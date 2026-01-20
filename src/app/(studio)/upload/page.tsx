@@ -13,7 +13,7 @@ import {
   MoveVertical,
   Timer,
   Type,
-  Zap,
+  FastForward,
   Info,
   Settings2,
 } from "lucide-react";
@@ -376,7 +376,7 @@ export default function DashboardUploadPage() {
                             }
                           />
                           <InputGroupAddon>
-                            <Zap />
+                            <FastForward />
                           </InputGroupAddon>
                         </InputGroup>
                       </div>

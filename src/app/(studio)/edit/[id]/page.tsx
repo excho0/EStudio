@@ -10,8 +10,9 @@ import {
   MoveVertical,
   Timer,
   Type,
-  Zap,
+  FastForward,
   Info,
+  Goal,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -334,7 +335,7 @@ export default function EditContentPage() {
                       }
                     />
                     <InputGroupAddon>
-                      <Type />
+                      <Goal />
                     </InputGroupAddon>
                   </InputGroup>
                 </div>
@@ -439,7 +440,7 @@ export default function EditContentPage() {
                           }
                         />
                         <InputGroupAddon>
-                          <Zap />
+                          <FastForward />
                         </InputGroupAddon>
                       </InputGroup>
                     </div>
