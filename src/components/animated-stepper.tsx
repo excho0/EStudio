@@ -83,7 +83,7 @@ export function StepperHeader() {
   const { steps, currentId, currentIndex, isComplete, progress } = context;
 
   return (
-    <nav className="rounded-xl border border-border bg-muted/30 p-8">
+    <nav className="my-6">
       <ol className="relative flex items-center justify-between">
         <div className="absolute top-5 left-4 right-4 z-0 h-0.5 bg-border sm:left-12 sm:right-12">
           <motion.div
