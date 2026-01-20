@@ -57,6 +57,8 @@ export const contentItemSchema = z.object({
   segmentDurationSeconds: z.number().nonnegative(),
   fadeDurationSeconds: z.number().nonnegative(),
   videoDurationSeconds: z.number().nonnegative().optional().nullable(),
+  overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
+  playbackRate: z.number().positive(),
   fps: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -81,6 +83,8 @@ export const contentCreateSchema = z.object({
   segmentDurationSeconds: z.number().nonnegative().default(4),
   fadeDurationSeconds: z.number().nonnegative().default(1),
   videoDurationSeconds: z.number().nonnegative().default(0),
+  overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
+  playbackRate: z.number().positive().default(1),
   fps: z.number().int().positive().default(30),
   width: z.number().int().positive().default(1280),
   height: z.number().int().positive().default(720),
@@ -93,6 +97,8 @@ export const contentUpdateSchema = z.object({
   segmentDurationSeconds: z.number().nonnegative().optional(),
   fadeDurationSeconds: z.number().nonnegative().optional(),
   videoDurationSeconds: z.number().nonnegative().optional(),
+  overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
+  playbackRate: z.number().positive().optional(),
   fps: z.number().int().positive().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
@@ -109,6 +115,8 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     updatedAt: toIso(record.updatedAt),
     renderPath: record.renderPath ?? null,
     videoDurationSeconds: record.videoDurationSeconds ?? null,
+    playbackRate: record.playbackRate ?? 1,
+    overlapRatio: record.overlapRatio ?? null,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);

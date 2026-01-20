@@ -61,6 +61,8 @@ export async function POST(request: Request) {
   const videoDurationSeconds = Number(formData.get("videoDurationSeconds") ?? 0);
   const segmentDurationSeconds = Number(formData.get("segmentDurationSeconds") ?? 4);
   const fadeDurationSeconds = Number(formData.get("fadeDurationSeconds") ?? 1);
+  const overlapRatio = Number(formData.get("overlapRatio") ?? NaN);
+  const playbackRate = Number(formData.get("playbackRate") ?? 1);
   const fps = Number(formData.get("fps") ?? 30);
   const width = Number(formData.get("width") ?? 1280);
   const height = Number(formData.get("height") ?? 720);
@@ -91,6 +93,12 @@ export async function POST(request: Request) {
         : 0,
     fadeDurationSeconds: Number.isFinite(fadeDurationSeconds)
       ? fadeDurationSeconds
+      : 1,
+    overlapRatio: Number.isFinite(overlapRatio)
+      ? Math.min(0.9, Math.max(0, overlapRatio))
+      : null,
+    playbackRate: Number.isFinite(playbackRate) && playbackRate > 0
+      ? playbackRate
       : 1,
     fps: Number.isFinite(fps) ? fps : 30,
     width: Number.isFinite(width) ? width : 1280,

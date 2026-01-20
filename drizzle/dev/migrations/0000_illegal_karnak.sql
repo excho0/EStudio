@@ -10,6 +10,8 @@ CREATE TABLE `content_items` (
 	`segment_duration_seconds` real DEFAULT 0 NOT NULL,
 	`video_duration_seconds` real DEFAULT 0 NOT NULL,
 	`fade_duration_seconds` real DEFAULT 0 NOT NULL,
+	`overlap_ratio` real,
+	`playback_rate` real DEFAULT 1 NOT NULL,
 	`fps` integer DEFAULT 30 NOT NULL,
 	`width` integer DEFAULT 1280 NOT NULL,
 	`height` integer DEFAULT 720 NOT NULL,

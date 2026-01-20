@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Player } from "@remotion/player";
@@ -23,6 +24,8 @@ type ContentItem = {
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
   videoDurationSeconds?: number | null;
+  playbackRate: number;
+  overlapRatio?: number | null;
   songDurationSeconds: number;
   fps: number;
   width: number;
@@ -41,6 +44,8 @@ export default function EditContentPage() {
     title: "",
     status: "",
     fadeDurationSeconds: "",
+    playbackRate: "",
+    overlapPercent: 25,
     fps: "",
     width: "",
     height: "",
@@ -64,6 +69,10 @@ export default function EditContentPage() {
     ? getNumber(item.segmentDurationSeconds, 4)
     : 4;
   const safeFadeDuration = item ? getNumber(item.fadeDurationSeconds, 1) : 1;
+  const safePlaybackRate = item ? getNumber(item.playbackRate, 1) : 1;
+  const safeOverlapPercent = item
+    ? Math.round(getNumber(item.overlapRatio, 0) * 100)
+    : 25;
   const safeVideoDuration = item
     ? getNumber(
         item.videoDurationSeconds ?? item.segmentDurationSeconds,
@@ -106,10 +115,15 @@ export default function EditContentPage() {
         const data = (await response.json()) as ContentItem;
         if (active) {
           setItem(data);
+          const overlapPercent = Number.isFinite(data.overlapRatio)
+            ? Math.round(Number(data.overlapRatio) * 100)
+            : 25;
           setFormValues({
             title: data.title,
             status: data.status,
             fadeDurationSeconds: String(data.fadeDurationSeconds ?? ""),
+            playbackRate: String(data.playbackRate ?? ""),
+            overlapPercent,
             fps: String(data.fps ?? ""),
             width: String(data.width ?? ""),
             height: String(data.height ?? ""),
@@ -153,6 +167,16 @@ export default function EditContentPage() {
       );
       if (fadeDurationSeconds !== undefined) {
         payload.fadeDurationSeconds = fadeDurationSeconds;
+      }
+      const playbackRate = toOptionalNumber(formValues.playbackRate);
+      if (playbackRate !== undefined) {
+        payload.playbackRate = playbackRate;
+      }
+      const overlapRatio = Number.isFinite(formValues.overlapPercent)
+        ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
+        : undefined;
+      if (overlapRatio !== undefined) {
+        payload.overlapRatio = overlapRatio;
       }
       const fps = toOptionalNumber(formValues.fps);
       if (fps !== undefined) {
@@ -267,6 +291,41 @@ export default function EditContentPage() {
                   />
                 </div>
                 <div className="grid gap-2">
+                  <Label htmlFor="playbackRate">Playback rate</Label>
+                  <Input
+                    id="playbackRate"
+                    type="number"
+                    min="0.1"
+                    step="0.05"
+                    value={formValues.playbackRate}
+                    onChange={(event) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        playbackRate: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-2 sm:col-span-2">
+                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                    <Label htmlFor="overlapPercent">Overlap</Label>
+                    <span>{formValues.overlapPercent}%</span>
+                  </div>
+                  <Slider
+                    id="overlapPercent"
+                    min={0}
+                    max={90}
+                    step={1}
+                    value={[formValues.overlapPercent]}
+                    onValueChange={(value) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        overlapPercent: value[0] ?? 0,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
                   <Label htmlFor="fps">FPS</Label>
                   <Input
                     id="fps"
@@ -352,6 +411,10 @@ export default function EditContentPage() {
                   segmentDurationSeconds: safeSegmentDuration,
                   fadeDurationSeconds: safeFadeDuration,
                   videoDurationSeconds: safeVideoDuration,
+                  playbackRate: safePlaybackRate,
+                  overlapRatio: Number.isFinite(formValues.overlapPercent)
+                    ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
+                    : null,
                 }}
                 durationInFrames={safeDurationInFrames}
                 fps={resolvedFps}

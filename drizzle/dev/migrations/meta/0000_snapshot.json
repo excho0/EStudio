@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "393d3f19-a2c4-4de6-ba9e-3ab0e1f1010a",
+  "id": "2bf55acf-1c7b-4533-91ea-c5da91d280bc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "content_items": {
@@ -88,6 +88,21 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "overlap_ratio": {
+          "name": "overlap_ratio",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "playback_rate": {
+          "name": "playback_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         },
         "fps": {
           "name": "fps",

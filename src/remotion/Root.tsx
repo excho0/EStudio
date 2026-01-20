@@ -51,6 +51,8 @@ export const RemotionRoot: React.FC = () => {
           segmentDurationSeconds: 4,
           fadeDurationSeconds: 1,
           videoDurationSeconds: 4,
+          playbackRate: 1,
+          overlapRatio: 0.25,
           songDurationSeconds: 30,
           fps: 30,
           width: 1280,

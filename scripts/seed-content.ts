@@ -35,6 +35,7 @@ const generateValues = (count: number) => {
     const height = pick(heights);
     const segmentDurationSeconds = Number((Math.random() * 6 + 4).toFixed(2));
     const fadeDurationSeconds = Number((Math.random() * 1.2 + 0.4).toFixed(2));
+    const playbackRate = Number((Math.random() * 0.8 + 0.7).toFixed(2));
     const songDurationSeconds = Number((Math.random() * 180 + 60).toFixed(2));
     const videoDurationSeconds = Number((segmentDurationSeconds + Math.random()).toFixed(2));
     const fps = pick([24, 25, 30, 60]);
@@ -50,6 +51,7 @@ const generateValues = (count: number) => {
       songDurationSeconds,
       segmentDurationSeconds,
       fadeDurationSeconds,
+      playbackRate,
       videoDurationSeconds,
       fps,
       width,

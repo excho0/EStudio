@@ -17,6 +17,8 @@ export type ContentItem = {
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
   videoDurationSeconds?: number;
+  overlapRatio?: number | null;
+  playbackRate: number;
   fps: number;
   width: number;
   height: number;

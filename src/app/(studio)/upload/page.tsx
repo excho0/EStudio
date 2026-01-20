@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useContentList } from "../_components/use-content-list";
 import { toast } from "sonner";
 import {
@@ -23,6 +24,8 @@ const initialForm = {
   segmentDurationSeconds: "",
   videoDurationSeconds: "",
   fadeDurationSeconds: "1",
+  playbackRate: "1",
+  overlapPercent: 25,
   fps: "30",
   width: "1280",
   height: "720",
@@ -136,6 +139,8 @@ export default function DashboardUploadPage() {
     payload.append("segmentDurationSeconds", formValues.segmentDurationSeconds);
     payload.append("videoDurationSeconds", formValues.videoDurationSeconds);
     payload.append("fadeDurationSeconds", formValues.fadeDurationSeconds);
+    payload.append("playbackRate", formValues.playbackRate);
+    payload.append("overlapRatio", String(formValues.overlapPercent / 100));
     payload.append("fps", formValues.fps);
     payload.append("width", formValues.width);
     payload.append("height", formValues.height);
@@ -221,6 +226,41 @@ export default function DashboardUploadPage() {
                         setFormValues((current) => ({
                           ...current,
                           fadeDurationSeconds: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="playbackRate">Playback rate</Label>
+                    <Input
+                      id="playbackRate"
+                      type="number"
+                      min="0.1"
+                      step="0.05"
+                      value={formValues.playbackRate}
+                      onChange={(event) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          playbackRate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2 sm:col-span-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                      <Label htmlFor="overlapPercent">Overlap</Label>
+                      <span>{formValues.overlapPercent}%</span>
+                    </div>
+                    <Slider
+                      id="overlapPercent"
+                      min={0}
+                      max={90}
+                      step={1}
+                      value={[formValues.overlapPercent]}
+                      onValueChange={(value) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          overlapPercent: value[0] ?? 0,
                         }))
                       }
                     />
@@ -399,6 +439,26 @@ export default function DashboardUploadPage() {
                         </span>
                         <div>{formValues.fps}</div>
                       </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                          Fade
+                        </span>
+                        <div>{formValues.fadeDurationSeconds || "--"}s</div>
+                      </div>
+                      <div>
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                          Playback rate
+                        </span>
+                        <div>{formValues.playbackRate || "--"}x</div>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <span className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                        Overlap
+                      </span>
+                      <div>{formValues.overlapPercent}%</div>
                     </div>
                   </div>
                 </div>

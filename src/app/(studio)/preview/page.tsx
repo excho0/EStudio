@@ -45,6 +45,8 @@ export default function DashboardPreviewPage() {
                   fadeDurationSeconds: item.fadeDurationSeconds,
                   videoDurationSeconds:
                     item.videoDurationSeconds ?? item.segmentDurationSeconds,
+                  playbackRate: item.playbackRate ?? 1,
+                  overlapRatio: item.overlapRatio ?? null,
                 }}
                 durationInFrames={Math.max(
                   1,

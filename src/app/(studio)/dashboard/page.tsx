@@ -125,9 +125,6 @@ export default function DashboardOverviewPage() {
               <Skeleton className="h-8 w-20" />
             )}
           </div>
-          <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
-            Live CPU temperature.
-          </p>
         </Card>
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <div className="flex items-center justify-between">
@@ -296,13 +293,13 @@ export default function DashboardOverviewPage() {
           <div className="mt-3 text-3xl font-semibold">
             {loading ? <Skeleton className="h-8 w-16" /> : rendered}
           </div>
-          <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
+          <div className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
             {loading ? (
               <Skeleton className="h-3 w-24" />
             ) : (
               `${items.length ? Math.round(progress) : 0}% completion`
             )}
-          </p>
+          </div>
         </Card>
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <div className="flex items-center justify-between">
@@ -316,9 +313,9 @@ export default function DashboardOverviewPage() {
           <div className="mt-3 text-3xl font-semibold">
             {loading ? <Skeleton className="h-8 w-16" /> : failed}
           </div>
-          <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
+          <div className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
             {loading ? <Skeleton className="h-3 w-32" /> : "Retry failed items from the library."}
-          </p>
+          </div>
         </Card>
       </section>
 

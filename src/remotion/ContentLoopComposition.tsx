@@ -2,6 +2,8 @@ import React, { useMemo } from "react";
 import {
   AbsoluteFill,
   Audio,
+  Html5Audio,
+  Html5Video,
   OffthreadVideo,
   Sequence,
   Video,
@@ -18,6 +20,8 @@ export type ContentLoopProps = {
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
   videoDurationSeconds?: number;
+  playbackRate?: number;
+  overlapRatio?: number | null;
 };
 
 type VideoSlice = {
@@ -31,6 +35,7 @@ type LoopVideoProps = {
   startFrom?: number;
   endAt?: number;
   muted?: boolean;
+  playbackRate?: number;
 };
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
@@ -40,7 +45,7 @@ const LoopVideo: React.FC<LoopVideoProps> = (props) => {
     return <OffthreadVideo {...props} />;
   }
 
-  return <Video {...props} />;
+  return <Html5Video {...props} />;
 };
 
 const buildVideoSlices = (
@@ -77,7 +82,8 @@ const SegmentLayer: React.FC<{
   videoSrc: string;
   videoFrames: number;
   startFrom: number;
-}> = ({ duration, videoSrc, videoFrames, startFrom }) => {
+  playbackRate?: number;
+}> = ({ duration, videoSrc, videoFrames, startFrom, playbackRate }) => {
   const slices = buildVideoSlices(startFrom, duration, videoFrames);
 
   return (
@@ -93,6 +99,7 @@ const SegmentLayer: React.FC<{
             startFrom={slice.startFrom}
             endAt={slice.startFrom + slice.duration}
             muted
+            playbackRate={playbackRate}
           />
         </Sequence>
       ))}
@@ -106,10 +113,18 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   segmentDurationSeconds,
   fadeDurationSeconds,
   videoDurationSeconds,
+  playbackRate = 1,
+  overlapRatio = null,
 }) => {
   const { durationInFrames, fps } = useVideoConfig();
+  const resolvedPlaybackRate =
+    Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
   const fadeFrames = Math.max(0, Math.round(fadeDurationSeconds * fps));
+  const resolvedOverlapRatio =
+    Number.isFinite(overlapRatio) && overlapRatio !== null
+      ? Math.min(0.9, Math.max(0, overlapRatio))
+      : null;
   const videoFrames = Math.max(
     1,
     Math.round((videoDurationSeconds ?? segmentDurationSeconds) * fps)
@@ -118,7 +133,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     fadeFrames > 0 && segmentFrames > 1
       ? Math.min(fadeFrames, segmentFrames - 1)
       : 0;
-  const step = Math.max(1, segmentFrames - transitionFrames);
+  const step =
+    resolvedOverlapRatio === null
+      ? Math.max(1, segmentFrames - transitionFrames)
+      : Math.max(1, Math.round(segmentFrames * (1 - resolvedOverlapRatio)));
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
@@ -146,6 +164,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               startFrom={
                 maxStart === 0 ? 0 : (index * step) % (maxStart + 1)
               }
+              playbackRate={resolvedPlaybackRate}
             />
           </TransitionSeries.Sequence>,
         ];
@@ -154,7 +173,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           items.push(
             <TransitionSeries.Transition
               key={`transition-${index}`}
-              presentation={fade({ shouldFadeOutExitingScene: true })}
+              presentation={fade({
+                shouldFadeOutExitingScene: false,
+              })}
               timing={linearTiming({ durationInFrames: transitionFrames })}
             />
           );
@@ -170,6 +191,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoFrames,
       videoSrc,
       maxStart,
+      resolvedPlaybackRate,
+      resolvedOverlapRatio,
     ]
   );
 
@@ -191,7 +214,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       )}
-      {audioSrc ? <Audio src={audioSrc} /> : null}
+      {audioSrc ? <Html5Audio src={audioSrc} /> : null}
     </AbsoluteFill>
   );
 };

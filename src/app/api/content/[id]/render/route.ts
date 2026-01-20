@@ -157,6 +157,8 @@ export async function POST(
     segmentDurationSeconds: item.segmentDurationSeconds,
     fadeDurationSeconds: item.fadeDurationSeconds,
     videoDurationSeconds: item.videoDurationSeconds ?? item.segmentDurationSeconds,
+    overlapRatio: item.overlapRatio ?? null,
+    playbackRate: item.playbackRate ?? 1,
     songDurationSeconds: item.songDurationSeconds,
     fps: item.fps,
     width: item.width,
