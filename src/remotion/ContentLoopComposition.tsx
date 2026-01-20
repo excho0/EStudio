@@ -129,14 +129,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     1,
     Math.round((videoDurationSeconds ?? segmentDurationSeconds) * fps)
   );
-  const transitionFrames =
+  const defaultOverlapFrames =
     fadeFrames > 0 && segmentFrames > 1
       ? Math.min(fadeFrames, segmentFrames - 1)
       : 0;
   const step =
     resolvedOverlapRatio === null
-      ? Math.max(1, segmentFrames - transitionFrames)
+      ? Math.max(1, segmentFrames - defaultOverlapFrames)
       : Math.max(1, Math.round(segmentFrames * (1 - resolvedOverlapRatio)));
+  const overlapFrames = Math.max(0, segmentFrames - step);
+  const transitionFrames =
+    fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
+      ? Math.min(fadeFrames, overlapFrames)
+      : 0;
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {

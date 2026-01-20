@@ -4,6 +4,20 @@ import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/lib/utils"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer"
+
+const TooltipContext = React.createContext<{
+  isDrawer: boolean
+  open: boolean
+  setOpen: (open: boolean) => void
+} | null>(null)
 
 function TooltipProvider({
   delayDuration = 0,
@@ -21,9 +35,24 @@ function TooltipProvider({
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  const isDrawer = useMediaQuery("(max-width: 1024px)")
+  const [open, setOpen] = React.useState(false)
+
+  if (isDrawer) {
+    return (
+      <TooltipContext.Provider value={{ isDrawer: true, open, setOpen }}>
+        <Drawer open={open} onOpenChange={setOpen}>
+          {props.children}
+        </Drawer>
+      </TooltipContext.Provider>
+    )
+  }
+
   return (
     <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+      <TooltipContext.Provider value={{ isDrawer: false, open, setOpen }}>
+        <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+      </TooltipContext.Provider>
     </TooltipProvider>
   )
 }
@@ -31,6 +60,12 @@ function Tooltip({
 function TooltipTrigger({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  const ctx = React.useContext(TooltipContext)
+
+  if (ctx?.isDrawer) {
+    return <DrawerTrigger data-slot="tooltip-trigger" {...props} />
+  }
+
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
@@ -40,6 +75,26 @@ function TooltipContent({
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  const ctx = React.useContext(TooltipContext)
+
+  if (ctx?.isDrawer) {
+    return (
+      <DrawerContent className="min-h-[40vh]">
+        <DrawerHeader>
+          <DrawerTitle>Info</DrawerTitle>
+        </DrawerHeader>
+        <div
+          className={cn(
+            "px-6 pb-8 text-base leading-relaxed text-slate-700 dark:text-zinc-100",
+            className
+          )}
+        >
+          {children}
+        </div>
+      </DrawerContent>
+    )
+  }
+
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
