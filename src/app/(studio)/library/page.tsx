@@ -1,9 +1,6 @@
 "use client";
 
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
-import { Player } from "@remotion/player";
-import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -18,14 +15,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useContentList, type ContentItem } from "../_components/use-content-list";
-import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
@@ -40,6 +30,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export default function DashboardLibraryPage() {
@@ -52,19 +43,9 @@ export default function DashboardLibraryPage() {
     page,
     limit,
   });
+  const router = useRouter();
   const [renderingId, setRenderingId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<ContentItem | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const selectedVideoUrl = selected
-    ? `/api/content/${selected.id}/asset?type=video`
-    : null;
-  const selectedAudioUrl = selected
-    ? `/api/content/${selected.id}/asset?type=song`
-    : null;
-  const { blobUrl: selectedVideoBlobUrl, loading: selectedVideoLoading } =
-    useMediaBlobUrl(selectedVideoUrl);
-  const { blobUrl: selectedAudioBlobUrl, loading: selectedAudioLoading } =
-    useMediaBlobUrl(selectedAudioUrl);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / limit)),
@@ -111,9 +92,9 @@ export default function DashboardLibraryPage() {
   /* eslint-enable react-hooks/incompatible-library */
   const getActionItems = (item: ContentItem) => [
     {
-      label: "Preview",
+      label: "Details",
       icon: Eye,
-      onSelect: () => setSelected(item),
+      onSelect: () => router.push(`/edit/${item.id}`),
     },
     {
       label: renderingId === item.id ? "Rendering..." : "Render",
@@ -568,43 +549,6 @@ export default function DashboardLibraryPage() {
             <div className="h-10" />
           )}
         </div>
-
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-4xl border-slate-200 bg-white text-slate-900 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-50">
-          <DialogHeader>
-            <DialogTitle>{selected?.title ?? "Preview"}</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-black dark:border-white/10">
-              {selectedVideoLoading || selectedAudioLoading || !selectedVideoBlobUrl ? (
-                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
-              ) : (
-                <Player
-                  component={ContentLoopComposition}
-                  inputProps={{
-                    title: selected.title,
-                    videoSrc: selectedVideoBlobUrl,
-                    audioSrc: selectedAudioBlobUrl ?? "",
-                    segmentDurationSeconds: selected.segmentDurationSeconds,
-                    fadeDurationSeconds: selected.fadeDurationSeconds,
-                    videoDurationSeconds:
-                      selected.videoDurationSeconds ?? selected.segmentDurationSeconds,
-                  }}
-                  durationInFrames={Math.max(
-                    1,
-                    Math.round(selected.songDurationSeconds * selected.fps)
-                  )}
-                  fps={selected.fps}
-                  compositionWidth={selected.width}
-                  compositionHeight={selected.height}
-                  controls
-                  style={{ width: "100%" }}
-                />
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

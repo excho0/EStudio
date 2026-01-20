@@ -99,12 +99,10 @@ const run = async () => {
   }
 
   const target = isPostgres ? "Postgres" : "SQLite";
-  // eslint-disable-next-line no-console
   console.log(`Seeded ${count} content items into ${target}.`);
 };
 
 run().catch((error) => {
-  // eslint-disable-next-line no-console
   console.error("Seed failed:", error);
   process.exit(1);
 });

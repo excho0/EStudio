@@ -183,7 +183,7 @@ export default function DashboardUploadPage() {
           steps={methods.all}
           currentId={methods.current.id}
           isComplete={isComplete}
-          onStepClick={(id) => methods.goTo(id)}
+          onStepClick={(id) => methods.goTo(id as typeof methods.current.id)}
         >
           <StepperHeader />
 
@@ -451,7 +451,6 @@ export default function DashboardUploadPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-emerald-500 text-black hover:bg-emerald-400"
                     disabled={
                       submitting ||
                       (methods.current.id === "review" && !isReadyToUpload)

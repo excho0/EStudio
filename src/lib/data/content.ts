@@ -86,12 +86,18 @@ export const contentCreateSchema = z.object({
   height: z.number().int().positive().default(720),
 });
 
-export const contentUpdateSchema = contentCreateSchema
-  .partial()
-  .extend({
-    renderPath: z.string().optional().nullable(),
-  })
-  .omit({ id: true, thumbnailPath: true, videoPath: true, songPath: true });
+export const contentUpdateSchema = z.object({
+  title: z.string().min(1).optional(),
+  status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  songDurationSeconds: z.number().nonnegative().optional(),
+  segmentDurationSeconds: z.number().nonnegative().optional(),
+  fadeDurationSeconds: z.number().nonnegative().optional(),
+  videoDurationSeconds: z.number().nonnegative().optional(),
+  fps: z.number().int().positive().optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  renderPath: z.string().optional().nullable(),
+});
 
 const normalizeRow = (row: unknown): ContentItemRow => {
   const record = row as Record<string, unknown>;
@@ -217,17 +223,30 @@ export async function updateContentItem(
   updates: z.infer<typeof contentUpdateSchema>
 ) {
   const data = contentUpdateSchema.parse(updates);
+  const cleaned = Object.fromEntries(
+    Object.entries(data).filter(([key, value]) => {
+      if (value === undefined) return false;
+      if (value === null) {
+        return key === "renderPath";
+      }
+      return true;
+    })
+  ) as typeof data;
+
+  if (Object.keys(cleaned).length === 0) {
+    return getContentItem(id);
+  }
   await withContentDb({
     pg: async ({ db, table, now }) => {
       const values: Partial<InferInsertModel<typeof schema.contentItems>> = {
-        ...data,
+        ...cleaned,
         updatedAt: now,
       };
       await db.update(table).set(values).where(eq(table.id, id));
     },
     sqlite: async ({ db, table, now }) => {
       const values: Partial<InferInsertModel<typeof sqliteSchema.contentItems>> = {
-        ...data,
+        ...cleaned,
         updatedAt: now,
       };
       await db.update(table).set(values).where(eq(table.id, id));

@@ -28,6 +28,13 @@ type UseContentListOptions = {
   limit?: number;
 };
 
+type ContentListResponse = {
+  items: ContentItem[];
+  total: number;
+  page?: number;
+  limit?: number;
+};
+
 export const useContentList = (options: UseContentListOptions = {}) => {
   const { eventToken } = useDashboardSocket();
   const query = options.query ?? "";
@@ -43,7 +50,7 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   searchParams.set("limit", String(limit));
   const queryKey = ["content", { query, page, limit }] as const;
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<ContentListResponse>({
     queryKey,
     queryFn: async () => {
       const response = await fetch(`/api/content?${searchParams.toString()}`);

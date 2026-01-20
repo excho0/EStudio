@@ -21,6 +21,7 @@ function createSqliteDb(): SqliteDrizzleDb {
 
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
 
+  console.info(`[db] Using SQLite database at ${absolutePath}`);
   const database = new Database(absolutePath);
   database.pragma("foreign_keys = ON");
 
@@ -36,7 +37,19 @@ export function getDrizzleDb(): DrizzleDb {
   if (cachedDb) {
     return cachedDb;
   }
+  const driver = process.env.DB_DRIVER?.toLowerCase();
   const postgresUrl = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
+  if (driver === "postgres") {
+    if (!postgresUrl) {
+      throw new Error("DB_DRIVER=postgres but no POSTGRES_URL/DATABASE_URL set.");
+    }
+    cachedDb = createPostgresDb(postgresUrl);
+    return cachedDb;
+  }
+  if (driver === "sqlite") {
+    cachedDb = createSqliteDb();
+    return cachedDb;
+  }
   if (postgresUrl) {
     cachedDb = createPostgresDb(postgresUrl);
     return cachedDb;
