@@ -30,13 +30,13 @@ import { ModeToggle } from "@/components/mode-toggle";
 
 const navItems = [
   { title: "Overview", href: "/dashboard", icon: Activity },
-  { title: "Library", href: "/dashboard/library", icon: Folder },
-  { title: "Upload", href: "/dashboard/upload", icon: Upload },
-  { title: "Preview", href: "/dashboard/preview", icon: Sparkles },
+  { title: "Library", href: "/library", icon: Folder },
+  { title: "Upload", href: "/upload", icon: Upload },
+  { title: "Preview", href: "/preview", icon: Sparkles },
 ];
 
 const settingsItems = [
-  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+  { title: "Settings", href: "/settings", icon: Settings },
 ];
 
 function SidebarStatus() {

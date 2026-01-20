@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { useContentList } from "./_components/use-content-list";
+import { useContentList } from "../_components/use-content-list";
 import {
   Activity,
   CircleCheck,
@@ -29,14 +29,14 @@ export default function DashboardOverviewPage() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-wrap gap-3">
         <Button asChild className="bg-emerald-500 text-black hover:bg-emerald-400">
-          <Link href="/dashboard/upload">Upload New</Link>
+          <Link href="/upload">Upload New</Link>
         </Button>
         <Button
           asChild
           variant="secondary"
           className="border border-slate-200 bg-white text-slate-900 hover:bg-slate-100 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
         >
-          <Link href="/dashboard/library">View Library</Link>
+          <Link href="/library">View Library</Link>
         </Button>
       </section>
 
@@ -103,7 +103,7 @@ export default function DashboardOverviewPage() {
                 variant="outline"
                 className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
               >
-                <Link href="/dashboard/library">Open Library</Link>
+                <Link href="/library">Open Library</Link>
               </Button>
             </div>
 

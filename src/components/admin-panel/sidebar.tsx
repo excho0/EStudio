@@ -2,7 +2,7 @@
 import { Menu } from "@/components/admin-panel/menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useDashboardSocket } from "@/app/dashboard/_components/dashboard-socket";
+import { useDashboardSocket } from "@/app/(studio)/_components/dashboard-socket";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";

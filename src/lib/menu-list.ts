@@ -43,17 +43,17 @@ export function getMenuList(): Group[] {
       groupLabel: "Studio",
       menus: [
         {
-          href: "/dashboard/library",
+          href: "/library",
           label: "Library",
           icon: Folder,
         },
         {
-          href: "/dashboard/upload",
+          href: "/upload",
           label: "Upload",
           icon: Upload,
         },
         {
-          href: "/dashboard/preview",
+          href: "/preview",
           label: "Preview",
           icon: Sparkles,
         },
@@ -63,7 +63,7 @@ export function getMenuList(): Group[] {
       groupLabel: "Settings",
       menus: [
         {
-          href: "/dashboard/settings",
+          href: "/settings",
           label: "Settings",
           icon: Settings,
         },

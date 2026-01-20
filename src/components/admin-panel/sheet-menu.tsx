@@ -4,7 +4,7 @@ import { MenuIcon, PanelsTopLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/admin-panel/menu";
-import { useDashboardSocket } from "@/app/dashboard/_components/dashboard-socket";
+import { useDashboardSocket } from "@/app/(studio)/_components/dashboard-socket";
 import {
   Sheet,
   SheetHeader,
