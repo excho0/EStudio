@@ -27,6 +27,9 @@
     "@remotion/player": "^4.0.407",
     "@remotion/transitions": "^4.0.407",
     "@stepperize/react": "^5.1.9",
+    "@tanstack/react-query": "^5.90.19",
+    "@tanstack/react-query-devtools": "^5.91.2",
+    "@tanstack/react-virtual": "^3.13.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "config": "link:@remotion/cli/config",
@@ -41,7 +44,8 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.407",

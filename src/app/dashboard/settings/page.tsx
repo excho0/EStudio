@@ -24,7 +24,7 @@ export default function DashboardSettingsPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-600 dark:border-white/10 dark:text-zinc-300">
+          {/* <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-600 dark:border-white/10 dark:text-zinc-300">
             <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
               Defaults
             </div>
@@ -34,7 +34,7 @@ export default function DashboardSettingsPage() {
               <li>Segment length: 4s</li>
               <li>Fade: 1s</li>
             </ul>
-          </div>
+          </div> */}
         </div>
       </Card>
     </div>

@@ -171,7 +171,7 @@ export default function DashboardUploadPage() {
           <div>
             <div className="flex items-center gap-2">
               <Film className="h-6 w-6 flex shrink-0" />
-              <h2 className="text-lg font-semibold">New Render</h2>
+              <h2 className="text-lg font-semibold">New Project</h2>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
               Upload media and define how the loop should behave.
@@ -465,10 +465,6 @@ export default function DashboardUploadPage() {
                   </Button>
                 </div>
               )}
-
-              <p className="text-xs text-slate-500 dark:text-zinc-500">
-                Song and video lengths are detected automatically from your files.
-              </p>
             </StepperFooter>
           </form>
         </StepperShell>

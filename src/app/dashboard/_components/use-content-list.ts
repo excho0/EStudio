@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSocket } from "./dashboard-socket";
 
 export type ContentItem = {
@@ -21,28 +22,51 @@ export type ContentItem = {
   height: number;
 };
 
-export const useContentList = () => {
+type UseContentListOptions = {
+  query?: string;
+  page?: number;
+  limit?: number;
+};
+
+export const useContentList = (options: UseContentListOptions = {}) => {
   const { eventToken } = useDashboardSocket();
-  const [items, setItems] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const query = options.query ?? "";
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 50;
+  const queryClient = useQueryClient();
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const response = await fetch("/api/content");
-    const data = await response.json();
-    setItems(data.items ?? []);
-    setLoading(false);
-  }, []);
+  const searchParams = new URLSearchParams();
+  if (query.trim()) {
+    searchParams.set("q", query.trim());
+  }
+  searchParams.set("page", String(page));
+  searchParams.set("limit", String(limit));
+  const queryKey = ["content", { query, page, limit }] as const;
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const response = await fetch(`/api/content?${searchParams.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to load content list");
+      }
+      return response.json();
+    },
+    keepPreviousData: true,
+  });
 
   useEffect(() => {
     if (eventToken > 0) {
-      refresh();
+      queryClient.invalidateQueries({ queryKey: ["content"] });
     }
-  }, [eventToken, refresh]);
+  }, [eventToken, queryClient]);
 
-  return { items, loading, refresh };
+  return {
+    items: data?.items ?? [],
+    total: Number.isFinite(data?.total) ? data.total : 0,
+    loading: isLoading,
+    refresh: refetch,
+    page,
+    limit,
+  };
 };

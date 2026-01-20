@@ -1,5 +1,13 @@
 import React, { useMemo } from "react";
-import { AbsoluteFill, Audio, Sequence, Video, useVideoConfig } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  OffthreadVideo,
+  Sequence,
+  Video,
+  useRemotionEnvironment,
+  useVideoConfig,
+} from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 
@@ -16,6 +24,23 @@ type VideoSlice = {
   from: number;
   startFrom: number;
   duration: number;
+};
+
+type LoopVideoProps = {
+  src: string;
+  startFrom?: number;
+  endAt?: number;
+  muted?: boolean;
+};
+
+const LoopVideo: React.FC<LoopVideoProps> = (props) => {
+  const { isRendering } = useRemotionEnvironment();
+
+  if (isRendering) {
+    return <OffthreadVideo {...props} />;
+  }
+
+  return <Video {...props} />;
 };
 
 const buildVideoSlices = (
@@ -63,7 +88,7 @@ const SegmentLayer: React.FC<{
           from={slice.from}
           durationInFrames={slice.duration}
         >
-          <Video
+          <LoopVideo
             src={videoSrc}
             startFrom={slice.startFrom}
             endAt={slice.startFrom + slice.duration}

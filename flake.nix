@@ -19,8 +19,10 @@
         buildInputs = with pkgs; [
           nss
           atk
+          at-spi2-core
           at-spi2-atk
           xorg.libX11
+          xorg.libxcb
           xorg.libXcomposite
           xorg.libXrandr
           xorg.libXdamage
@@ -28,6 +30,11 @@
           xorg.libXext
           xorg.libXrender
           xorg.libXcursor
+          xorg.libXi
+          xorg.libXScrnSaver
+          xorg.libXinerama
+          xorg.libXtst
+          xorg.libxshmfence
           xorg.libXxf86vm
           libxkbcommon
           libdrm
@@ -44,6 +51,7 @@
           fontconfig
           freetype
           cups
+          util-linux
         ];
 
         REMOTION_BROWSER_EXECUTABLE = "${pkgs.chromium}/bin/chromium";

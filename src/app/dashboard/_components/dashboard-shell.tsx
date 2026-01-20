@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
-  Film,
   Folder,
   Settings,
   Sparkles,
@@ -37,8 +36,7 @@ const navItems = [
   { title: "Preview", href: "/dashboard/preview", icon: Sparkles },
 ];
 
-const renderItems = [
-  { title: "Renders", href: "/dashboard/renders", icon: Film },
+const settingsItems = [
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -125,7 +123,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </SidebarHeader>
           <SidebarContent className="px-2 py-4">
             <SidebarNavGroup label="Studio" items={navItems} />
-            <SidebarNavGroup label="Renders" items={renderItems} />
+            <SidebarNavGroup label="Settings" items={settingsItems} />
           </SidebarContent>
           <SidebarFooter className="px-4 py-4 text-xs text-slate-500 dark:text-zinc-400">
             Filesystem storage enabled
@@ -139,19 +137,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               
               <div className="flex items-center gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-zinc-500">
-                    Dashboard
-                  </p>
-                  <h1 className="text-lg font-semibold sm:text-xl">
-                    Remotion Render Studio
-                  </h1>
+
                 </div>
               </div>
 
               <ModeToggle />
             </div>
           </header>
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6 lg:px-10">
+          <div className="mx-auto flex w-full flex-col gap-6 px-4 pb-16 pt-6 sm:px-6 lg:px-10 overflow-x-hidden">
             {children}
           </div>
         </SidebarInset>

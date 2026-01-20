@@ -26,9 +26,41 @@ const writeUpload = async (file: File, folder: string) => {
   return path.relative(contentPaths.baseDir, targetPath);
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const query = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const page = Number(searchParams.get("page") ?? "1");
+  const limit = Number(searchParams.get("limit") ?? "50");
+
   const index = await readContentIndex();
-  return NextResponse.json(index);
+  const allItems = index.items;
+  const filtered = query
+    ? allItems.filter((item) => {
+        const title = item.title.toLowerCase();
+        const status = item.status.toLowerCase();
+        return (
+          title.includes(query) ||
+          status.includes(query) ||
+          item.id.toLowerCase().includes(query)
+        );
+      })
+    : allItems;
+  const ordered = [...filtered].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+  const safeLimit =
+    Number.isFinite(limit) && limit > 0 ? Math.min(200, limit) : 50;
+  const start = (safePage - 1) * safeLimit;
+  const paged = ordered.slice(start, start + safeLimit);
+
+  return NextResponse.json({
+    items: paged,
+    total: ordered.length,
+    page: safePage,
+    limit: safeLimit,
+  });
 }
 
 export async function POST(request: Request) {

@@ -18,3 +18,16 @@ export const emitContentUpdate = (payload: {
     io.emit("content:update", payload);
   }
 };
+
+export const emitRenderProgress = (payload: {
+  id: string;
+  rendered: number;
+  total: number;
+  progress: number;
+  eta?: string;
+}) => {
+  const io = getSocketServer();
+  if (io) {
+    io.emit("render:progress", payload);
+  }
+};

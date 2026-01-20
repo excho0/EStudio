@@ -74,7 +74,7 @@ export default function DashboardOverviewPage() {
           </div>
           <div className="mt-3 text-3xl font-semibold">{failed}</div>
           <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
-            Quick retry from the renders tab.
+            Retry failed items from the library.
           </p>
         </Card>
       </section>

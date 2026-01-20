@@ -1,11 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 
 type DashboardSocketContextValue = {
   connected: boolean;
   eventToken: number;
+  socket: Socket | null;
 };
 
 const DashboardSocketContext = createContext<DashboardSocketContextValue | null>(
@@ -19,27 +20,30 @@ export function DashboardSocketProvider({
 }) {
   const [connected, setConnected] = useState(false);
   const [eventToken, setEventToken] = useState(0);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    const socket = io({ path: "/api/socket" });
+    const socketInstance = io({ path: "/api/socket" });
 
     const handleUpdate = () => {
       setEventToken((current) => current + 1);
     };
 
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("content:update", handleUpdate);
+    socketInstance.on("connect", () => setConnected(true));
+    socketInstance.on("disconnect", () => setConnected(false));
+    socketInstance.on("content:update", handleUpdate);
+    setSocket(socketInstance);
 
     return () => {
-      socket.off("content:update", handleUpdate);
-      socket.disconnect();
+      socketInstance.off("content:update", handleUpdate);
+      socketInstance.disconnect();
+      setSocket(null);
     };
   }, []);
 
   const value = useMemo(
-    () => ({ connected, eventToken }),
-    [connected, eventToken]
+    () => ({ connected, eventToken, socket }),
+    [connected, eventToken, socket]
   );
 
   return (
