@@ -60,6 +60,15 @@ export default function DashboardLibraryPage() {
     () => Math.max(1, Math.ceil(total / limit)),
     [limit, total]
   );
+  const formatDate = (value: string) =>
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+      new Date(value)
+    );
+  const formatDateTime = (value: string) =>
+    new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
   const canGoBack = page > 1;
   const canGoNext = page < totalPages;
   const isMobile = useIsMobile();
@@ -371,7 +380,7 @@ export default function DashboardLibraryPage() {
                               <div>
                                 <div className="font-medium">{item.title}</div>
                                 <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                  {new Date(item.createdAt).toLocaleString()}
+                                  {formatDateTime(item.createdAt)}
                                 </div>
                               </div>
                             </div>
@@ -449,7 +458,7 @@ export default function DashboardLibraryPage() {
                                 {item.title}
                               </div>
                               <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                {new Date(item.createdAt).toLocaleDateString()}
+                                {formatDate(item.createdAt)}
                               </div>
                               <div className="mt-2">
                                 {renderStatusBadge(item.status, false)}

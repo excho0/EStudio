@@ -200,9 +200,11 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
       };
       await db.insert(table).values(values);
     },
-    sqlite: async ({ db, table }) => {
+    sqlite: async ({ db, table, now }) => {
       const values: InferInsertModel<typeof sqliteSchema.contentItems> = {
         ...data,
+        createdAt: now,
+        updatedAt: now,
       };
       await db.insert(table).values(values);
     },

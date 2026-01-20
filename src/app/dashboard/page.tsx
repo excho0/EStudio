@@ -15,6 +15,10 @@ import {
 
 export default function DashboardOverviewPage() {
   const { items, loading } = useContentList();
+  const formatDate = (value: string) =>
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+      new Date(value)
+    );
 
   const rendered = items.filter((item) => item.status === "rendered").length;
   const failed = items.filter((item) => item.status === "failed").length;
@@ -130,7 +134,7 @@ export default function DashboardOverviewPage() {
                     <div>
                       <div className="text-sm font-semibold">{item.title}</div>
                       <div className="text-xs text-slate-500 dark:text-zinc-500">
-                        {new Date(item.createdAt).toLocaleDateString()}
+                        {formatDate(item.createdAt)}
                       </div>
                     </div>
                   </div>
