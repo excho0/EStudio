@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import { Player } from "@remotion/player";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 export default function DashboardLibraryPage() {
   const [query, setQuery] = useState("");
@@ -69,6 +70,7 @@ export default function DashboardLibraryPage() {
     () => Math.max(1, Math.ceil(total / limit)),
     [limit, total]
   );
+  const [stableTotalPages, setStableTotalPages] = useState(1);
   const formatDate = (value: string) =>
     new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
       new Date(value)
@@ -78,8 +80,15 @@ export default function DashboardLibraryPage() {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));
+  useEffect(() => {
+    if (!loading && totalPages > 0) {
+      setStableTotalPages(totalPages);
+    }
+  }, [loading, totalPages]);
+
+  const displayTotalPages = Math.max(totalPages, stableTotalPages);
   const canGoBack = page > 1;
-  const canGoNext = page < totalPages;
+  const canGoNext = page < displayTotalPages;
   const isMobile = useIsMobile();
   const [isHydrated, setIsHydrated] = useState(false);
   const desktopScrollRef = useRef<HTMLDivElement>(null);
@@ -150,16 +159,16 @@ export default function DashboardLibraryPage() {
   };
 
   const getPageItems = () => {
-    if (totalPages <= 1) return [];
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    if (displayTotalPages <= 1) return [];
+    if (displayTotalPages <= 7) {
+      return Array.from({ length: displayTotalPages }, (_, index) => index + 1);
     }
     const pages = new Set<number>([
       1,
-      totalPages,
+      displayTotalPages,
       page,
       Math.max(1, page - 1),
-      Math.min(totalPages, page + 1),
+      Math.min(displayTotalPages, page + 1),
     ]);
     return Array.from(pages).sort((a, b) => a - b);
   };
@@ -235,7 +244,7 @@ export default function DashboardLibraryPage() {
   }, []);
 
   const DesktopSkeletonRows = () => (
-    <Table>
+    <Table className="-mb-12">
       <thead>
         <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
           <th className="py-3">Project</th>
@@ -245,7 +254,7 @@ export default function DashboardLibraryPage() {
         </tr>
       </thead>
       <tbody className="text-sm">
-        {Array.from({ length: 5 }).map((_, index) => (
+        {Array.from({ length: 8 }).map((_, index) => (
           <tr key={`skeleton-row-${index}`} className="border-t border-slate-200 dark:border-white/10">
             <td className="py-4">
               <div className="flex items-center gap-3">
@@ -281,7 +290,7 @@ export default function DashboardLibraryPage() {
       {Array.from({ length: 4 }).map((_, index) => (
         <div
           key={`skeleton-card-${index}`}
-          className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
+          className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
         >
           <div className="flex flex-1 gap-3">
             <Skeleton className="h-16 w-20 rounded-md" />
@@ -500,55 +509,65 @@ export default function DashboardLibraryPage() {
               </ScrollArea>
             </div>
             )}
-
-            {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-center">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                        onClick={() => setPage((current) => Math.max(1, current - 1))}
-                        aria-disabled={!canGoBack}
-                      />
-                    </PaginationItem>
-                    {getPageItems().flatMap((pageNumber, index, list) => {
-                      const items: JSX.Element[] = [];
-                      const previous = list[index - 1];
-                      if (typeof previous === "number" && pageNumber - previous > 1) {
-                        items.push(
-                          <PaginationItem key={`ellipsis-${previous}`}>
-                            <PaginationEllipsis />
-                          </PaginationItem>
-                        );
-                      }
-                      items.push(
-                        <PaginationItem key={pageNumber}>
-                          <PaginationLink
-                            isActive={pageNumber === page}
-                            onClick={() => setPage(pageNumber)}
-                          >
-                            {pageNumber}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                      return items;
-                    })}
-                    <PaginationItem>
-                      <PaginationNext
-                        className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                        onClick={() =>
-                          setPage((current) => Math.min(totalPages, current + 1))
-                        }
-                        aria-disabled={!canGoNext}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
           </>
         )}
+
+        <div
+          className={cn(
+            "mt-6 flex items-center justify-center transition-opacity",
+            displayTotalPages > 1 || page > 1 ? "visible" : "invisible"
+          )}
+        >
+          {displayTotalPages > 1 || page > 1 ? (
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    aria-disabled={!canGoBack || loading}
+                  />
+                </PaginationItem>
+                {getPageItems().flatMap((pageNumber, index, list) => {
+                  const items: JSX.Element[] = [];
+                  const previous = list[index - 1];
+                  if (typeof previous === "number" && pageNumber - previous > 1) {
+                    items.push(
+                      <PaginationItem key={`ellipsis-${previous}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  items.push(
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        isActive={pageNumber === page}
+                        onClick={() => setPage(pageNumber)}
+                        aria-disabled={loading}
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                  return items;
+                })}
+                <PaginationItem>
+                  <PaginationNext
+                    className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                    onClick={() =>
+                      setPage((current) =>
+                        Math.min(displayTotalPages, current + 1)
+                      )
+                    }
+                    aria-disabled={!canGoNext || loading}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          ) : (
+            <div className="h-10" />
+          )}
+        </div>
 
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="max-w-4xl border-slate-200 bg-white text-slate-900 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-50">
