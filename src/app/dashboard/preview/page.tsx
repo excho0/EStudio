@@ -2,6 +2,7 @@
 
 import { Player } from "@remotion/player";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import { useContentList } from "../_components/use-content-list";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
@@ -31,9 +32,7 @@ export default function DashboardPreviewPage() {
         ) : item ? (
           <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-black dark:border-white/10">
             {videoLoading || audioLoading || !videoBlobUrl ? (
-              <div className="p-6 text-sm text-slate-500 dark:text-zinc-400">
-                Preparing preview assets...
-              </div>
+              <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
             ) : (
               <Player
                 acknowledgeRemotionLicense

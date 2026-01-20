@@ -41,7 +41,7 @@ export const RemotionRoot: React.FC = () => {
           backgroundColor: "#030712",
         }}
       />
-      <Composition<any, ContentLoopInput>
+      <Composition<ContentLoopInput>
         id="ContentLoop"
         component={ContentLoopComposition}
         defaultProps={{

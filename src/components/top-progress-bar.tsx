@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
@@ -21,7 +21,23 @@ export function TopProgressBar() {
     [searchParams]
   );
 
-  const start = () => {
+  const stop = useCallback(() => {
+    if (activeRequests.current > 0) {
+      return;
+    }
+    state.current = "idle";
+    if (timer.current) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+    if (safetyTimer.current) {
+      window.clearTimeout(safetyTimer.current);
+      safetyTimer.current = null;
+    }
+    NProgress.done();
+  }, []);
+
+  const start = useCallback(() => {
     if (state.current === "loading") {
       return;
     }
@@ -40,23 +56,7 @@ export function TopProgressBar() {
         stop();
       }
     }, 1500);
-  };
-
-  const stop = () => {
-    if (activeRequests.current > 0) {
-      return;
-    }
-    state.current = "idle";
-    if (timer.current) {
-      window.clearTimeout(timer.current);
-      timer.current = null;
-    }
-    if (safetyTimer.current) {
-      window.clearTimeout(safetyTimer.current);
-      safetyTimer.current = null;
-    }
-    NProgress.done();
-  };
+  }, [stop]);
 
   useEffect(() => {
     NProgress.configure({
@@ -139,11 +139,11 @@ export function TopProgressBar() {
       document.removeEventListener("click", handleLinkClick, true);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, []);
+  }, [start, stop]);
 
   useEffect(() => {
     stop();
-  }, [pathname, queryString]);
+  }, [pathname, queryString, stop]);
 
   return null;
 }

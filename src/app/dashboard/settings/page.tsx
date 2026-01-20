@@ -17,7 +17,7 @@ export default function DashboardSettingsPage() {
               Storage
             </div>
             <div className="mt-2 font-semibold text-slate-900 dark:text-zinc-50">
-              local-content/
+              data/
             </div>
             <p className="mt-2 text-xs text-slate-500 dark:text-zinc-500">
               Filesystem-backed storage is active for this workspace.

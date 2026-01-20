@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -13,8 +14,6 @@ export const useMediaBlobUrl = (url?: string | null) => {
         URL.revokeObjectURL(currentUrl.current);
         currentUrl.current = null;
       }
-      setBlobUrl(null);
-      setLoading(false);
       return;
     }
 

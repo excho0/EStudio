@@ -121,6 +121,7 @@ export default function DashboardOverviewPage() {
                   className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
                 >
                   <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={`/api/content/${item.id}/asset?type=thumbnail`}
                       alt={`${item.title} thumbnail`}

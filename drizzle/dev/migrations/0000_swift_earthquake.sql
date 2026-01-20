@@ -1,0 +1,21 @@
+CREATE TABLE `content_items` (
+	`id` text PRIMARY KEY NOT NULL,
+	`title` text NOT NULL,
+	`status` text DEFAULT 'uploaded' NOT NULL,
+	`thumbnail_path` text NOT NULL,
+	`video_path` text NOT NULL,
+	`song_path` text NOT NULL,
+	`render_path` text,
+	`song_duration_seconds` real DEFAULT 0 NOT NULL,
+	`segment_duration_seconds` real DEFAULT 0 NOT NULL,
+	`video_duration_seconds` real DEFAULT 0 NOT NULL,
+	`fade_duration_seconds` real DEFAULT 0 NOT NULL,
+	`fps` integer DEFAULT 30 NOT NULL,
+	`width` integer DEFAULT 1280 NOT NULL,
+	`height` integer DEFAULT 720 NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `idx_content_items_status` ON `content_items` (`status`);--> statement-breakpoint
+CREATE INDEX `idx_content_items_created_at` ON `content_items` (`created_at`);

@@ -19,7 +19,8 @@
 
 # production
 /build
-/local-content
+/data/*
+!/data/README.md
 
 # misc
 .DS_Store

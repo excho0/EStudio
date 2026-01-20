@@ -44,9 +44,10 @@ export function StepperShell({
 }) {
   const currentIndex = steps.findIndex((step) => step.id === currentId);
   const previousIndex = React.useRef(currentIndex);
-  const direction = currentIndex - previousIndex.current;
+  const [direction, setDirection] = React.useState(0);
 
   React.useEffect(() => {
+    setDirection(currentIndex - previousIndex.current);
     previousIndex.current = currentIndex;
   }, [currentIndex]);
 

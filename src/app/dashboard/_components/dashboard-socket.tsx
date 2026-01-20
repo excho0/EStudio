@@ -20,26 +20,22 @@ export function DashboardSocketProvider({
 }) {
   const [connected, setConnected] = useState(false);
   const [eventToken, setEventToken] = useState(0);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket] = useState<Socket>(() => io({ path: "/api/socket" }));
 
   useEffect(() => {
-    const socketInstance = io({ path: "/api/socket" });
-
     const handleUpdate = () => {
       setEventToken((current) => current + 1);
     };
 
-    socketInstance.on("connect", () => setConnected(true));
-    socketInstance.on("disconnect", () => setConnected(false));
-    socketInstance.on("content:update", handleUpdate);
-    setSocket(socketInstance);
+    socket.on("connect", () => setConnected(true));
+    socket.on("disconnect", () => setConnected(false));
+    socket.on("content:update", handleUpdate);
 
     return () => {
-      socketInstance.off("content:update", handleUpdate);
-      socketInstance.disconnect();
-      setSocket(null);
+      socket.off("content:update", handleUpdate);
+      socket.disconnect();
     };
-  }, []);
+  }, [socket]);
 
   const value = useMemo(
     () => ({ connected, eventToken, socket }),

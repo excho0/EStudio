@@ -4,10 +4,9 @@ import { NextResponse } from "next/server";
 import {
   contentPaths,
   ensureContentStore,
-  getContentItem,
-  updateContentItem,
 } from "@/lib/content-store";
 import { emitContentUpdate, emitRenderProgress } from "@/lib/socket";
+import { getContentItem, updateContentItem } from "@/lib/data/content";
 
 export const runtime = "nodejs";
 

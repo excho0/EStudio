@@ -66,6 +66,7 @@ export default function DashboardLibraryPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
+  /* eslint-disable react-hooks/incompatible-library */
   const desktopVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => desktopScrollRef.current,
@@ -80,6 +81,7 @@ export default function DashboardLibraryPage() {
     overscan: 12,
     getItemKey: (index) => items[index]?.id ?? index,
   });
+  /* eslint-enable react-hooks/incompatible-library */
   const getActionItems = (item: ContentItem) => [
     {
       label: "Preview",
@@ -360,6 +362,7 @@ export default function DashboardLibraryPage() {
                         >
                           <td className="py-4">
                             <div className="flex items-center gap-3">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={`/api/content/${item.id}/asset?type=thumbnail`}
                                 alt={`${item.title} thumbnail`}
@@ -435,6 +438,7 @@ export default function DashboardLibraryPage() {
                       >
                         <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                           <div className="flex flex-1 gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={`/api/content/${item.id}/asset?type=thumbnail`}
                               alt={`${item.title} thumbnail`}
@@ -500,9 +504,7 @@ export default function DashboardLibraryPage() {
           {selected && (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-black dark:border-white/10">
               {selectedVideoLoading || selectedAudioLoading || !selectedVideoBlobUrl ? (
-                <div className="p-6 text-sm text-slate-500 dark:text-zinc-400">
-                  Preparing preview assets...
-                </div>
+                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
               ) : (
                 <Player
                   component={ContentLoopComposition}

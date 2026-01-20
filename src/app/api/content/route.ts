@@ -3,12 +3,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
-  addContentItem,
   contentPaths,
   ensureContentStore,
-  readContentIndex,
 } from "@/lib/content-store";
 import { emitContentUpdate } from "@/lib/socket";
+import {
+  contentCreateSchema,
+  contentQuerySchema,
+  createContentItem,
+  listContentItems,
+} from "@/lib/data/content";
 
 export const runtime = "nodejs";
 
@@ -28,39 +32,13 @@ const writeUpload = async (file: File, folder: string) => {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const query = (searchParams.get("q") ?? "").trim().toLowerCase();
-  const page = Number(searchParams.get("page") ?? "1");
-  const limit = Number(searchParams.get("limit") ?? "50");
-
-  const index = await readContentIndex();
-  const allItems = index.items;
-  const filtered = query
-    ? allItems.filter((item) => {
-        const title = item.title.toLowerCase();
-        const status = item.status.toLowerCase();
-        return (
-          title.includes(query) ||
-          status.includes(query) ||
-          item.id.toLowerCase().includes(query)
-        );
-      })
-    : allItems;
-  const ordered = [...filtered].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
-  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-  const safeLimit =
-    Number.isFinite(limit) && limit > 0 ? Math.min(200, limit) : 50;
-  const start = (safePage - 1) * safeLimit;
-  const paged = ordered.slice(start, start + safeLimit);
-
-  return NextResponse.json({
-    items: paged,
-    total: ordered.length,
-    page: safePage,
-    limit: safeLimit,
+  const params = contentQuerySchema.parse({
+    q: searchParams.get("q") ?? "",
+    page: searchParams.get("page") ?? "1",
+    limit: searchParams.get("limit") ?? "50",
   });
+  const result = await listContentItems(params);
+  return NextResponse.json(result);
 }
 
 export async function POST(request: Request) {
@@ -93,10 +71,9 @@ export async function POST(request: Request) {
     writeUpload(song, "uploads/songs"),
   ]);
 
-  const item = {
+  const item = contentCreateSchema.parse({
     id: randomUUID(),
     title,
-    createdAt: new Date().toISOString(),
     thumbnailPath,
     videoPath,
     songPath,
@@ -118,9 +95,9 @@ export async function POST(request: Request) {
     fps: Number.isFinite(fps) ? fps : 30,
     width: Number.isFinite(width) ? width : 1280,
     height: Number.isFinite(height) ? height : 720,
-  };
+  });
 
-  await addContentItem(item);
-  emitContentUpdate({ type: "content:created", item });
-  return NextResponse.json(item);
+  const created = await createContentItem(item);
+  emitContentUpdate({ type: "content:created", item: created });
+  return NextResponse.json(created);
 }

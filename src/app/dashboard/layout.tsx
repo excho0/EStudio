@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
-import { DashboardShell } from "./_components/dashboard-shell";
+import AdminPanelLayout from "@/components/admin-panel/admin-panel-layout";
+import { DashboardSocketProvider } from "@/app/dashboard/_components/dashboard-socket";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  return <DashboardShell>{children}</DashboardShell>;
+  return (
+    <DashboardSocketProvider>
+      <AdminPanelLayout>{children}</AdminPanelLayout>
+    </DashboardSocketProvider>
+  );
 }

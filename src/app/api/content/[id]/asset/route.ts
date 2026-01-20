@@ -1,7 +1,8 @@
 import { createReadStream, promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { getContentItem, resolveContentPath } from "@/lib/content-store";
+import { resolveContentPath } from "@/lib/content-store";
+import { getContentItem } from "@/lib/data/content";
 import { Readable } from "stream";
 
 export const runtime = "nodejs";
