@@ -16,7 +16,8 @@
     "drizzle:prod:generate": "drizzle-kit generate --config=drizzle/prod/drizzle.config.ts",
     "drizzle:prod:push": "drizzle-kit push --config=drizzle/prod/drizzle.config.ts",
     "drizzle:prod:studio": "drizzle-kit studio --config=drizzle/prod/drizzle.config.ts",
-    "drizzle:prod:introspect": "drizzle-kit introspect --config=drizzle/prod/drizzle.config.ts"
+    "drizzle:prod:introspect": "drizzle-kit introspect --config=drizzle/prod/drizzle.config.ts",
+    "seed:content": "pnpm dlx tsx -r tsconfig-paths/register scripts/seed-content.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -76,6 +77,7 @@
     "eslint-config-next": "16.1.3",
     "shadcn": "^3.7.0",
     "tailwindcss": "^4",
+    "tsconfig-paths": "^4.2.0",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5"
   }

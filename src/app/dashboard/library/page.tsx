@@ -10,6 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -138,6 +147,21 @@ export default function DashboardLibraryPage() {
 
     await refresh();
     setRenderingId(null);
+  };
+
+  const getPageItems = () => {
+    if (totalPages <= 1) return [];
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+    const pages = new Set<number>([
+      1,
+      totalPages,
+      page,
+      Math.max(1, page - 1),
+      Math.min(totalPages, page + 1),
+    ]);
+    return Array.from(pages).sort((a, b) => a - b);
   };
 
   const handleDelete = async (id: string) => {
@@ -478,28 +502,49 @@ export default function DashboardLibraryPage() {
             )}
 
             {totalPages > 1 && (
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  variant="outline"
-                  className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  disabled={!canGoBack}
-                >
-                  Previous
-                </Button>
-                <span className="text-xs text-slate-500 dark:text-zinc-500">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
-                  disabled={!canGoNext}
-                >
-                  Next
-                </Button>
+              <div className="mt-6 flex items-center justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                        onClick={() => setPage((current) => Math.max(1, current - 1))}
+                        aria-disabled={!canGoBack}
+                      />
+                    </PaginationItem>
+                    {getPageItems().flatMap((pageNumber, index, list) => {
+                      const items: JSX.Element[] = [];
+                      const previous = list[index - 1];
+                      if (typeof previous === "number" && pageNumber - previous > 1) {
+                        items.push(
+                          <PaginationItem key={`ellipsis-${previous}`}>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        );
+                      }
+                      items.push(
+                        <PaginationItem key={pageNumber}>
+                          <PaginationLink
+                            isActive={pageNumber === page}
+                            onClick={() => setPage(pageNumber)}
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                      return items;
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                        onClick={() =>
+                          setPage((current) => Math.min(totalPages, current + 1))
+                        }
+                        aria-disabled={!canGoNext}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             )}
           </>
