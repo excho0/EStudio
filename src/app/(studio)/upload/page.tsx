@@ -8,7 +8,6 @@ import {
   FileVideo,
   Film,
   Image,
-  Music,
   MoveHorizontal,
   MoveVertical,
   Monitor,

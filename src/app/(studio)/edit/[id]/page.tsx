@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
-  Image as ImageIcon,
   Pencil,
   MoveHorizontal,
   MoveVertical,
@@ -21,7 +20,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -32,7 +30,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -134,9 +131,6 @@ export default function EditContentPage() {
     : 4;
   const safeFadeDuration = item ? getNumber(item.fadeDurationSeconds, 1) : 1;
   const safePlaybackRate = item ? getNumber(item.playbackRate, 1) : 1;
-  const safeOverlapPercent = item
-    ? Math.round(getNumber(item.overlapRatio, 0) * 100)
-    : 25;
   const safeVideoDuration = item
     ? getNumber(
         item.videoDurationSeconds ?? item.segmentDurationSeconds,
@@ -361,7 +355,7 @@ export default function EditContentPage() {
             </div>
           ) : item ? (
             <div className="flex flex-col gap-6">
-              <div className="grid gap-4">
+              <div className="grid gap-6">
                 <div className="grid gap-2">
                   <LabelWithTooltip
                     htmlFor="title"
@@ -414,7 +408,7 @@ export default function EditContentPage() {
                       text="Thumbnail"
                       tip="Image shown in the library and preview."
                     />
-                    <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+                    <div className="flex items-center gap-4 p-3">
                       <div className="h-20 w-28 overflow-hidden rounded-md ">
                         {thumbnailPreview || item ? (
                           <ImageWithSkeleton

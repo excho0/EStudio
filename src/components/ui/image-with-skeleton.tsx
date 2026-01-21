@@ -10,7 +10,7 @@ type ImageWithSkeletonProps = React.ImgHTMLAttributes<HTMLImageElement> & {
 };
 
 const ImageWithSkeleton = React.forwardRef<HTMLImageElement, ImageWithSkeletonProps>(
-  ({ className, wrapperClassName, skeletonClassName, onLoad, ...props }, ref) => {
+  ({ className, wrapperClassName, skeletonClassName, onLoad, alt = "", ...props }, ref) => {
     const [loaded, setLoaded] = React.useState(false);
 
     return (
@@ -26,6 +26,7 @@ const ImageWithSkeleton = React.forwardRef<HTMLImageElement, ImageWithSkeletonPr
             )}
           />
         ) : null}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={ref}
           className={cn(loaded ? "opacity-100" : "opacity-0", "transition-opacity duration-300", className)}
@@ -34,6 +35,7 @@ const ImageWithSkeleton = React.forwardRef<HTMLImageElement, ImageWithSkeletonPr
             onLoad?.(event);
           }}
           {...props}
+          alt={alt}
         />
       </div>
     );

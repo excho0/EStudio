@@ -128,10 +128,16 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
   const { durationInFrames, fps } = useVideoConfig();
-  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
-  const [fadeStartFrame, setFadeStartFrame] = useState<number | null>(null);
+  const [loadedThumbnailSrc, setLoadedThumbnailSrc] = useState<string | null>(null);
+  const [fadeStartState, setFadeStartState] = useState<{
+    src: string | null;
+    frame: number | null;
+  }>({ src: null, frame: null });
   const thumbnailRenderHandle = useRef<number | null>(null);
   const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
+  const thumbnailLoaded = Boolean(thumbnailSrc && loadedThumbnailSrc === thumbnailSrc);
+  const fadeStartFrame =
+    thumbnailSrc && fadeStartState.src === thumbnailSrc ? fadeStartState.frame : null;
   const fadeFrom = fadeStartFrame ?? 0;
   const fadeOutEnd = fadeFrom + thumbnailFadeFrames;
   const shouldFade = thumbnailSrc && thumbnailLoaded && fadeStartFrame !== null;
@@ -143,7 +149,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       : thumbnailSrc
         ? 1
         : 0;
-  const videoOpacity = thumbnailSrc && !thumbnailLoaded ? 0 : 1;
+  const videoOpacity = thumbnailSrc && !thumbnailLoaded && !isRendering ? 0 : 1;
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
@@ -224,7 +230,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoSrc,
       maxStart,
       resolvedPlaybackRate,
-      resolvedOverlapRatio,
     ]
   );
 
@@ -232,8 +237,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     if (!thumbnailSrc || isRendering) {
       return;
     }
-    setThumbnailLoaded(false);
-    setFadeStartFrame(null);
     if (thumbnailRenderHandle.current !== null) {
       continueRender(thumbnailRenderHandle.current);
     }
@@ -259,10 +262,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 src={thumbnailSrc}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 onLoad={() => {
-                  setThumbnailLoaded(true);
-                  if (fadeStartFrame === null) {
-                    setFadeStartFrame(frame);
-                  }
+                  setLoadedThumbnailSrc(thumbnailSrc);
+                  setFadeStartState({ src: thumbnailSrc, frame });
                   if (thumbnailRenderHandle.current !== null) {
                     continueRender(thumbnailRenderHandle.current);
                     thumbnailRenderHandle.current = null;
