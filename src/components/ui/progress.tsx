@@ -9,7 +9,7 @@ type ProgressVariant =
   | "default"
   | "blue"
   | "green"
-  | "red"
+  | "rose"
   | "amber"
   | "violet";
 
@@ -20,7 +20,7 @@ const indicatorVariants: Record<ProgressVariant, string> = {
     "bg-sky-500 shadow-[0_0_12px_rgba(14,165,233,0.35)] dark:shadow-[0_0_12px_rgba(14,165,233,0.45)]",
   green:
     "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.35)] dark:shadow-[0_0_12px_rgba(16,185,129,0.45)]",
-  red:
+  rose:
     "bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.35)] dark:shadow-[0_0_12px_rgba(244,63,94,0.45)]",
   amber:
     "bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.35)] dark:shadow-[0_0_12px_rgba(251,191,36,0.45)]",

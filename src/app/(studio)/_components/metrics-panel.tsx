@@ -21,18 +21,36 @@ import IntelIcon from "@/components/icons/intel";
 import { cn } from "@/lib/utils";
 import type { MetricsPayload } from "./dashboard-socket";
 
-const tempVariant = (temp: number | null) =>
-  temp !== null && temp < 40 ? "blue" : temp !== null && temp < 70 ? "amber" : "red";
+const TEMP_THRESHOLDS = {
+  low: 50,
+  mid: 70,
+  high: 80,
+} as const;
 
-const tempChipClass = (temp: number | null) =>
-  cn(
-    "border",
-    temp !== null && temp < 40
-      ? "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
-      : temp !== null && temp < 70
-        ? "border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
-        : "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-  );
+type TempVariant = "default" | "blue" | "amber" | "rose";
+
+const tempVariant = (temp: number | null): TempVariant => {
+  if (temp === null) return "default";
+  if (temp < TEMP_THRESHOLDS.low) return "blue";
+  if (temp < TEMP_THRESHOLDS.high) return "amber";
+  return "rose";
+};
+
+const TEMP_CLASSES: Record<TempVariant, string> = {
+  default:
+    "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-500/30 dark:bg-gray-500/10 dark:text-gray-300",
+  blue:
+    "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
+  amber:
+    "border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+  rose:
+    "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
+};
+
+const tempChipClass = (temp: number | null) => {
+  const variant = tempVariant(temp);
+  return cn("border", TEMP_CLASSES[variant]);
+};
 
 const CardHeaderRow = ({
   label,
@@ -79,7 +97,7 @@ const ProgressWithSkeleton = ({
 }: {
   loading: boolean;
   value: number;
-  variant: "blue" | "green" | "amber" | "red" | "violet" | "default";
+  variant: "blue" | "green" | "amber" | "rose" | "violet" | "default";
 }) =>
   loading ? (
     <Skeleton className="mt-4 h-2 w-full" />
