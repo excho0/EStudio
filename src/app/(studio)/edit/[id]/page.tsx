@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
+  Image as ImageIcon,
+  Pencil,
   MoveHorizontal,
   MoveVertical,
+  Monitor,
+  Repeat2,
+  SlidersHorizontal,
   Timer,
   Type,
   FastForward,
@@ -32,10 +37,12 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { toast } from "sonner";
 import { Player } from "@remotion/player";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 type ContentItem = {
   id: string;
@@ -88,6 +95,7 @@ const LabelWithTooltip = ({
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [item, setItem] = useState<ContentItem | null>(null);
   const [formValues, setFormValues] = useState({
     title: "",
@@ -99,11 +107,18 @@ export default function EditContentPage() {
     width: "",
     height: "",
   });
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const isTablet = useMediaQuery("(max-width: 1024px)");
   const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
   const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
+  const thumbnailUrl = item
+    ? `/api/content/${item.id}/asset?type=thumbnail&v=${thumbnailVersion}`
+    : null;
   const { blobUrl: videoBlobUrl, loading: videoLoading } =
     useMediaBlobUrl(videoUrl);
   const { blobUrl: audioBlobUrl, loading: audioLoading } =
@@ -164,6 +179,7 @@ export default function EditContentPage() {
         const data = (await response.json()) as ContentItem;
         if (active) {
           setItem(data);
+          setThumbnailVersion(Date.now());
           const overlapPercent = Number.isFinite(data.overlapRatio)
             ? Math.round(Number(data.overlapRatio) * 100)
             : 25;
@@ -193,6 +209,20 @@ export default function EditContentPage() {
       active = false;
     };
   }, [params.id]);
+
+  useEffect(() => {
+    if (!thumbnailFile) {
+      setThumbnailPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(thumbnailFile);
+    setThumbnailPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [thumbnailFile]);
+
+  const handleThumbnailChange = (file: File | null) => {
+    setThumbnailFile(file);
+  };
 
   const handleSave = async () => {
     if (!item) return;
@@ -239,16 +269,53 @@ export default function EditContentPage() {
       if (height !== undefined) {
         payload.height = height;
       }
-      const response = await fetch(`/api/content/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const response = await (thumbnailFile
+        ? (() => {
+            const formData = new FormData();
+            formData.append("title", String(payload.title ?? ""));
+            if (payload.status) {
+              formData.append("status", String(payload.status));
+            }
+            if (payload.fadeDurationSeconds !== undefined) {
+              formData.append(
+                "fadeDurationSeconds",
+                String(payload.fadeDurationSeconds)
+              );
+            }
+            if (payload.playbackRate !== undefined) {
+              formData.append("playbackRate", String(payload.playbackRate));
+            }
+            if (payload.overlapRatio !== undefined) {
+              formData.append("overlapRatio", String(payload.overlapRatio));
+            }
+            if (payload.fps !== undefined) {
+              formData.append("fps", String(payload.fps));
+            }
+            if (payload.width !== undefined) {
+              formData.append("width", String(payload.width));
+            }
+            if (payload.height !== undefined) {
+              formData.append("height", String(payload.height));
+            }
+            formData.append("thumbnail", thumbnailFile);
+            return fetch(`/api/content/${item.id}`, {
+              method: "PATCH",
+              body: formData,
+            });
+          })()
+        : fetch(`/api/content/${item.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }));
       if (!response.ok) {
         throw new Error("Failed to save changes.");
       }
       const updated = (await response.json()) as ContentItem;
       setItem(updated);
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailVersion(Date.now());
       toast.success("Content updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -340,16 +407,62 @@ export default function EditContentPage() {
                   </InputGroup>
                 </div>
 
+                {!isTablet && (
+                  <div className="grid gap-2">
+                    <LabelWithTooltip
+                      htmlFor="thumbnail"
+                      text="Thumbnail"
+                      tip="Image shown in the library and preview."
+                    />
+                    <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+                      <div className="h-20 w-28 overflow-hidden rounded-md ">
+                        {thumbnailPreview || item ? (
+                          <ImageWithSkeleton
+                            src={thumbnailPreview ?? thumbnailUrl ?? ""}
+                            alt="Thumbnail preview"
+                            className="h-full w-full object-cover"
+                            wrapperClassName="h-full w-full"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-slate-400 dark:text-zinc-500">
+                            No thumbnail
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Change thumbnail
+                        </button>
+                        {thumbnailFile ? (
+                          <div className="text-xs text-slate-500 dark:text-zinc-400">
+                            Selected: {thumbnailFile.name}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <Collapsible
                   defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex flex-col items-start text-left">
-                      <span>Loop</span>
-                      <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                        Fade + overlap
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <Repeat2 className="h-4 w-4" />
                       </span>
+                      <div className="flex flex-col items-start">
+                        <span>Loop</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Fade + overlap
+                        </span>
+                      </div>
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
@@ -410,11 +523,16 @@ export default function EditContentPage() {
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex flex-col items-start text-left">
-                      <span>Playback</span>
-                      <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                        Speed
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <SlidersHorizontal className="h-4 w-4" />
                       </span>
+                      <div className="flex flex-col items-start">
+                        <span>Playback</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Speed
+                        </span>
+                      </div>
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
@@ -476,11 +594,16 @@ export default function EditContentPage() {
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex flex-col items-start text-left">
-                      <span>Output</span>
-                      <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                        Resolution
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <Monitor className="h-4 w-4" />
                       </span>
+                      <div className="flex flex-col items-start">
+                        <span>Output</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Resolution
+                        </span>
+                      </div>
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
@@ -535,6 +658,16 @@ export default function EditContentPage() {
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
+                <input
+                  ref={fileInputRef}
+                  id="thumbnail"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) =>
+                    handleThumbnailChange(event.target.files?.[0] ?? null)
+                  }
+                />
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Button
@@ -561,7 +694,7 @@ export default function EditContentPage() {
           </div>
         )}
         <div>
-          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
+          <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
             {loading || videoLoading || audioLoading || !videoBlobUrl || !canRenderPreview ? (
               <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
             ) : item ? (
@@ -570,6 +703,7 @@ export default function EditContentPage() {
                 component={ContentLoopComposition}
                 inputProps={{
                   title: item.title,
+                  thumbnailSrc: thumbnailPreview ?? thumbnailUrl ?? "",
                   videoSrc: videoBlobUrl,
                   audioSrc: audioBlobUrl ?? "",
                   segmentDurationSeconds: safeSegmentDuration,
@@ -590,6 +724,16 @@ export default function EditContentPage() {
             ) : (
               <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
             )}
+            {isTablet ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
+                aria-label="Edit thumbnail"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
           <div className="p-2 py-4">
             {loading ? (

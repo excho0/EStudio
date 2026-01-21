@@ -1,12 +1,15 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AbsoluteFill,
   Audio,
   Html5Audio,
   Html5Video,
+  Img,
   OffthreadVideo,
   Sequence,
   Video,
+  interpolate,
+  useCurrentFrame,
   useRemotionEnvironment,
   useVideoConfig,
 } from "remotion";
@@ -15,6 +18,7 @@ import { fade } from "@remotion/transitions/fade";
 
 export type ContentLoopProps = {
   title: string;
+  thumbnailSrc?: string;
   videoSrc: string;
   audioSrc: string;
   segmentDurationSeconds: number;
@@ -108,6 +112,7 @@ const SegmentLayer: React.FC<{
 };
 
 export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
+  thumbnailSrc,
   videoSrc,
   audioSrc,
   segmentDurationSeconds,
@@ -116,7 +121,34 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   playbackRate = 1,
   overlapRatio = null,
 }) => {
+  const frame = useCurrentFrame();
+  const { isRendering } = useRemotionEnvironment();
   const { durationInFrames, fps } = useVideoConfig();
+  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
+  const [fadeStartFrame, setFadeStartFrame] = useState<number | null>(null);
+  const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
+  const thumbnailIntroFrames = Math.min(8, Math.max(2, Math.round(fps * 0.12)));
+  const fadeFrom = fadeStartFrame ?? 0;
+  const fadeInEnd = fadeFrom + thumbnailIntroFrames;
+  const fadeOutEnd = fadeInEnd + thumbnailFadeFrames;
+  const shouldFade = thumbnailSrc && thumbnailLoaded && fadeStartFrame !== null;
+  const thumbnailOpacity =
+    shouldFade && thumbnailSrc
+      ? interpolate(
+          frame,
+          [fadeFrom, fadeInEnd, fadeOutEnd],
+          [0, 1, 0],
+          { extrapolateRight: "clamp" }
+        )
+      : thumbnailSrc
+        ? 0
+        : 0;
+  const videoOpacity =
+    shouldFade && thumbnailSrc
+      ? interpolate(frame, [fadeFrom, fadeInEnd], [1, 1], {
+          extrapolateRight: "clamp",
+        })
+      : 1;
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
@@ -204,7 +236,25 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   return (
     <AbsoluteFill style={{ backgroundColor: "#050505", color: "white" }}>
       {videoSrc ? (
-        <TransitionSeries>{series}</TransitionSeries>
+        <>
+          <AbsoluteFill style={{ opacity: videoOpacity }}>
+            <TransitionSeries>{series}</TransitionSeries>
+          </AbsoluteFill>
+          {thumbnailSrc && !isRendering ? (
+            <AbsoluteFill style={{ opacity: thumbnailOpacity }}>
+              <Img
+                src={thumbnailSrc}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onLoad={() => {
+                  setThumbnailLoaded(true);
+                  if (fadeStartFrame === null) {
+                    setFadeStartFrame(frame);
+                  }
+                }}
+              />
+            </AbsoluteFill>
+          ) : null}
+        </>
       ) : (
         <AbsoluteFill
           style={{

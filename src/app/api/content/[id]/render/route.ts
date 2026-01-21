@@ -152,6 +152,7 @@ export async function POST(
   const totalFrames = Math.max(1, Math.round(item.songDurationSeconds * item.fps));
   const props = {
     title: item.title,
+    thumbnailSrc: `${origin}/api/content/${id}/asset?type=thumbnail`,
     videoSrc: `${origin}/api/content/${id}/asset?type=video`,
     audioSrc: `${origin}/api/content/${id}/asset?type=song`,
     segmentDurationSeconds: item.segmentDurationSeconds,

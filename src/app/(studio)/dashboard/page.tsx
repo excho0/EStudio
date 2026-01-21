@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
+import { StatRow } from "@/components/ui/stat-row";
 import { useContentList, type ContentItem } from "../_components/use-content-list";
 import { useDashboardSocket } from "../_components/dashboard-socket";
 import NvidiaIcon from "@/components/icons/nvidia";
@@ -20,6 +23,7 @@ import {
   MonitorDot,
   TriangleAlert,
   Sparkles,
+  Thermometer,
 } from "lucide-react";
 
 export default function DashboardOverviewPage() {
@@ -117,7 +121,7 @@ export default function DashboardOverviewPage() {
               CPU Temp
             </p>
             <span className="rounded-full border border-rose-200 bg-rose-50 p-2 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-              <Flame className="h-4 w-4" />
+              <Thermometer className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3 text-3xl font-semibold">
@@ -174,7 +178,7 @@ export default function DashboardOverviewPage() {
                 </div>
               </div>
               <div className="mt-4 space-y-3 text-sm text-slate-500 dark:text-zinc-400">
-                <div>
+                <StatRow>
                   <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">
                     <span>Utilization</span>
                     <span>
@@ -184,8 +188,8 @@ export default function DashboardOverviewPage() {
                     </span>
                   </div>
                   <Progress value={gpu.utilizationGpu ?? 0} variant="blue" className="mt-2" />
-                </div>
-                <div>
+                </StatRow>
+                <StatRow>
                   <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">
                     <span>VRAM</span>
                     <span>
@@ -200,18 +204,29 @@ export default function DashboardOverviewPage() {
                       {gpu.vramUsedMB}MB / {gpu.vramTotalMB}MB
                     </div>
                   ) : null}
-                </div>
-                {gpu.fanSpeedPct !== null && (
-                  <div>
-                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">
-                      <span>Fan</span>
-                      <span>{Math.round(gpu.fanSpeedPct)}%</span>
-                    </div>
-                    <Progress value={gpu.fanSpeedPct} variant="default" className="mt-2" />
-                  </div>
-                )}
+                </StatRow>
+                <AnimatePresence initial={false}>
+                  {gpu.fanSpeedPct !== null && gpu.fanSpeedPct > 0 ? (
+                    <StatRow
+                      key="fan-speed"
+                    >
+                      {(() => {
+                        const fanValue = Math.round(gpu.fanSpeedPct ?? 0);
+                        return (
+                          <>
+                          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">
+                            <span>Fan</span>
+                            <span>{fanValue}%</span>
+                          </div>
+                          <Progress value={fanValue} variant="default" className="mt-2" />
+                          </>
+                        );
+                      })()}
+                    </StatRow>
+                  ) : null}
+                </AnimatePresence>
                 {gpu.powerDrawW !== null && (
-                  <div>
+                  <StatRow>
                     <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">
                       <span>Power</span>
                       <span>
@@ -233,7 +248,7 @@ export default function DashboardOverviewPage() {
                       variant="amber"
                       className="mt-2"
                     />
-                  </div>
+                  </StatRow>
                 )}
               </div>
             </Card>
@@ -375,11 +390,11 @@ export default function DashboardOverviewPage() {
                   className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
                 >
                   <div className="flex items-center gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <ImageWithSkeleton
                       src={`/api/content/${item.id}/asset?type=thumbnail`}
                       alt={`${item.title} thumbnail`}
                       className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                      wrapperClassName="h-12 w-16 rounded-md"
                     />
                     <div>
                       <div className="text-sm font-semibold">{item.title}</div>

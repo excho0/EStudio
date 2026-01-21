@@ -8,6 +8,7 @@ export type ContentItem = {
   id: string;
   title: string;
   createdAt: string;
+  updatedAt: string;
   thumbnailPath: string;
   videoPath: string;
   songPath: string;

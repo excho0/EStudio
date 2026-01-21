@@ -11,6 +11,9 @@ import {
   Music,
   MoveHorizontal,
   MoveVertical,
+  Monitor,
+  Repeat2,
+  SlidersHorizontal,
   Timer,
   Type,
   FastForward,
@@ -42,6 +45,7 @@ import {
   StepperMotion,
   StepperShell,
 } from "@/components/animated-stepper";
+import { motion } from "framer-motion";
 
 const initialForm = {
   title: "",
@@ -281,11 +285,16 @@ export default function DashboardUploadPage() {
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
                     <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex flex-col items-start text-left">
-                        <span>Loop</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Fade + overlap
+                      <div className="flex items-center gap-3 text-left">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                          <Repeat2 className="h-4 w-4" />
                         </span>
+                        <div className="flex flex-col items-start">
+                          <span>Loop</span>
+                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                            Fade + overlap
+                          </span>
+                        </div>
                       </div>
                       <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                     </CollapsibleTrigger>
@@ -346,11 +355,16 @@ export default function DashboardUploadPage() {
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
                     <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex flex-col items-start text-left">
-                        <span>Playback</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Speed
+                      <div className="flex items-center gap-3 text-left">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                          <SlidersHorizontal className="h-4 w-4" />
                         </span>
+                        <div className="flex flex-col items-start">
+                          <span>Playback</span>
+                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                            Speed
+                          </span>
+                        </div>
                       </div>
                       <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                     </CollapsibleTrigger>
@@ -412,11 +426,16 @@ export default function DashboardUploadPage() {
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
                     <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex flex-col items-start text-left">
-                        <span>Output</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Resolution
+                      <div className="flex items-center gap-3 text-left">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                          <Monitor className="h-4 w-4" />
                         </span>
+                        <div className="flex flex-col items-start">
+                          <span>Output</span>
+                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                            Resolution
+                          </span>
+                        </div>
                       </div>
                       <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                     </CollapsibleTrigger>
@@ -636,25 +655,50 @@ export default function DashboardUploadPage() {
                   ))}
                   {methods.when("success", () => (
                     <StepperMotion stepKey="success" direction={direction}>
-                <div className="flex flex-col items-center gap-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-6 text-center text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <Music className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <div className="text-lg font-semibold">Upload complete</div>
-                    <p className="text-sm">
-                      Your files are saved and ready for render.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/30 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
-                    onClick={() => methods.reset()}
-                  >
-                    Upload another
-                  </Button>
-                </div>
+                        <motion.div
+                          className="text-center py-10"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+                        >
+                          <motion.div
+                            className="relative mx-auto mb-6 flex size-20 items-center justify-center rounded-full bg-linear-to-br from-[#f8f7f4] via-40% to-[#a8a7a4] shadow-[0_0_0_2px_rgba(255,255,255,0.7),0_18px_40px_-20px_rgba(15,15,15,0.6)] after:absolute after:inset-[6px] after:rounded-full after:bg-linear-to-br after:from-white/80 after:to-white/10 after:content-[''] dark:from-[#7b7a78] dark:via-35% dark:to-[#1a1a1a] dark:shadow-[0_0_0_2px_rgba(255,255,255,0.08),0_18px_40px_-20px_rgba(0,0,0,0.7)] dark:after:bg-linear-to-br dark:after:from-white/10 dark:after:to-black/10"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 200, damping: 10, delay: 0.2 }}
+                          >
+                            <CheckCircle className="relative z-10 size-9 text-emerald-700 dark:text-emerald-300" />
+                          </motion.div>
+                          <motion.h3
+                            className="text-2xl font-bold text-gray-12 mb-2"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                          >
+                            Uploaded!
+                          </motion.h3>
+                          <motion.p
+                            className="text-gray-12 mb-6"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4 }}
+                          >
+                            Your files are saved and ready for render.
+                          </motion.p>
+                          <motion.button
+                            type="button"
+                            onClick={() => methods.reset()}
+
+                            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors hover:cursor-pointer"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                            whileHover={{ scale: 1.05, transition: { delay: 0, duration: 0.12 } }}
+                            whileTap={{ scale: 0.95, transition: { delay: 0, duration: 0.06 } }}
+                          >
+                            Upload another
+                          </motion.button>
+                        </motion.div>
                     </StepperMotion>
                   ))}
                 </>

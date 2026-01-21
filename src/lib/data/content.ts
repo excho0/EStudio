@@ -48,6 +48,7 @@ export const contentItemSchema = z.object({
   id: z.uuid(),
   title: z.string().min(1),
   createdAt: z.string(),
+  updatedAt: z.string(),
   thumbnailPath: z.string(),
   videoPath: z.string(),
   songPath: z.string(),
@@ -93,6 +94,7 @@ export const contentCreateSchema = z.object({
 export const contentUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  thumbnailPath: z.string().min(1).optional(),
   songDurationSeconds: z.number().nonnegative().optional(),
   segmentDurationSeconds: z.number().nonnegative().optional(),
   fadeDurationSeconds: z.number().nonnegative().optional(),

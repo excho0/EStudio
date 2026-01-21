@@ -6,6 +6,7 @@ import { Table } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import {
   Pagination,
   PaginationContent,
@@ -385,11 +386,13 @@ export default function DashboardLibraryPage() {
                         >
                           <td className="py-4">
                             <div className="flex items-center gap-3">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/api/content/${item.id}/asset?type=thumbnail`}
+                              <ImageWithSkeleton
+                                src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                  item.updatedAt
+                                )}`}
                                 alt={`${item.title} thumbnail`}
                                 className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                                wrapperClassName="h-12 w-16 rounded-md"
                               />
                               <div>
                                 <div className="font-medium">{item.title}</div>
@@ -461,11 +464,13 @@ export default function DashboardLibraryPage() {
                       >
                         <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                           <div className="flex flex-1 gap-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={`/api/content/${item.id}/asset?type=thumbnail`}
+                            <ImageWithSkeleton
+                              src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                item.updatedAt
+                              )}`}
                               alt={`${item.title} thumbnail`}
                               className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                              wrapperClassName="h-16 w-20 rounded-md"
                             />
                             <div className="flex-1">
                               <div className="text-sm font-semibold">

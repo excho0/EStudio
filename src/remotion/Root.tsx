@@ -46,6 +46,7 @@ export const RemotionRoot: React.FC = () => {
         component={ContentLoopComposition}
         defaultProps={{
           title: "Content Loop",
+          thumbnailSrc: "",
           videoSrc: "",
           audioSrc: "",
           segmentDurationSeconds: 4,

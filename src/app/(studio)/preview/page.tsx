@@ -39,6 +39,7 @@ export default function DashboardPreviewPage() {
                 component={ContentLoopComposition}
                 inputProps={{
                   title: item.title,
+                  thumbnailSrc: `/api/content/${item.id}/asset?type=thumbnail`,
                   videoSrc: videoBlobUrl,
                   audioSrc: audioBlobUrl ?? "",
                   segmentDurationSeconds: item.segmentDurationSeconds,

@@ -9,6 +9,8 @@ const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT || 3000);
 const app = next({ dev, hostname: "0.0.0.0", port });
 const handle = app.getRequestHandler();
+let mockFanStep = 0;
+let mockFanDir = 1;
 
 app
   .prepare()
@@ -110,7 +112,13 @@ app
           ? (memory.active / memory.total) * 100
           : null;
 
-        const gpus = graphics.controllers.map((gpu, index) => {
+          const useMockFan = process.env.MOCK_FAN_SPEED === "true";
+          if (useMockFan) {
+            mockFanStep = mockFanDir > 0 ? 50 : 0;
+            mockFanDir *= -1;
+          }
+
+          const gpus = graphics.controllers.map((gpu, index) => {
           const vramTotalBytes = gpu.vramTotal ? gpu.vramTotal * 1024 * 1024 : 0;
           const vramUsedBytes = gpu.vramUsed ? gpu.vramUsed * 1024 * 1024 : 0;
           const vramPct =
@@ -142,7 +150,9 @@ app
               gpu.utilizationGpu ?? nvidia?.utilizationGpu ?? amd?.utilizationGpu ?? null,
             temperatureGpu:
               gpu.temperatureGpu ?? nvidia?.temperatureGpu ?? amd?.temperatureGpu ?? null,
-            fanSpeedPct: nvidia?.fanSpeedPct ?? amd?.fanSpeedPct ?? null,
+            fanSpeedPct: useMockFan
+              ? mockFanStep
+              : nvidia?.fanSpeedPct ?? amd?.fanSpeedPct ?? null,
             powerDrawW: nvidia?.powerDrawW ?? amd?.powerDrawW ?? null,
             powerLimitW: nvidia?.powerLimitW ?? amd?.powerLimitW ?? null,
           };
