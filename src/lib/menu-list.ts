@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Folder,
   LayoutGrid,
   Settings,
@@ -35,6 +36,12 @@ export function getMenuList(): Group[] {
           href: "/dashboard",
           label: "Overview",
           icon: LayoutGrid,
+          submenus: [],
+        },
+        {
+          href: "/metrics",
+          label: "Metrics",
+          icon: BarChart3,
           submenus: [],
         }
       ],

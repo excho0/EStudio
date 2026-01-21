@@ -5,14 +5,7 @@ import {
   ContentLoopComposition,
   ContentLoopProps,
 } from "./ContentLoopComposition";
-import { TemplateVideo, TemplateVideoProps } from "./TemplateVideo";
-
-type ContentLoopInput = ContentLoopProps & {
-  songDurationSeconds: number;
-  fps: number;
-  width: number;
-  height: number;
-};
+import { TemplateVideo } from "./TemplateVideo";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -26,7 +19,7 @@ export const RemotionRoot: React.FC = () => {
         height={720}
         defaultProps={{ title: "Remotion + Next.js" }}
       />
-      <Composition<TemplateVideoProps, Record<string, never>>
+      <Composition
         id="TemplatePreview"
         component={TemplateVideo}
         durationInFrames={240}
@@ -41,7 +34,7 @@ export const RemotionRoot: React.FC = () => {
           backgroundColor: "#030712",
         }}
       />
-      <Composition<ContentLoopInput, Record<string, never>>
+      <Composition
         id="ContentLoop"
         component={ContentLoopComposition}
         defaultProps={{
@@ -59,13 +52,16 @@ export const RemotionRoot: React.FC = () => {
           width: 1280,
           height: 720,
         }}
-        calculateMetadata={({ props }: { props: ContentLoopInput }) => {
-          const fps = Number.isFinite(props.fps) ? props.fps : 30;
-          const width = Number.isFinite(props.width) ? props.width : 1280;
-          const height = Number.isFinite(props.height) ? props.height : 720;
+        calculateMetadata={({ props }: { props: ContentLoopProps }) => {
+          const fps = Number.isFinite(props.fps ?? NaN) ? props.fps ?? 30 : 30;
+          const width = Number.isFinite(props.width ?? NaN) ? props.width ?? 1280 : 1280;
+          const height = Number.isFinite(props.height ?? NaN) ? props.height ?? 720 : 720;
+          const songDurationSeconds = Number.isFinite(props.songDurationSeconds ?? NaN)
+            ? props.songDurationSeconds ?? 1
+            : 1;
           const durationInFrames = Math.max(
             1,
-            Math.round((props.songDurationSeconds || 1) * fps)
+            Math.round(songDurationSeconds * fps)
           );
 
           return {

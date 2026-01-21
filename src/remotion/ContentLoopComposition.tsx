@@ -1,13 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AbsoluteFill,
-  Audio,
+  continueRender,
+  delayRender,
   Html5Audio,
   Html5Video,
   Img,
   OffthreadVideo,
   Sequence,
-  Video,
   interpolate,
   useCurrentFrame,
   useRemotionEnvironment,
@@ -26,6 +26,10 @@ export type ContentLoopProps = {
   videoDurationSeconds?: number;
   playbackRate?: number;
   overlapRatio?: number | null;
+  songDurationSeconds?: number;
+  fps?: number;
+  width?: number;
+  height?: number;
 };
 
 type VideoSlice = {
@@ -126,29 +130,20 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const { durationInFrames, fps } = useVideoConfig();
   const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
   const [fadeStartFrame, setFadeStartFrame] = useState<number | null>(null);
+  const thumbnailRenderHandle = useRef<number | null>(null);
   const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
-  const thumbnailIntroFrames = Math.min(8, Math.max(2, Math.round(fps * 0.12)));
   const fadeFrom = fadeStartFrame ?? 0;
-  const fadeInEnd = fadeFrom + thumbnailIntroFrames;
-  const fadeOutEnd = fadeInEnd + thumbnailFadeFrames;
+  const fadeOutEnd = fadeFrom + thumbnailFadeFrames;
   const shouldFade = thumbnailSrc && thumbnailLoaded && fadeStartFrame !== null;
   const thumbnailOpacity =
     shouldFade && thumbnailSrc
-      ? interpolate(
-          frame,
-          [fadeFrom, fadeInEnd, fadeOutEnd],
-          [0, 1, 0],
-          { extrapolateRight: "clamp" }
-        )
-      : thumbnailSrc
-        ? 0
-        : 0;
-  const videoOpacity =
-    shouldFade && thumbnailSrc
-      ? interpolate(frame, [fadeFrom, fadeInEnd], [1, 1], {
+      ? interpolate(frame, [fadeFrom, fadeOutEnd], [1, 0], {
           extrapolateRight: "clamp",
         })
-      : 1;
+      : thumbnailSrc
+        ? 1
+        : 0;
+  const videoOpacity = thumbnailSrc && !thumbnailLoaded ? 0 : 1;
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
@@ -233,6 +228,24 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     ]
   );
 
+  useEffect(() => {
+    if (!thumbnailSrc || isRendering) {
+      return;
+    }
+    setThumbnailLoaded(false);
+    setFadeStartFrame(null);
+    if (thumbnailRenderHandle.current !== null) {
+      continueRender(thumbnailRenderHandle.current);
+    }
+    thumbnailRenderHandle.current = delayRender("Loading thumbnail");
+    return () => {
+      if (thumbnailRenderHandle.current !== null) {
+        continueRender(thumbnailRenderHandle.current);
+        thumbnailRenderHandle.current = null;
+      }
+    };
+  }, [thumbnailSrc, isRendering]);
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#050505", color: "white" }}>
       {videoSrc ? (
@@ -249,6 +262,16 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                   setThumbnailLoaded(true);
                   if (fadeStartFrame === null) {
                     setFadeStartFrame(frame);
+                  }
+                  if (thumbnailRenderHandle.current !== null) {
+                    continueRender(thumbnailRenderHandle.current);
+                    thumbnailRenderHandle.current = null;
+                  }
+                }}
+                onError={() => {
+                  if (thumbnailRenderHandle.current !== null) {
+                    continueRender(thumbnailRenderHandle.current);
+                    thumbnailRenderHandle.current = null;
                   }
                 }}
               />

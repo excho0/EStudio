@@ -10,7 +10,7 @@ type DashboardSocketContextValue = {
   socket: Socket | null;
 };
 
-type MetricsPayload = {
+export type MetricsPayload = {
   cpu: {
     load: number | null;
     temperature: number | null;
