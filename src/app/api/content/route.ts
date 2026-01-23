@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import {
   contentPaths,
   ensureContentStore,
+  resolveContentPath,
 } from "@/lib/content-store";
 import { emitContentUpdate } from "@/lib/socket";
 import {
@@ -30,6 +31,18 @@ const writeUpload = async (file: File, folder: string) => {
   return path.relative(contentPaths.baseDir, targetPath);
 };
 
+const finalizeDraft = async (draftPath: string, folder: string) => {
+  const absoluteDraft = resolveContentPath(draftPath);
+  const extension = path.extname(draftPath);
+  const id = randomUUID();
+  const fileName = `${id}${extension || ""}`;
+  const targetDir = path.join(contentPaths.baseDir, folder);
+  const targetPath = path.join(targetDir, fileName);
+  await fs.mkdir(targetDir, { recursive: true });
+  await fs.rename(absoluteDraft, targetPath);
+  return path.relative(contentPaths.baseDir, targetPath);
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const params = contentQuerySchema.parse({
@@ -43,6 +56,79 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await ensureContentStore();
+  const contentType = request.headers.get("content-type") ?? "";
+  const isMultipart = contentType.includes("multipart/form-data");
+
+  if (!isMultipart) {
+    const payload = (await request.json().catch(() => null)) as
+      | {
+          title?: string;
+          thumbnailPath?: string;
+          videoPath?: string;
+          songPath?: string;
+          songDurationSeconds?: number;
+          segmentDurationSeconds?: number;
+          videoDurationSeconds?: number;
+          fadeDurationSeconds?: number;
+          playbackRate?: number;
+          overlapRatio?: number;
+          fps?: number;
+          width?: number;
+          height?: number;
+        }
+      | null;
+
+    if (!payload?.thumbnailPath || !payload.videoPath || !payload.songPath) {
+      return NextResponse.json(
+        { error: "Missing thumbnail, video, or song file." },
+        { status: 400 }
+      );
+    }
+
+    const [thumbnailPath, videoPath, songPath] = await Promise.all([
+      finalizeDraft(payload.thumbnailPath, "uploads/thumbnails"),
+      finalizeDraft(payload.videoPath, "uploads/videos"),
+      finalizeDraft(payload.songPath, "uploads/songs"),
+    ]);
+
+    const item = contentCreateSchema.parse({
+      id: randomUUID(),
+      title: payload.title?.trim() || "Untitled",
+      thumbnailPath,
+      videoPath,
+      songPath,
+      status: "uploaded",
+      songDurationSeconds: Number.isFinite(payload.songDurationSeconds)
+        ? payload.songDurationSeconds
+        : 0,
+      segmentDurationSeconds: Number.isFinite(payload.segmentDurationSeconds)
+        ? payload.segmentDurationSeconds
+        : 4,
+      videoDurationSeconds: Number.isFinite(payload.videoDurationSeconds)
+        ? payload.videoDurationSeconds
+        : Number.isFinite(payload.segmentDurationSeconds)
+          ? payload.segmentDurationSeconds
+          : 0,
+      fadeDurationSeconds: Number.isFinite(payload.fadeDurationSeconds)
+        ? payload.fadeDurationSeconds
+        : 1,
+      overlapRatio: Number.isFinite(payload.overlapRatio)
+        ? Math.min(0.9, Math.max(0, payload.overlapRatio))
+        : null,
+      playbackRate:
+        Number.isFinite(payload.playbackRate) && (payload.playbackRate ?? 0) > 0
+          ? payload.playbackRate ?? 1
+          : 1,
+      fps: Number.isFinite(payload.fps) ? payload.fps : 30,
+      width: Number.isFinite(payload.width) ? payload.width : 1280,
+      height: Number.isFinite(payload.height) ? payload.height : 720,
+    });
+
+    const created = await createContentItem(item);
+    emitContentUpdate({ type: "content:created", item: created });
+    return NextResponse.json(created);
+  }
+
   const formData = await request.formData();
 
   const title = String(formData.get("title") ?? "Untitled");

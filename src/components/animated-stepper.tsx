@@ -19,6 +19,7 @@ type StepperContextValue = {
   direction: number;
   progress: number;
   onStepClick?: (id: string) => void;
+  validate?: (id: string) => boolean | Promise<boolean>;
 };
 
 const StepperContext = React.createContext<StepperContextValue | null>(null);
@@ -34,12 +35,14 @@ export function StepperShell({
   currentId,
   isComplete,
   onStepClick,
+  validate,
   children,
 }: {
   steps: Step[];
   currentId: string;
   isComplete: boolean;
   onStepClick?: (id: string) => void;
+  validate?: (id: string) => boolean | Promise<boolean>;
   children: React.ReactNode;
 }) {
   const currentIndex = steps.findIndex((step) => step.id === currentId);
@@ -63,8 +66,18 @@ export function StepperShell({
       direction,
       progress,
       onStepClick,
+      validate,
     }),
-    [steps, currentId, currentIndex, isComplete, direction, progress, onStepClick]
+    [
+      steps,
+      currentId,
+      currentIndex,
+      isComplete,
+      direction,
+      progress,
+      onStepClick,
+      validate,
+    ]
   );
 
   return (
@@ -104,7 +117,20 @@ export function StepperHeader() {
                 "relative z-10 flex shrink-0 flex-col items-center gap-2",
                 isClickable && "cursor-pointer"
               )}
-              onClick={() => context.onStepClick?.(step.id)}
+              onClick={() => {
+                if (!context.onStepClick || isComplete) return;
+                const allow = context.validate?.(step.id);
+                if (allow instanceof Promise) {
+                  void allow.then((ok) => {
+                    if (ok) {
+                      context.onStepClick?.(step.id);
+                    }
+                  });
+                  return;
+                }
+                if (allow === false) return;
+                context.onStepClick?.(step.id);
+              }}
               whileHover={!isComplete ? { scale: 1.03 } : {}}
             >
               <div
@@ -176,14 +202,17 @@ export function StepperMotion({
   stepKey,
   direction,
   children,
+  className,
 }: {
   stepKey: string;
   direction: number;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <motion.div
       key={stepKey}
+      className={className}
       custom={direction}
       variants={slideVariants}
       initial="enter"
