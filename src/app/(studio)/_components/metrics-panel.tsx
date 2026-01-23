@@ -251,11 +251,6 @@ export function MetricsPanel({ metrics }: { metrics: MetricsPayload | null }) {
                   </h3>
                 </div>
                 <div className="flex items-center gap-2 text-right text-sm text-slate-500 dark:text-zinc-400">
-                  <span>
-                    {gpu.temperatureGpu !== null
-                      ? `${Math.round(gpu.temperatureGpu)}°C`
-                      : "--"}
-                  </span>
                   <span className="rounded-full border border-slate-200 p-2 text-slate-600 dark:border-white/10 dark:text-zinc-300">
                     <GpuIcon vendor={gpu.vendor} model={gpu.model} />
                   </span>
