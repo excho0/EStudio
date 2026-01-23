@@ -1,7 +1,7 @@
 import { createReadStream, promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { resolveContentPath } from "@/lib/content-store";
+import { findContentAssetPath, resolveContentPath } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
 import { Readable } from "stream";
 
@@ -33,13 +33,12 @@ export async function GET(
   const type = searchParams.get("type");
 
   const relativePath =
-    type === "thumbnail"
-      ? item.thumbnailPath
-      : type === "song"
-        ? item.songPath
-        : type === "render"
-          ? item.renderPath
-          : item.videoPath;
+    type === "render"
+      ? item.renderPath
+      : await findContentAssetPath(
+          item.id,
+          type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
+        );
 
   if (!relativePath) {
     return NextResponse.json({ error: "Asset not available" }, { status: 404 });

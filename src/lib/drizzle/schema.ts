@@ -15,14 +15,22 @@ export const contentItems = sqliteTable(
     id: text("id").primaryKey(),
     title: text("title").notNull(),
     status: text("status").notNull().default("uploaded"),
-    thumbnailPath: text("thumbnail_path").notNull(),
-    videoPath: text("video_path").notNull(),
-    songPath: text("song_path").notNull(),
+    // asset paths derived from content id
     renderPath: text("render_path"),
     songDurationSeconds: real("song_duration_seconds").notNull().default(0),
     segmentDurationSeconds: real("segment_duration_seconds").notNull().default(0),
     videoDurationSeconds: real("video_duration_seconds").notNull().default(0),
     fadeDurationSeconds: real("fade_duration_seconds").notNull().default(0),
+    introFadeSeconds: real("intro_fade_seconds").notNull().default(0),
+    outroFadeSeconds: real("outro_fade_seconds").notNull().default(0),
+    audioFadeInSeconds: real("audio_fade_in_seconds").notNull().default(0),
+    audioFadeOutSeconds: real("audio_fade_out_seconds").notNull().default(0),
+    audioFadeInOffsetSeconds: real("audio_fade_in_offset_seconds")
+      .notNull()
+      .default(0),
+    audioFadeOutOffsetSeconds: real("audio_fade_out_offset_seconds")
+      .notNull()
+      .default(0),
     overlapRatio: real("overlap_ratio"),
     playbackRate: real("playback_rate").notNull().default(1),
     fps: integer("fps").notNull().default(30),
@@ -47,14 +55,22 @@ export const contentItemsPg = pgTable(
     id: pgText("id").primaryKey(),
     title: pgText("title").notNull(),
     status: pgText("status").notNull().default("uploaded"),
-    thumbnailPath: pgText("thumbnail_path").notNull(),
-    videoPath: pgText("video_path").notNull(),
-    songPath: pgText("song_path").notNull(),
+    // asset paths derived from content id
     renderPath: pgText("render_path"),
     songDurationSeconds: pgReal("song_duration_seconds").notNull().default(0),
     segmentDurationSeconds: pgReal("segment_duration_seconds").notNull().default(0),
     videoDurationSeconds: pgReal("video_duration_seconds").notNull().default(0),
     fadeDurationSeconds: pgReal("fade_duration_seconds").notNull().default(0),
+    introFadeSeconds: pgReal("intro_fade_seconds").notNull().default(0),
+    outroFadeSeconds: pgReal("outro_fade_seconds").notNull().default(0),
+    audioFadeInSeconds: pgReal("audio_fade_in_seconds").notNull().default(0),
+    audioFadeOutSeconds: pgReal("audio_fade_out_seconds").notNull().default(0),
+    audioFadeInOffsetSeconds: pgReal("audio_fade_in_offset_seconds")
+      .notNull()
+      .default(0),
+    audioFadeOutOffsetSeconds: pgReal("audio_fade_out_offset_seconds")
+      .notNull()
+      .default(0),
     overlapRatio: pgReal("overlap_ratio"),
     playbackRate: pgReal("playback_rate").notNull().default(1),
     fps: pgInteger("fps").notNull().default(30),

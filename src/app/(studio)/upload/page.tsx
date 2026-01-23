@@ -7,8 +7,9 @@ import {
   ChevronDown,
   FileVideo,
   Film,
-  Image,
+  Image as ImageIcon,
   Music,
+  Sparkles,
   MoveHorizontal,
   MoveVertical,
   Monitor,
@@ -20,6 +21,7 @@ import {
   Info,
   Settings2,
   CircleAlert,
+  Clapperboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,6 +60,12 @@ const initialForm = {
   segmentDurationSeconds: "",
   videoDurationSeconds: "",
   fadeDurationSeconds: "1",
+  introFadeSeconds: "0",
+  outroFadeSeconds: "0",
+  audioFadeInSeconds: "0",
+  audioFadeOutSeconds: "0",
+  audioFadeInOffsetSeconds: "0",
+  audioFadeOutOffsetSeconds: "0",
   playbackRate: "1",
   overlapPercent: 25,
   fps: "30",
@@ -82,7 +90,7 @@ const stepper = defineStepper(
     id: "review",
     label: "Review",
     description: "Confirm details before upload",
-    icon: Image,
+    icon: ImageIcon,
   },
   {
     id: "success",
@@ -163,7 +171,6 @@ export default function DashboardUploadPage() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>(
     {}
   );
-  const [durationNote, setDurationNote] = useState<string | null>(null);
   const [uploadKey, setUploadKey] = useState(0);
   const isReadyToUpload =
     !!draftPaths.thumbnailPath &&
@@ -176,27 +183,12 @@ export default function DashboardUploadPage() {
     file.file.type?.startsWith("image/")
   )?.preview;
 
-  const updateDurationNote = (
-    songDurationSeconds: string,
-    segmentDurationSeconds: string
-  ) => {
-    if (!songDurationSeconds && !segmentDurationSeconds) {
-      setDurationNote(null);
-      return;
-    }
-
-    const songValue = songDurationSeconds || "0";
-    const segmentValue = segmentDurationSeconds || "0";
-    setDurationNote(
-      `Detected song length: ${songValue}s. Segment length: ${segmentValue}s.`
-    );
-  };
-
   const handleMediaFilesChange = (files: FileUploadItem[]) => {
     void (async () => {
       setMediaFiles(files);
       const realFiles = files.filter(
-        (entry): entry is { file: File } => entry.file instanceof File
+        (entry): entry is FileUploadItem & { file: File } =>
+          entry.file instanceof File
       );
       const imageFile =
         realFiles.find((entry) => entry.file.type.startsWith("image/"))?.file ??
@@ -227,10 +219,6 @@ export default function DashboardUploadPage() {
             segmentDurationSeconds,
             videoDurationSeconds: segmentDurationSeconds,
           };
-          updateDurationNote(
-            next.songDurationSeconds,
-            next.segmentDurationSeconds
-          );
           return next;
         });
       } else {
@@ -240,10 +228,6 @@ export default function DashboardUploadPage() {
             segmentDurationSeconds: "",
             videoDurationSeconds: "",
           };
-          updateDurationNote(
-            next.songDurationSeconds,
-            next.segmentDurationSeconds
-          );
           return next;
         });
       }
@@ -253,19 +237,11 @@ export default function DashboardUploadPage() {
         const songDurationSeconds = duration ? duration.toFixed(2) : "";
         setFormValues((current) => {
           const next = { ...current, songDurationSeconds };
-          updateDurationNote(
-            next.songDurationSeconds,
-            next.segmentDurationSeconds
-          );
           return next;
         });
       } else {
         setFormValues((current) => {
           const next = { ...current, songDurationSeconds: "" };
-          updateDurationNote(
-            next.songDurationSeconds,
-            next.segmentDurationSeconds
-          );
           return next;
         });
       }
@@ -402,6 +378,12 @@ export default function DashboardUploadPage() {
       segmentDurationSeconds: Number(formValues.segmentDurationSeconds),
       videoDurationSeconds: Number(formValues.videoDurationSeconds),
       fadeDurationSeconds: Number(formValues.fadeDurationSeconds),
+      introFadeSeconds: Number(formValues.introFadeSeconds),
+      outroFadeSeconds: Number(formValues.outroFadeSeconds),
+      audioFadeInSeconds: Number(formValues.audioFadeInSeconds),
+      audioFadeOutSeconds: Number(formValues.audioFadeOutSeconds),
+      audioFadeInOffsetSeconds: Number(formValues.audioFadeInOffsetSeconds),
+      audioFadeOutOffsetSeconds: Number(formValues.audioFadeOutOffsetSeconds),
       playbackRate: Number(formValues.playbackRate),
       overlapRatio: Number(formValues.overlapPercent / 100),
       fps: Number(formValues.fps),
@@ -423,7 +405,6 @@ export default function DashboardUploadPage() {
       setFormValues(initialForm);
       setDraftPaths({});
       setMediaFiles([]);
-      setDurationNote(null);
       setUploadKey((current) => current + 1);
       await refresh();
       toast.success("Upload saved.");
@@ -550,6 +531,179 @@ export default function DashboardUploadPage() {
                 </div>
 
                 <div className="mt-4 space-y-3">
+
+
+                  <Collapsible
+                    className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
+                  >
+                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
+                      <div className="flex items-center gap-3 text-left">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                          <Clapperboard className="h-4 w-4" />
+                        </span>
+                        <div className="flex flex-col items-start">
+                          <span>Intro + Outro</span>
+                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                            Fade timing
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="introFadeSeconds"
+                          text="Intro fade (sec)"
+                          tip="Video fade in at the start of the sequence."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="introFadeSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.introFadeSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                introFadeSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="outroFadeSeconds"
+                          text="Outro fade (sec)"
+                          tip="Video fade out at the end of the sequence."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="outroFadeSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.outroFadeSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                outroFadeSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="audioFadeInSeconds"
+                          text="Audio fade in (sec)"
+                          tip="How long the audio takes to reach full volume."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="audioFadeInSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.audioFadeInSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                audioFadeInSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="audioFadeOutSeconds"
+                          text="Audio fade out (sec)"
+                          tip="How long the audio takes to fade to silence."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="audioFadeOutSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.audioFadeOutSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                audioFadeOutSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="audioFadeInOffsetSeconds"
+                          text="Audio fade-in offset (sec)"
+                          tip="Delay the fade-in start by this many seconds."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="audioFadeInOffsetSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.audioFadeInOffsetSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                audioFadeInOffsetSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                      <div className="grid gap-2">
+                        <LabelWithTooltip
+                          htmlFor="audioFadeOutOffsetSeconds"
+                          text="Audio fade-out offset (sec)"
+                          tip="Start the fade-out this many seconds before the end."
+                        />
+                        <InputGroup className="bg-white dark:bg-white/5">
+                          <InputGroupInput
+                            id="audioFadeOutOffsetSeconds"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formValues.audioFadeOutOffsetSeconds}
+                            onChange={(event) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                audioFadeOutOffsetSeconds: event.target.value,
+                              }))
+                            }
+                          />
+                          <InputGroupAddon>
+                            <Timer />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
                   <Collapsible
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
@@ -806,7 +960,7 @@ export default function DashboardUploadPage() {
                           />
                         ) : (
                           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-400 dark:text-zinc-500">
-                            <Image className="h-6 w-6" />
+                            <ImageIcon className="h-6 w-6" />
                             <span className="text-xs uppercase tracking-[0.2em]">
                               No thumbnail
                             </span>
@@ -912,6 +1066,84 @@ export default function DashboardUploadPage() {
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
                               {formValues.playbackRate || "--"}x
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                            <Sparkles className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Intro Fade
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.introFadeSeconds || "--"}s
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                            <Sparkles className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Outro Fade
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.outroFadeSeconds || "--"}s
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            <Music className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Audio Fade In
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.audioFadeInSeconds || "--"}s
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            <Music className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Audio Fade Out
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.audioFadeOutSeconds || "--"}s
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+                            <Timer className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Audio In Offset
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.audioFadeInOffsetSeconds || "--"}s
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+                            <Timer className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Audio Out Offset
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.audioFadeOutOffsetSeconds || "--"}s
                             </div>
                           </div>
                         </div>

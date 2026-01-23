@@ -1,10 +1,13 @@
-import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
-  contentPaths,
+  getContentAssetPath,
   resolveContentPath,
+  removeContentAssetFiles,
+  removeContentAssets,
+  deleteContentManifest,
+  writeContentManifest,
 } from "@/lib/content-store";
 import { emitContentUpdate } from "@/lib/socket";
 import {
@@ -15,24 +18,17 @@ import {
 
 export const runtime = "nodejs";
 
-const safeUnlink = async (relativePath?: string | null) => {
-  if (!relativePath) return;
-  const absolutePath = resolveContentPath(relativePath);
-  await fs.rm(absolutePath, { force: true });
-};
-
-const writeUpload = async (file: File, folder: string) => {
+const writeUpload = async (file: File, id: string, kind: "thumbnail") => {
   const extension = path.extname(file.name || "");
-  const id = randomUUID();
-  const fileName = `${id}${extension || ""}`;
-  const targetDir = path.join(contentPaths.baseDir, folder);
-  const targetPath = path.join(targetDir, fileName);
+  const relativePath = getContentAssetPath(id, kind, extension || ".bin");
+  const targetPath = resolveContentPath(relativePath);
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await fs.mkdir(targetDir, { recursive: true });
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await removeContentAssetFiles(id, kind);
   await fs.writeFile(targetPath, buffer);
 
-  return path.relative(contentPaths.baseDir, targetPath);
+  return relativePath;
 };
 
 export async function GET(
@@ -69,6 +65,12 @@ export async function PATCH(
     const title = formData.get("title");
     const status = formData.get("status");
     const fadeDurationSeconds = formData.get("fadeDurationSeconds");
+    const introFadeSeconds = formData.get("introFadeSeconds");
+    const outroFadeSeconds = formData.get("outroFadeSeconds");
+    const audioFadeInSeconds = formData.get("audioFadeInSeconds");
+    const audioFadeOutSeconds = formData.get("audioFadeOutSeconds");
+    const audioFadeInOffsetSeconds = formData.get("audioFadeInOffsetSeconds");
+    const audioFadeOutOffsetSeconds = formData.get("audioFadeOutOffsetSeconds");
     const playbackRate = formData.get("playbackRate");
     const fps = formData.get("fps");
     const width = formData.get("width");
@@ -92,6 +94,30 @@ export async function PATCH(
     if (fadeValue !== undefined) {
       payload.fadeDurationSeconds = fadeValue;
     }
+    const introFadeValue = toOptionalNumber(introFadeSeconds);
+    if (introFadeValue !== undefined) {
+      payload.introFadeSeconds = introFadeValue;
+    }
+    const outroFadeValue = toOptionalNumber(outroFadeSeconds);
+    if (outroFadeValue !== undefined) {
+      payload.outroFadeSeconds = outroFadeValue;
+    }
+    const audioFadeInValue = toOptionalNumber(audioFadeInSeconds);
+    if (audioFadeInValue !== undefined) {
+      payload.audioFadeInSeconds = audioFadeInValue;
+    }
+    const audioFadeOutValue = toOptionalNumber(audioFadeOutSeconds);
+    if (audioFadeOutValue !== undefined) {
+      payload.audioFadeOutSeconds = audioFadeOutValue;
+    }
+    const audioFadeInOffsetValue = toOptionalNumber(audioFadeInOffsetSeconds);
+    if (audioFadeInOffsetValue !== undefined) {
+      payload.audioFadeInOffsetSeconds = audioFadeInOffsetValue;
+    }
+    const audioFadeOutOffsetValue = toOptionalNumber(audioFadeOutOffsetSeconds);
+    if (audioFadeOutOffsetValue !== undefined) {
+      payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetValue;
+    }
     const playbackValue = toOptionalNumber(playbackRate);
     if (playbackValue !== undefined) {
       payload.playbackRate = playbackValue;
@@ -114,9 +140,8 @@ export async function PATCH(
     }
 
     if (thumbnail instanceof File) {
-      const thumbnailPath = await writeUpload(thumbnail, "uploads/thumbnails");
-      payload.thumbnailPath = thumbnailPath;
-      await safeUnlink(item.thumbnailPath);
+      await writeUpload(thumbnail, item.id, "thumbnail");
+      payload.status = item.status;
     }
   } else {
     payload = await request.json();
@@ -129,6 +154,7 @@ export async function PATCH(
   }
 
   emitContentUpdate({ type: "content:updated", id });
+  await writeContentManifest(updated.id, updated);
 
   return NextResponse.json(updated);
 }
@@ -145,13 +171,12 @@ export async function DELETE(
   }
 
   await Promise.all([
-    safeUnlink(item.thumbnailPath),
-    safeUnlink(item.videoPath),
-    safeUnlink(item.songPath),
-    safeUnlink(item.renderPath ?? undefined),
+    removeContentAssets(item.id),
+    item.renderPath ? fs.rm(resolveContentPath(item.renderPath), { force: true }) : null,
   ]);
 
   await deleteContentItem(id);
+  await deleteContentManifest(id);
 
   emitContentUpdate({ type: "content:deleted", id });
 

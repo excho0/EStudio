@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { useContentList, type ContentItem } from "../_components/use-content-list";
+import { useRenderProgress } from "../_components/use-render-progress";
 import {
   Activity,
+  CheckCircle2,
   CircleCheck,
+  Loader2,
+  Play,
+  XCircle,
   TriangleAlert,
   Sparkles,
   Film,
@@ -19,6 +24,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { StatRow } from "@/components/ui/stat-row";
 
 const CardHeaderRow = ({
   label,
@@ -60,23 +66,81 @@ const ValueWithSkeleton = ({
   </div>
 );
 
-const ProgressWithSkeleton = ({
-  loading,
-  value,
-  variant,
-}: {
-  loading: boolean;
-  value: number;
-  variant: "blue" | "green" | "amber" | "red" | "violet" | "default";
-}) =>
-  loading ? (
-    <Skeleton className="mt-4 h-2 w-full" />
-  ) : (
-    <Progress value={value} variant={variant} className="mt-4" />
-  );
+
+const getStatusMeta = (status: string) => {
+  switch (status) {
+    case "rendered":
+      return {
+        label: "Rendered",
+        icon: CheckCircle2,
+        className:
+          "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200",
+      };
+    case "failed":
+      return {
+        label: "Failed",
+        icon: XCircle,
+        className: "bg-red-500/15 text-red-700 dark:bg-red-400/20 dark:text-red-200",
+      };
+    case "rendering":
+      return {
+        label: "Rendering",
+        icon: Loader2,
+        className:
+          "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
+      };
+    default:
+      return {
+        label: "Queued",
+        icon: Play,
+        className:
+          "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
+      };
+  }
+};
+
+const renderStatusBadge = (
+    status: string,
+    showLabel: boolean,
+    progress?: number
+  ) => {
+    const meta = getStatusMeta(status);
+    const Icon = meta.icon;
+    const showProgress = status === "rendering" && typeof progress === "number";
+    const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
+    return (
+      <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
+        <Icon
+          className={`h-4 w-4 shrink-0 ${
+            status === "rendering" ? "animate-spin" : ""
+          }`}
+        />
+        {showLabel ? (
+          <span className="flex items-center gap-2">
+            <span>{meta.label}</span>
+            {progressLabel ? (
+              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                {progressLabel}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="flex items-center gap-2">
+            <span className="sr-only">{meta.label}</span>
+            {progressLabel ? (
+              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                {progressLabel}
+              </span>
+            ) : null}
+          </span>
+        )}
+      </Badge>
+    );
+  };
 
 export default function DashboardOverviewPage() {
   const { items, loading } = useContentList();
+  const renderProgress = useRenderProgress();
   const formatDate = (value: string) =>
     new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
       new Date(value)
@@ -84,7 +148,6 @@ export default function DashboardOverviewPage() {
 
   const rendered = items.filter((item: ContentItem) => item.status === "rendered").length;
   const failed = items.filter((item: ContentItem) => item.status === "failed").length;
-  const progress = items.length ? (rendered / items.length) * 100 : 0;
   const recent = items.slice(0, 3);
 
   return (
@@ -100,11 +163,6 @@ export default function DashboardOverviewPage() {
             value={items.length}
             skeletonClassName="h-8 w-16"
           />
-          <ProgressWithSkeleton
-            loading={loading}
-            value={progress}
-            variant="violet"
-          />
         </Card>
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <CardHeaderRow
@@ -117,13 +175,6 @@ export default function DashboardOverviewPage() {
             value={rendered}
             skeletonClassName="h-8 w-16"
           />
-          <div className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
-            {loading ? (
-              <Skeleton className="h-3 w-24" />
-            ) : (
-              `${items.length ? Math.round(progress) : 0}% completion`
-            )}
-          </div>
         </Card>
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <CardHeaderRow
@@ -136,9 +187,6 @@ export default function DashboardOverviewPage() {
             value={failed}
             skeletonClassName="h-8 w-16"
           />
-          <div className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
-            {loading ? <Skeleton className="h-3 w-32" /> : "Retry failed items from the library."}
-          </div>
         </Card>
       </section>
 
@@ -195,25 +243,35 @@ export default function DashboardOverviewPage() {
               {recent.map((item: ContentItem) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
+                  className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
                 >
-                  <div className="flex items-center gap-3">
-                    <ImageWithSkeleton
-                      src={`/api/content/${item.id}/asset?type=thumbnail`}
-                      alt={`${item.title} thumbnail`}
-                      className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                      wrapperClassName="h-12 w-16 rounded-md"
-                    />
-                    <div>
-                      <div className="text-sm font-semibold">{item.title}</div>
-                      <div className="text-xs text-slate-500 dark:text-zinc-500">
-                        {formatDate(item.createdAt)}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <ImageWithSkeleton
+                        src={`/api/content/${item.id}/asset?type=thumbnail`}
+                        alt={`${item.title} thumbnail`}
+                        className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                        wrapperClassName="h-12 w-16 rounded-md"
+                      />
+                      <div>
+                        <div className="text-sm font-semibold">{item.title}</div>
+                        <div className="text-xs text-slate-500 dark:text-zinc-500">
+                          {formatDate(item.createdAt)}
+                        </div>
                       </div>
                     </div>
+                    {renderStatusBadge(
+                      item.status,
+                      true,
+                      renderProgress[item.id]?.progress
+                    )}
                   </div>
-                  <Badge className="bg-slate-100 text-slate-900 dark:bg-white/10 dark:text-white">
-                    {item.status}
-                  </Badge>
+                  <StatRow show={item.status === "rendering"}>
+                    <Progress
+                      value={Math.round((renderProgress[item.id]?.progress ?? 0) * 100)}
+                      variant="amber"
+                    />
+                  </StatRow>
                 </div>
               ))}
             </div>

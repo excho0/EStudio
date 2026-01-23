@@ -17,6 +17,7 @@ import {
   FastForward,
   Info,
   Goal,
+  Clapperboard,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,12 @@ type ContentItem = {
   createdAt: string;
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
+  introFadeSeconds: number;
+  outroFadeSeconds: number;
+  audioFadeInSeconds: number;
+  audioFadeOutSeconds: number;
+  audioFadeInOffsetSeconds: number;
+  audioFadeOutOffsetSeconds: number;
   videoDurationSeconds?: number | null;
   playbackRate: number;
   overlapRatio?: number | null;
@@ -55,9 +62,6 @@ type ContentItem = {
   fps: number;
   width: number;
   height: number;
-  thumbnailPath: string;
-  videoPath: string;
-  songPath: string;
   renderPath?: string | null;
 };
 
@@ -98,6 +102,12 @@ export default function EditContentPage() {
     title: "",
     status: "",
     fadeDurationSeconds: "",
+    introFadeSeconds: "",
+    outroFadeSeconds: "",
+    audioFadeInSeconds: "",
+    audioFadeOutSeconds: "",
+    audioFadeInOffsetSeconds: "",
+    audioFadeOutOffsetSeconds: "",
     playbackRate: "",
     overlapPercent: 25,
     fps: "",
@@ -130,6 +140,16 @@ export default function EditContentPage() {
     ? getNumber(item.segmentDurationSeconds, 4)
     : 4;
   const safeFadeDuration = item ? getNumber(item.fadeDurationSeconds, 1) : 1;
+  const safeIntroFadeDuration = item ? getNumber(item.introFadeSeconds, 0) : 0;
+  const safeOutroFadeDuration = item ? getNumber(item.outroFadeSeconds, 0) : 0;
+  const safeAudioFadeInDuration = item ? getNumber(item.audioFadeInSeconds, 0) : 0;
+  const safeAudioFadeOutDuration = item ? getNumber(item.audioFadeOutSeconds, 0) : 0;
+  const safeAudioFadeInOffset = item
+    ? getNumber(item.audioFadeInOffsetSeconds, 0)
+    : 0;
+  const safeAudioFadeOutOffset = item
+    ? getNumber(item.audioFadeOutOffsetSeconds, 0)
+    : 0;
   const safePlaybackRate = item ? getNumber(item.playbackRate, 1) : 1;
   const safeVideoDuration = item
     ? getNumber(
@@ -181,6 +201,12 @@ export default function EditContentPage() {
             title: data.title,
             status: data.status,
             fadeDurationSeconds: String(data.fadeDurationSeconds ?? ""),
+            introFadeSeconds: String(data.introFadeSeconds ?? ""),
+            outroFadeSeconds: String(data.outroFadeSeconds ?? ""),
+            audioFadeInSeconds: String(data.audioFadeInSeconds ?? ""),
+            audioFadeOutSeconds: String(data.audioFadeOutSeconds ?? ""),
+            audioFadeInOffsetSeconds: String(data.audioFadeInOffsetSeconds ?? ""),
+            audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
             playbackRate: String(data.playbackRate ?? ""),
             overlapPercent,
             fps: String(data.fps ?? ""),
@@ -241,6 +267,34 @@ export default function EditContentPage() {
       if (fadeDurationSeconds !== undefined) {
         payload.fadeDurationSeconds = fadeDurationSeconds;
       }
+      const introFadeSeconds = toOptionalNumber(formValues.introFadeSeconds);
+      if (introFadeSeconds !== undefined) {
+        payload.introFadeSeconds = introFadeSeconds;
+      }
+      const outroFadeSeconds = toOptionalNumber(formValues.outroFadeSeconds);
+      if (outroFadeSeconds !== undefined) {
+        payload.outroFadeSeconds = outroFadeSeconds;
+      }
+      const audioFadeInSeconds = toOptionalNumber(formValues.audioFadeInSeconds);
+      if (audioFadeInSeconds !== undefined) {
+        payload.audioFadeInSeconds = audioFadeInSeconds;
+      }
+      const audioFadeOutSeconds = toOptionalNumber(formValues.audioFadeOutSeconds);
+      if (audioFadeOutSeconds !== undefined) {
+        payload.audioFadeOutSeconds = audioFadeOutSeconds;
+      }
+      const audioFadeInOffsetSeconds = toOptionalNumber(
+        formValues.audioFadeInOffsetSeconds
+      );
+      if (audioFadeInOffsetSeconds !== undefined) {
+        payload.audioFadeInOffsetSeconds = audioFadeInOffsetSeconds;
+      }
+      const audioFadeOutOffsetSeconds = toOptionalNumber(
+        formValues.audioFadeOutOffsetSeconds
+      );
+      if (audioFadeOutOffsetSeconds !== undefined) {
+        payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetSeconds;
+      }
       const playbackRate = toOptionalNumber(formValues.playbackRate);
       if (playbackRate !== undefined) {
         payload.playbackRate = playbackRate;
@@ -274,6 +328,42 @@ export default function EditContentPage() {
               formData.append(
                 "fadeDurationSeconds",
                 String(payload.fadeDurationSeconds)
+              );
+            }
+            if (payload.introFadeSeconds !== undefined) {
+              formData.append(
+                "introFadeSeconds",
+                String(payload.introFadeSeconds)
+              );
+            }
+            if (payload.outroFadeSeconds !== undefined) {
+              formData.append(
+                "outroFadeSeconds",
+                String(payload.outroFadeSeconds)
+              );
+            }
+            if (payload.audioFadeInSeconds !== undefined) {
+              formData.append(
+                "audioFadeInSeconds",
+                String(payload.audioFadeInSeconds)
+              );
+            }
+            if (payload.audioFadeOutSeconds !== undefined) {
+              formData.append(
+                "audioFadeOutSeconds",
+                String(payload.audioFadeOutSeconds)
+              );
+            }
+            if (payload.audioFadeInOffsetSeconds !== undefined) {
+              formData.append(
+                "audioFadeInOffsetSeconds",
+                String(payload.audioFadeInOffsetSeconds)
+              );
+            }
+            if (payload.audioFadeOutOffsetSeconds !== undefined) {
+              formData.append(
+                "audioFadeOutOffsetSeconds",
+                String(payload.audioFadeOutOffsetSeconds)
               );
             }
             if (payload.playbackRate !== undefined) {
@@ -443,7 +533,179 @@ export default function EditContentPage() {
                 )}
 
                 <Collapsible
-                  defaultOpen
+                  // defaultOpen
+                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
+                >
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <Clapperboard className="h-4 w-4" />
+                      </span>
+                      <div className="flex flex-col items-start">
+                        <span>Intro + Outro</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Fade timing
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="introFadeSeconds"
+                        text="Intro fade (sec)"
+                        tip="Video fade in at the start of the sequence."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="introFadeSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.introFadeSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              introFadeSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="outroFadeSeconds"
+                        text="Outro fade (sec)"
+                        tip="Video fade out at the end of the sequence."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="outroFadeSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.outroFadeSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              outroFadeSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="audioFadeInSeconds"
+                        text="Audio fade in (sec)"
+                        tip="How long the audio takes to reach full volume."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="audioFadeInSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.audioFadeInSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              audioFadeInSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="audioFadeOutSeconds"
+                        text="Audio fade out (sec)"
+                        tip="How long the audio takes to fade to silence."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="audioFadeOutSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.audioFadeOutSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              audioFadeOutSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="audioFadeInOffsetSeconds"
+                        text="Audio fade-in offset (sec)"
+                        tip="Delay the fade-in start by this many seconds."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="audioFadeInOffsetSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.audioFadeInOffsetSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              audioFadeInOffsetSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="audioFadeOutOffsetSeconds"
+                        text="Audio fade-out offset (sec)"
+                        tip="Start the fade-out this many seconds before the end."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="audioFadeOutOffsetSeconds"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formValues.audioFadeOutOffsetSeconds}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              audioFadeOutOffsetSeconds: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <Timer />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Collapsible
+                  // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
@@ -513,7 +775,7 @@ export default function EditContentPage() {
                 </Collapsible>
 
                 <Collapsible
-                  defaultOpen
+                  // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
@@ -584,7 +846,7 @@ export default function EditContentPage() {
                 </Collapsible>
 
                 <Collapsible
-                  defaultOpen
+                  // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
                   <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
@@ -702,6 +964,12 @@ export default function EditContentPage() {
                   audioSrc: audioBlobUrl ?? "",
                   segmentDurationSeconds: safeSegmentDuration,
                   fadeDurationSeconds: safeFadeDuration,
+                  introFadeSeconds: safeIntroFadeDuration,
+                  outroFadeSeconds: safeOutroFadeDuration,
+                  audioFadeInSeconds: safeAudioFadeInDuration,
+                  audioFadeOutSeconds: safeAudioFadeOutDuration,
+                  audioFadeInOffsetSeconds: safeAudioFadeInOffset,
+                  audioFadeOutOffsetSeconds: safeAudioFadeOutOffset,
                   videoDurationSeconds: safeVideoDuration,
                   playbackRate: safePlaybackRate,
                   overlapRatio: Number.isFinite(formValues.overlapPercent)

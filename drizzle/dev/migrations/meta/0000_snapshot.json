@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2bf55acf-1c7b-4533-91ea-c5da91d280bc",
+  "id": "6d4db2da-ff93-4239-8d80-ddd8b33160eb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "content_items": {
@@ -28,27 +28,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'uploaded'"
-        },
-        "thumbnail_path": {
-          "name": "thumbnail_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "video_path": {
-          "name": "video_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "song_path": {
-          "name": "song_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
         },
         "render_path": {
           "name": "render_path",
@@ -83,6 +62,54 @@
         },
         "fade_duration_seconds": {
           "name": "fade_duration_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "intro_fade_seconds": {
+          "name": "intro_fade_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "outro_fade_seconds": {
+          "name": "outro_fade_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "audio_fade_in_seconds": {
+          "name": "audio_fade_in_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "audio_fade_out_seconds": {
+          "name": "audio_fade_out_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "audio_fade_in_offset_seconds": {
+          "name": "audio_fade_in_offset_seconds",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "audio_fade_out_offset_seconds": {
+          "name": "audio_fade_out_offset_seconds",
           "type": "real",
           "primaryKey": false,
           "notNull": true,

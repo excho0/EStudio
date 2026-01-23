@@ -49,14 +49,17 @@ export const contentItemSchema = z.object({
   title: z.string().min(1),
   createdAt: z.string(),
   updatedAt: z.string(),
-  thumbnailPath: z.string(),
-  videoPath: z.string(),
-  songPath: z.string(),
   renderPath: z.string().optional().nullable(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
   songDurationSeconds: z.number().nonnegative(),
   segmentDurationSeconds: z.number().nonnegative(),
   fadeDurationSeconds: z.number().nonnegative(),
+  introFadeSeconds: z.number().nonnegative(),
+  outroFadeSeconds: z.number().nonnegative(),
+  audioFadeInSeconds: z.number().nonnegative(),
+  audioFadeOutSeconds: z.number().nonnegative(),
+  audioFadeInOffsetSeconds: z.number().nonnegative(),
+  audioFadeOutOffsetSeconds: z.number().nonnegative(),
   videoDurationSeconds: z.number().nonnegative().optional().nullable(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive(),
@@ -76,13 +79,16 @@ export const contentQuerySchema = z.object({
 export const contentCreateSchema = z.object({
   id: z.uuid(),
   title: z.string().min(1),
-  thumbnailPath: z.string().min(1),
-  videoPath: z.string().min(1),
-  songPath: z.string().min(1),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).default("uploaded"),
   songDurationSeconds: z.number().nonnegative().default(0),
   segmentDurationSeconds: z.number().nonnegative().default(4),
   fadeDurationSeconds: z.number().nonnegative().default(1),
+  introFadeSeconds: z.number().nonnegative().default(0),
+  outroFadeSeconds: z.number().nonnegative().default(0),
+  audioFadeInSeconds: z.number().nonnegative().default(0),
+  audioFadeOutSeconds: z.number().nonnegative().default(0),
+  audioFadeInOffsetSeconds: z.number().nonnegative().default(0),
+  audioFadeOutOffsetSeconds: z.number().nonnegative().default(0),
   videoDurationSeconds: z.number().nonnegative().default(0),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
   playbackRate: z.number().positive().default(1),
@@ -94,10 +100,15 @@ export const contentCreateSchema = z.object({
 export const contentUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
-  thumbnailPath: z.string().min(1).optional(),
   songDurationSeconds: z.number().nonnegative().optional(),
   segmentDurationSeconds: z.number().nonnegative().optional(),
   fadeDurationSeconds: z.number().nonnegative().optional(),
+  introFadeSeconds: z.number().nonnegative().optional(),
+  outroFadeSeconds: z.number().nonnegative().optional(),
+  audioFadeInSeconds: z.number().nonnegative().optional(),
+  audioFadeOutSeconds: z.number().nonnegative().optional(),
+  audioFadeInOffsetSeconds: z.number().nonnegative().optional(),
+  audioFadeOutOffsetSeconds: z.number().nonnegative().optional(),
   videoDurationSeconds: z.number().nonnegative().optional(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive().optional(),
@@ -119,6 +130,12 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     videoDurationSeconds: record.videoDurationSeconds ?? null,
     playbackRate: record.playbackRate ?? 1,
     overlapRatio: record.overlapRatio ?? null,
+    introFadeSeconds: record.introFadeSeconds ?? 0,
+    outroFadeSeconds: record.outroFadeSeconds ?? 0,
+    audioFadeInSeconds: record.audioFadeInSeconds ?? 0,
+    audioFadeOutSeconds: record.audioFadeOutSeconds ?? 0,
+    audioFadeInOffsetSeconds: record.audioFadeInOffsetSeconds ?? 0,
+    audioFadeOutOffsetSeconds: record.audioFadeOutOffsetSeconds ?? 0,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);
@@ -181,6 +198,49 @@ export async function listContentItems(query: z.infer<typeof contentQuerySchema>
         total: Number(totalRow[0]?.count ?? 0),
         page: safe.page,
         limit: safe.limit,
+      };
+    },
+  });
+}
+
+export async function getContentStats() {
+  return withContentDb({
+    pg: async ({ db, table }) => {
+      const rows = await db
+        .select({
+          total: sql<number>`count(*)`,
+          uploaded: sql<number>`sum(case when ${table.status} = 'uploaded' then 1 else 0 end)`,
+          rendering: sql<number>`sum(case when ${table.status} = 'rendering' then 1 else 0 end)`,
+          rendered: sql<number>`sum(case when ${table.status} = 'rendered' then 1 else 0 end)`,
+          failed: sql<number>`sum(case when ${table.status} = 'failed' then 1 else 0 end)`,
+        })
+        .from(table);
+      const row = rows[0] ?? {};
+      return {
+        total: Number(row.total ?? 0),
+        uploaded: Number(row.uploaded ?? 0),
+        rendering: Number(row.rendering ?? 0),
+        rendered: Number(row.rendered ?? 0),
+        failed: Number(row.failed ?? 0),
+      };
+    },
+    sqlite: async ({ db, table }) => {
+      const rows = await db
+        .select({
+          total: sql<number>`count(*)`,
+          uploaded: sql<number>`sum(case when ${table.status} = 'uploaded' then 1 else 0 end)`,
+          rendering: sql<number>`sum(case when ${table.status} = 'rendering' then 1 else 0 end)`,
+          rendered: sql<number>`sum(case when ${table.status} = 'rendered' then 1 else 0 end)`,
+          failed: sql<number>`sum(case when ${table.status} = 'failed' then 1 else 0 end)`,
+        })
+        .from(table);
+      const row = rows[0] ?? {};
+      return {
+        total: Number(row.total ?? 0),
+        uploaded: Number(row.uploaded ?? 0),
+        rendering: Number(row.rendering ?? 0),
+        rendered: Number(row.rendered ?? 0),
+        failed: Number(row.failed ?? 0),
       };
     },
   });

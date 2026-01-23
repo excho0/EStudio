@@ -1,4 +1,3 @@
-import { spawn } from "child_process";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
@@ -10,107 +9,177 @@ import { getContentItem, updateContentItem } from "@/lib/data/content";
 
 export const runtime = "nodejs";
 
-const runRender = (args: string[], onLog?: (text: string) => void) =>
-  new Promise<string>((resolve, reject) => {
-    const child = spawn(
-      "pnpm",
-      ["exec", "--", "remotion", "render", ...args],
-      {
-        cwd: process.cwd(),
-        env: process.env,
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    );
-
-    let output = "";
-    const handleStdout = (chunk: Buffer) => {
-      const text = chunk.toString();
-      output += text;
-      process.stdout.write(text);
-      onLog?.(text);
-    };
-    const handleStderr = (chunk: Buffer) => {
-      const text = chunk.toString();
-      output += text;
-      process.stderr.write(text);
-      onLog?.(text);
-    };
-
-    child.stdout?.on("data", handleStdout);
-    child.stderr?.on("data", handleStderr);
-
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(output);
-      } else {
-        reject(new Error(`Render failed with code ${code}\n${output}`));
-      }
-    });
-  });
-
 type RenderJob = {
   id: string;
-  args: string[];
   renderPath: string;
-  totalFrames: number;
   browserLabel: string;
-  chromeMode: string;
+  chromeMode: "chrome-for-testing" | "headless-shell";
+  serveUrl: string;
+  compositionId: string;
+  outputPath: string;
+  inputProps: Record<string, unknown>;
+};
+
+let bundlePromise: Promise<string> | null = null;
+const lastProgressPercent = new Map<string, number>();
+type BundleFn = (
+  entryPoint: string,
+  onProgress: (progress: number) => void,
+  options: {
+    outDir: string | null;
+    enableCaching: boolean;
+    publicPath: string | null;
+    publicDir: string | null;
+    rootDir: string | null;
+    webpackOverride: (config: Record<string, unknown>) => Record<string, unknown>;
+    onPublicDirCopyProgress: (progress: number) => void;
+    onSymlinkDetected: (path: string) => void;
+  }
+) => Promise<string>;
+
+type RenderMediaFn = (options: {
+  serveUrl: string;
+  composition: {
+    id: string;
+    durationInFrames: number;
+    fps: number;
+    width: number;
+    height: number;
+    defaultProps?: Record<string, unknown>;
+  };
+  outputLocation: string;
+  codec: "h264";
+  inputProps: Record<string, unknown>;
+  logLevel: "warn";
+  browserExecutable: string | null;
+  chromeMode: "chrome-for-testing" | "headless-shell";
+  onProgress: (payload: {
+    renderedFrames?: number | null;
+    encodedFrames?: number | null;
+    progress?: number | null;
+  }) => void;
+}) => Promise<unknown>;
+
+type SelectCompositionFn = (options: {
+  serveUrl: string;
+  id: string;
+  inputProps: Record<string, unknown>;
+  logLevel: "warn";
+  browserExecutable: string | null;
+  chromeMode: "chrome-for-testing" | "headless-shell";
+}) => Promise<{
+  id: string;
+  durationInFrames: number;
+  fps: number;
+  width: number;
+  height: number;
+  defaultProps?: Record<string, unknown>;
+}>;
+
+const loadRenderer = () => {
+  const req = eval("require") as NodeJS.Require;
+  const bundler = req("@remotion/bundler") as { bundle: BundleFn };
+  const renderer = req("@remotion/renderer") as {
+    renderMedia: RenderMediaFn;
+    selectComposition: SelectCompositionFn;
+  };
+  return {
+    bundle: bundler.bundle,
+    renderMedia: renderer.renderMedia,
+    selectComposition: renderer.selectComposition,
+  };
+};
+
+const getServeUrl = (entryPoint: string) => {
+  if (!bundlePromise) {
+    const { bundle } = loadRenderer();
+    bundlePromise = bundle(entryPoint, () => undefined, {
+      outDir: null,
+      enableCaching: true,
+      publicPath: null,
+      publicDir: null,
+      rootDir: process.cwd(),
+      webpackOverride: (config: Record<string, unknown>) => config,
+      onPublicDirCopyProgress: () => undefined,
+      onSymlinkDetected: () => undefined,
+    });
+  }
+  return bundlePromise;
 };
 
 const startRenderJob = async ({
   id,
-  args,
   renderPath,
-  totalFrames,
   browserLabel,
   chromeMode,
+  serveUrl,
+  compositionId,
+  outputPath,
+  inputProps,
 }: RenderJob) => {
-  emitRenderProgress({
-    id,
-    rendered: 0,
-    total: totalFrames,
-    progress: 0,
-  });
-
-  let buffer = "";
-  let lastRendered = -1;
-  const progressRegex = /Rendered\s+(\d+)\/(\d+),\s+time remaining:\s+(.+)/;
-
-  const handleLog = (text: string) => {
-    buffer += text;
-    let index = buffer.indexOf("\n");
-    while (index >= 0) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      const match = progressRegex.exec(line);
-      if (match) {
-        const rendered = Number(match[1]);
-        const total = Number(match[2]);
-        if (Number.isFinite(rendered) && Number.isFinite(total)) {
-          if (rendered !== lastRendered) {
-            lastRendered = rendered;
-            emitRenderProgress({
-              id,
-              rendered,
-              total,
-              progress: total ? rendered / total : 0,
-              eta: match[3],
-            });
-          }
-        }
-      }
-      index = buffer.indexOf("\n");
-    }
-  };
-
   try {
-    await runRender(args, handleLog);
+    const { renderMedia, selectComposition } = loadRenderer();
+    const composition = await selectComposition({
+      serveUrl,
+      id: compositionId,
+      inputProps,
+      logLevel: "warn",
+      browserExecutable:
+        process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
+        process.env.REMOTION_BROWSER_EXECUTABLE ||
+        null,
+      chromeMode,
+    });
+
+    const totalFrames = composition.durationInFrames;
+
+    lastProgressPercent.set(id, -1);
+    emitRenderProgress({
+      id,
+      rendered: 0,
+      total: totalFrames,
+      progress: 0,
+    });
+
+    await renderMedia({
+      serveUrl,
+      composition,
+      outputLocation: outputPath,
+      codec: "h264",
+      inputProps,
+      logLevel: "warn",
+      browserExecutable:
+        process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
+        process.env.REMOTION_BROWSER_EXECUTABLE ||
+        null,
+      chromeMode,
+      onProgress: ({ renderedFrames, encodedFrames, progress }) => {
+        const rendered = Number.isFinite(renderedFrames)
+          ? Number(renderedFrames)
+          : Number.isFinite(encodedFrames)
+            ? Number(encodedFrames)
+            : 0;
+        const safeProgress = typeof progress === "number" ? progress : 0;
+        const percent = Math.floor(safeProgress * 100);
+        const lastPercent = lastProgressPercent.get(id) ?? -1;
+        if (percent === lastPercent) {
+          return;
+        }
+        lastProgressPercent.set(id, percent);
+        emitRenderProgress({
+          id,
+          rendered,
+          total: totalFrames,
+          progress: safeProgress,
+        });
+      },
+    });
 
     const updated = await updateContentItem(id, {
       status: "rendered",
       renderPath,
     });
+    lastProgressPercent.delete(id);
     emitContentUpdate({ type: "content:status", id, status: "rendered" });
     emitContentUpdate({ type: "content:rendered", id, item: updated });
   } catch (error) {
@@ -133,7 +202,10 @@ export async function POST(
     process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
     process.env.REMOTION_BROWSER_EXECUTABLE ||
     null;
-  const chromeMode = process.env.REMOTION_RENDER_CHROME_MODE || "chrome-for-testing";
+  const chromeMode =
+    process.env.REMOTION_RENDER_CHROME_MODE === "headless-shell"
+      ? "headless-shell"
+      : "chrome-for-testing";
   const item = await getContentItem(id);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -147,9 +219,11 @@ export async function POST(
   const outputPath = path.join(contentPaths.rendersDir, outputFileName);
   const renderPath = path.relative(contentPaths.baseDir, outputPath);
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
+  const compositionId = "ContentLoop";
+
+  const serveUrl = await getServeUrl(entryPoint);
 
   const origin = new URL(request.url).origin;
-  const totalFrames = Math.max(1, Math.round(item.songDurationSeconds * item.fps));
   const props = {
     title: item.title,
     thumbnailSrc: `${origin}/api/content/${id}/asset?type=thumbnail`,
@@ -157,6 +231,12 @@ export async function POST(
     audioSrc: `${origin}/api/content/${id}/asset?type=song`,
     segmentDurationSeconds: item.segmentDurationSeconds,
     fadeDurationSeconds: item.fadeDurationSeconds,
+    introFadeSeconds: item.introFadeSeconds,
+    outroFadeSeconds: item.outroFadeSeconds,
+    audioFadeInSeconds: item.audioFadeInSeconds,
+    audioFadeOutSeconds: item.audioFadeOutSeconds,
+    audioFadeInOffsetSeconds: item.audioFadeInOffsetSeconds,
+    audioFadeOutOffsetSeconds: item.audioFadeOutOffsetSeconds,
     videoDurationSeconds: item.videoDurationSeconds ?? item.segmentDurationSeconds,
     overlapRatio: item.overlapRatio ?? null,
     playbackRate: item.playbackRate ?? 1,
@@ -166,34 +246,16 @@ export async function POST(
     height: item.height,
   };
 
-  const args = [
-    entryPoint,
-    "ContentLoop",
-    outputPath,
-    "--props",
-    JSON.stringify(props),
-    "--overwrite",
-    "--log=info",
-    `--chrome-mode=${chromeMode}`,
-    "--gl=vulkan",
-  ];
-
-  if (process.env.REMOTION_RENDER_BROWSER_ARGS) {
-    args.push("--browser-args", process.env.REMOTION_RENDER_BROWSER_ARGS);
-  }
-
-  if (resolvedBrowser) {
-    args.push("--browser-executable", resolvedBrowser);
-  }
-
   const browserLabel = resolvedBrowser ?? "auto";
   void startRenderJob({
     id,
-    args,
     renderPath,
-    totalFrames,
     browserLabel,
     chromeMode,
+    serveUrl,
+    compositionId,
+    outputPath,
+    inputProps: props,
   });
 
   return NextResponse.json(

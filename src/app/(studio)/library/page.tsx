@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
+import { Progress } from "@/components/ui/progress";
+import { StatRow } from "@/components/ui/stat-row";
 import {
   Pagination,
   PaginationContent,
@@ -17,6 +19,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useContentList, type ContentItem } from "../_components/use-content-list";
+import { useRenderProgress } from "../_components/use-render-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
@@ -33,6 +36,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import React from "react";
 
 export default function DashboardLibraryPage() {
   const [query, setQuery] = useState("");
@@ -47,6 +51,7 @@ export default function DashboardLibraryPage() {
   const router = useRouter();
   const [renderingId, setRenderingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const renderProgress = useRenderProgress();
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / limit)),
@@ -123,6 +128,7 @@ export default function DashboardLibraryPage() {
       destructive: true,
     },
   ];
+
 
   const handleRender = async (id: string) => {
     setRenderingId(id);
@@ -202,9 +208,15 @@ export default function DashboardLibraryPage() {
     }
   };
 
-  const renderStatusBadge = (status: string, showLabel: boolean) => {
+  const renderStatusBadge = (
+    status: string,
+    showLabel: boolean,
+    progress?: number
+  ) => {
     const meta = getStatusMeta(status);
     const Icon = meta.icon;
+    const showProgress = status === "rendering" && typeof progress === "number";
+    const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
     return (
       <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
         <Icon
@@ -213,9 +225,23 @@ export default function DashboardLibraryPage() {
           }`}
         />
         {showLabel ? (
-          <span>{meta.label}</span>
+          <span className="flex items-center gap-2">
+            <span>{meta.label}</span>
+            {progressLabel ? (
+              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                {progressLabel}
+              </span>
+            ) : null}
+          </span>
         ) : (
-          <span className="sr-only">{meta.label}</span>
+          <span className="flex items-center gap-2">
+            <span className="sr-only">{meta.label}</span>
+            {progressLabel ? (
+              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                {progressLabel}
+              </span>
+            ) : null}
+          </span>
         )}
       </Badge>
     );
@@ -378,48 +404,68 @@ export default function DashboardLibraryPage() {
                       const item = items[virtualRow.index];
                       if (!item) return null;
                       return (
-                        <tr
-                          key={item.id}
-                          data-index={virtualRow.index}
-                          ref={desktopVirtualizer.measureElement}
-                          className="border-t border-slate-200 dark:border-white/10"
-                        >
-                          <td className="py-4">
-                            <div className="flex items-center gap-3">
-                              <ImageWithSkeleton
-                                src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
-                                  item.updatedAt
-                                )}`}
-                                alt={`${item.title} thumbnail`}
-                                className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                                wrapperClassName="h-12 w-16 rounded-md"
-                              />
-                              <div>
-                                <div className="font-medium">{item.title}</div>
-                                <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                  {formatDateTime(item.createdAt)}
+                        <React.Fragment key={item.id}>
+                          <tr
+                            data-index={virtualRow.index}
+                            ref={desktopVirtualizer.measureElement}
+                            className="border-t border-slate-200 dark:border-white/10"
+                          >
+                            <td className="py-4">
+                              <div className="flex items-center gap-3">
+                                <ImageWithSkeleton
+                                  src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                    item.updatedAt
+                                  )}`}
+                                  alt={`${item.title} thumbnail`}
+                                  className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                                  wrapperClassName="h-12 w-16 rounded-md"
+                                />
+                                <div>
+                                  <div className="font-medium">{item.title}</div>
+                                  <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                    {formatDateTime(item.createdAt)}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          <td>
-                            {renderStatusBadge(item.status, true)}
-                          </td>
-                          <td>
-                            <div className="text-xs text-slate-500 dark:text-zinc-400">
-                              {item.segmentDurationSeconds}s segments /{" "}
-                              {item.fadeDurationSeconds}s fade
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-zinc-500">
-                              {item.width}x{item.height} @ {item.fps}fps
-                            </div>
-                          </td>
-                          <td className="text-center">
-                            <div className="flex flex-wrap justify-center gap-2">
-                              <ResponsiveActionMenu items={getActionItems(item)} />
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                            <td>
+                              {renderStatusBadge(
+                                item.status,
+                                true,
+                                renderProgress[item.id]?.progress
+                              )}
+                            </td>
+                            <td>
+                              <div className="text-xs text-slate-500 dark:text-zinc-400">
+                                {item.segmentDurationSeconds}s segments /{" "}
+                                {item.fadeDurationSeconds}s fade
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                {item.width}x{item.height} @ {item.fps}fps
+                              </div>
+                            </td>
+                            <td className="text-center">
+                              <div className="flex flex-wrap justify-center gap-2">
+                                <ResponsiveActionMenu items={getActionItems(item)} />
+                              </div>
+                            </td>
+                          </tr>
+                          {item.status === "rendering" ? (
+                            <tr className="border-b border-slate-200 dark:border-white/10">
+                              <td colSpan={4} className="pb-4">
+                                <StatRow show className="px-1">
+                                  <Progress
+                                    value={Math.round(
+                                      (renderProgress[item.id]?.progress ?? 0) *
+                                        100
+                                    )}
+                                    variant="amber"
+                                  />
+                                </StatRow>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </React.Fragment>
                       );
                     })}
                     {desktopVirtualizer.getVirtualItems().length ? (
@@ -462,31 +508,48 @@ export default function DashboardLibraryPage() {
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                       >
-                        <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
-                          <div className="flex flex-1 gap-3">
-                            <ImageWithSkeleton
-                              src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
-                                item.updatedAt
-                              )}`}
-                              alt={`${item.title} thumbnail`}
-                              className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                              wrapperClassName="h-16 w-20 rounded-md"
-                            />
-                            <div className="flex-1">
-                              <div className="text-sm font-semibold">
-                                {item.title}
-                              </div>
-                              <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                {formatDate(item.createdAt)}
-                              </div>
-                              <div className="mt-2">
-                                {renderStatusBadge(item.status, false)}
+                        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-1 gap-3">
+                              <ImageWithSkeleton
+                                src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                  item.updatedAt
+                                )}`}
+                                alt={`${item.title} thumbnail`}
+                                className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                                wrapperClassName="h-16 w-20 rounded-md"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold">
+                                  {item.title}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                  {formatDate(item.createdAt)}
+                                </div>
+                                <div className="mt-2">
+                                  {renderStatusBadge(
+                                    item.status,
+                                    false,
+                                    renderProgress[item.id]?.progress
+                                  )}
+                                </div>
                               </div>
                             </div>
+                            <div className="flex shrink-0 items-start justify-end">
+                              <ResponsiveActionMenu items={getActionItems(item)} />
+                            </div>
                           </div>
-                          <div className="flex shrink-0 items-start justify-end">
-                            <ResponsiveActionMenu items={getActionItems(item)} />
-                          </div>
+                          <StatRow
+                            show={item.status === "rendering"}
+                            className="w-full"
+                          >
+                            <Progress
+                              value={Math.round(
+                                (renderProgress[item.id]?.progress ?? 0) * 100
+                              )}
+                              variant="amber"
+                            />
+                          </StatRow>
                         </div>
                       </div>
                     );

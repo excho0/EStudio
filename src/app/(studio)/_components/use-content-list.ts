@@ -9,9 +9,6 @@ export type ContentItem = {
   title: string;
   createdAt: string;
   updatedAt: string;
-  thumbnailPath: string;
-  videoPath: string;
-  songPath: string;
   renderPath?: string;
   status: "uploaded" | "rendering" | "rendered" | "failed";
   songDurationSeconds: number;
