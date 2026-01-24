@@ -20,6 +20,7 @@ import {
   Music,
   SlidersHorizontal,
   Send,
+  Upload,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,37 +68,45 @@ const ValueWithSkeleton = ({
 );
 
 
-const getStatusMeta = (status: string) => {
-  switch (status) {
-    case "rendered":
-      return {
-        label: "Rendered",
-        icon: CheckCircle2,
-        className:
-          "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200",
-      };
-    case "failed":
-      return {
-        label: "Failed",
-        icon: XCircle,
-        className: "bg-red-500/15 text-red-700 dark:bg-red-400/20 dark:text-red-200",
-      };
-    case "rendering":
-      return {
-        label: "Rendering",
-        icon: Loader2,
-        className:
-          "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
-      };
-    default:
-      return {
-        label: "Queued",
-        icon: Play,
-        className:
-          "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
-      };
-  }
-};
+  const getStatusMeta = (status: string) => {
+    switch (status) {
+      case "rendered":
+        return {
+          label: "Rendered",
+          icon: CheckCircle2,
+          className:
+            "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200",
+        };
+      case "failed":
+        return {
+          label: "Failed",
+          icon: XCircle,
+          className:
+            "bg-red-500/15 text-red-700 dark:bg-red-400/20 dark:text-red-200",
+        };
+      case "rendering":
+        return {
+          label: "Rendering",
+          icon: Loader2,
+          className:
+            "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
+        };
+      case "uploaded":
+        return {
+          label: "Uploaded",
+          icon: Upload,
+          className:
+            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
+        };
+      default:
+        return {
+          label: "Queued",
+          icon: Play,
+          className:
+            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
+        };
+    }
+  };
 
 const renderStatusBadge = (
     status: string,

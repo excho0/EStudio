@@ -182,6 +182,35 @@ app
       socket.emit("content:update", { type: "connected" });
     });
 
+    if (process.env.RENDER_SIMULATE === "true") {
+      const simulateId = process.env.RENDER_SIMULATE_ID ?? "demo-render";
+      const steps = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1];
+      let index = 0;
+      let announcedRendered = false;
+      setInterval(() => {
+        const progress = steps[index % steps.length];
+        io.emit("render:progress", {
+          id: simulateId,
+          rendered: Math.round(progress * 100),
+          total: 100,
+          progress,
+        });
+        if (progress >= 1 && !announcedRendered) {
+          io.emit("content:update", {
+            type: "content:status",
+            id: simulateId,
+            status: "rendered",
+          });
+          announcedRendered = true;
+        }
+        index += 1;
+        if (index >= steps.length) {
+          index = 0;
+          announcedRendered = false;
+        }
+      }, 2000);
+    }
+
     httpServer.listen(port, () => {
       console.log(`> Ready on http://localhost:${port}`);
     });

@@ -11,7 +11,8 @@ import Link from "next/link";
 
 export function Sidebar() {
   const sidebar = useStore(useSidebar, (x) => x);
-  const { connected } = useDashboardSocket();
+  const { connected, socket } = useDashboardSocket();
+  const isConnected = connected || socket?.connected === true;
   if (!sidebar) return null;
   const { getOpenState, setIsHover, settings } = sidebar;
   return (
@@ -58,12 +59,12 @@ export function Sidebar() {
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
               <span
                 className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
-                  connected ? "border-emerald-300/60" : "border-amber-300/60"
+                  isConnected ? "border-emerald-300/60" : "border-amber-300/60"
                 }`}
               >
                 <span
                   className={`absolute inset-0 rounded-full ${
-                    connected
+                    isConnected
                       ? "animate-pulse bg-emerald-400/25"
                       : "animate-pulse bg-amber-400/25"
                   }`}
@@ -71,11 +72,11 @@ export function Sidebar() {
                 />
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
-                    connected ? "bg-emerald-400" : "bg-amber-400"
+                    isConnected ? "bg-emerald-400" : "bg-amber-400"
                   }`}
                 />
               </span>
-              {connected ? "Connected" : "Connecting"}
+              {isConnected ? "Connected" : "Connecting"}
             </div>
           ) : (
             <Tooltip>
@@ -83,12 +84,12 @@ export function Sidebar() {
                 <div className="flex items-center justify-center">
                   <span
                     className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
-                      connected ? "border-emerald-300/60" : "border-amber-300/60"
+                      isConnected ? "border-emerald-300/60" : "border-amber-300/60"
                     }`}
                   >
                     <span
                       className={`absolute inset-0 rounded-full ${
-                        connected
+                        isConnected
                           ? "animate-pulse bg-emerald-400/25"
                           : "animate-pulse bg-amber-400/25"
                       }`}
@@ -96,14 +97,14 @@ export function Sidebar() {
                     />
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        connected ? "bg-emerald-400" : "bg-amber-400"
+                        isConnected ? "bg-emerald-400" : "bg-amber-400"
                       }`}
                     />
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {connected ? "Connected" : "Connecting"}
+                {isConnected ? "Connected" : "Connecting"}
               </TooltipContent>
             </Tooltip>
           )}

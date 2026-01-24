@@ -18,6 +18,10 @@ import {
   Info,
   Goal,
   Clapperboard,
+  Upload,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +35,13 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -64,6 +75,13 @@ type ContentItem = {
   height: number;
   renderPath?: string | null;
 };
+
+const STATUS_OPTIONS = [
+  { value: "uploaded", label: "Uploaded", icon: Upload },
+  { value: "rendering", label: "Rendering", icon: Loader2 },
+  { value: "rendered", label: "Rendered", icon: CheckCircle2 },
+  { value: "failed", label: "Failed", icon: XCircle },
+] as const;
 
 const LabelWithTooltip = ({
   htmlFor,
@@ -474,21 +492,48 @@ export default function EditContentPage() {
                     text="Status"
                     tip="Current render state (uploaded, rendering, rendered, failed)."
                   />
-                  <InputGroup className="bg-white dark:bg-white/5">
-                    <InputGroupInput
-                      id="status"
-                      value={formValues.status}
-                      onChange={(event) =>
-                        setFormValues((current) => ({
-                          ...current,
-                          status: event.target.value,
-                        }))
-                      }
-                    />
-                    <InputGroupAddon>
-                      <Goal />
-                    </InputGroupAddon>
-                  </InputGroup>
+                  <Select
+                    value={formValues.status}
+                    onValueChange={(value) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        status: value,
+                      }))
+                    }
+                  >
+                    {(() => {
+                      const selected = STATUS_OPTIONS.find(
+                        (option) => option.value === formValues.status
+                      );
+                      const Icon = selected?.icon;
+                      return (
+                    <SelectTrigger id="status" className="w-full">
+                      <SelectValue placeholder="Select status">
+                        {selected ? (
+                          <span className="inline-flex items-center gap-2">
+                            {Icon ? <Icon className="h-4 w-4" /> : null}
+                            {selected.label}
+                          </span>
+                        ) : null}
+                      </SelectValue>
+                    </SelectTrigger>
+                      );
+                    })()}
+                    <SelectContent>
+                      {STATUS_OPTIONS.map((option) => {
+                        const Icon = option.icon;
+                        return (
+                          <SelectItem
+                            key={option.value}
+                            value={option.value}
+                            icon={<Icon className="h-4 w-4" />}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {!isTablet && (

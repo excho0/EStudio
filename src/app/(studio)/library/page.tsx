@@ -31,6 +31,7 @@ import {
   Loader2,
   Play,
   Trash2,
+  Upload,
   XCircle,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -197,6 +198,13 @@ export default function LibraryPage() {
           icon: Loader2,
           className:
             "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
+        };
+      case "uploaded":
+        return {
+          label: "Uploaded",
+          icon: Upload,
+          className:
+            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
         };
       default:
         return {
