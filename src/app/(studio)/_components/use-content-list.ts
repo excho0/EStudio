@@ -50,16 +50,16 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   searchParams.set("limit", String(limit));
   const queryKey = ["content", { query, page, limit }] as const;
 
-  const { data, isLoading, refetch } = useQuery<ContentListResponse>({
+  const { data, isLoading, isFetching, refetch } = useQuery<ContentListResponse>({
     queryKey,
     queryFn: async () => {
       const response = await fetch(`/api/content?${searchParams.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to load content list");
       }
-      return response.json();
+      return (await response.json()) as ContentListResponse;
     },
-    keepPreviousData: true,
+    placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
@@ -70,8 +70,9 @@ export const useContentList = (options: UseContentListOptions = {}) => {
 
   return {
     items: data?.items ?? [],
-    total: Number.isFinite(data?.total) ? data.total : 0,
-    loading: isLoading,
+    total: Number.isFinite(data?.total) ? data?.total ?? 0 : 0,
+    loading: isFetching,
+    initialLoading: isLoading,
     refresh: refetch,
     page,
     limit,

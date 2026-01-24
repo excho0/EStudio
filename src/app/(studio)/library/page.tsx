@@ -38,7 +38,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import React from "react";
 
-export default function DashboardLibraryPage() {
+export default function LibraryPage() {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 350);
   const [page, setPage] = useState(1);
