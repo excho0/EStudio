@@ -296,24 +296,25 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const fftSize = 2048;
   const spectrum = useMemo(() => {
     if (!audioData) return null;
-    const frames = [frame - 2, frame - 1, frame, frame + 1, frame + 2]
+    const frames = [frame - 2, frame - 1, frame];
+    const weights = [0.2, 0.3, 0.5];
     const spectra = frames.map((currentFrame) =>
       getAudioSpectrum({
         audioData,
         frame: currentFrame,
         fps,
         fftSize,
-        dataOffsetInSeconds: -0.05,
+        dataOffsetInSeconds: -0.015,
       })
     );
-    const length = spectra[0]?.length ?? 0;
+    const length = spectra[1]?.length ?? 0;
     const averaged = new Array(length).fill(0);
     for (let i = 0; i < length; i += 1) {
       let sum = 0;
       for (let j = 0; j < spectra.length; j += 1) {
-        sum += spectra[j][i] ?? 0;
+        sum += (spectra[j][i] ?? 0) * weights[j];
       }
-      averaged[i] = sum / spectra.length;
+      averaged[i] = sum;
     }
     return averaged;
   }, [audioData, frame, fps]);
@@ -323,14 +324,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       magnitudes: spectrum,
       sampleRate: audioData.sampleRate,
       fftSize,
-      bands: 128,
+      bands: 96,
       minFreq: 60,
       maxFreq: 20000,
     });
   }, [audioData, spectrum]);
   const audioBars = useMemo(() => {
     if (!audioVisualization) return null;
-    return audioVisualization;
+    return audioVisualization.map((value, index) => {
+      const bandT = index / (audioVisualization.length - 1);
+      const lowAtten = 0.6 + bandT * 0.8;
+      const tilt = 0.85 + bandT * 0.6;
+      return value * lowAtten * tilt;
+    });
   }, [audioVisualization]);
   const paletteColors = useMemo(() => {
     if (!colorPalette?.length) return DEFAULT_PALETTE;
@@ -342,10 +348,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   }, [colorPalette]);
   const accentColor =
     paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
+  const enableSoftGate = false;
   const smoothBars = useMemo(() => {
-    const { next } = processAudioBars(audioBars);
+    const { next } = processAudioBars(audioBars, { enableSoftGate });
     return next.length ? next : null;
-  }, [audioBars]);
+  }, [audioBars, enableSoftGate]);
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
@@ -497,26 +504,34 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 index < smoothBars.length / 2
                   ? index
                   : smoothBars.length - 1 - index;
-              const lowBoost = Math.max(0.9, 1.4 - barIndex / (smoothBars.length / 2));
-              const boosted = Math.min(1, Math.pow(value * 2.2 * lowBoost, 0.7));
+              const lowBoost = Math.max(
+                1,
+                1.8 - barIndex / (smoothBars.length / 2)
+              );
+              const boosted = Math.pow(value * 2.2 * lowBoost, 1.05);
               const shimmer =
                 1 +
                 Math.sin((frame + index) * 0.15) *
-                  0.05 *
+                  0.015 *
                   (0.2 + value);
-              const clamped = Math.max(0.02, Math.min(1, boosted * shimmer));
+              const minVisible =
+                0.13 +
+                (1 -
+                  barIndex / Math.max(1, smoothBars.length / 2)) *
+                  0.02;
+              const clamped = Math.max(minVisible, boosted * shimmer);
               const shade = paletteColors[index % paletteColors.length];
               return (
                 <div
                   key={`bar-${index}`}
                   style={{
-                    height: `${clamped * 100}%`,
-                    borderRadius: 8,
+                    height: `${clamped * 160}%`,
+                    borderRadius: 5,
                     background: `linear-gradient(180deg, ${hexToRgba(
                       shade,
                       0.95
                     )} 0%, ${hexToRgba(shade, 0.35)} 100%)`,
-                    border: `1px solid ${hexToRgba(accentColor, 0.35)}`,
+                    // border: `1px solid ${hexToRgba(accentColor, 0.35)}`,
                     boxShadow: `inset 0 1px 0 ${hexToRgba(
                       accentColor,
                       0.6
