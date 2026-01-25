@@ -10,18 +10,20 @@ import {
   MoveHorizontal,
   MoveVertical,
   Monitor,
+  Palette,
   Repeat2,
   SlidersHorizontal,
   Timer,
   Type,
   FastForward,
   Info,
-  Goal,
   Clapperboard,
   Upload,
   Loader2,
   CheckCircle2,
   XCircle,
+  Pipette,
+  Copy,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,29 +54,9 @@ import { Player } from "@remotion/player";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useMediaQuery } from "@/hooks/use-media-query";
-
-type ContentItem = {
-  id: string;
-  title: string;
-  status: string;
-  createdAt: string;
-  segmentDurationSeconds: number;
-  fadeDurationSeconds: number;
-  introFadeSeconds: number;
-  outroFadeSeconds: number;
-  audioFadeInSeconds: number;
-  audioFadeOutSeconds: number;
-  audioFadeInOffsetSeconds: number;
-  audioFadeOutOffsetSeconds: number;
-  videoDurationSeconds?: number | null;
-  playbackRate: number;
-  overlapRatio?: number | null;
-  songDurationSeconds: number;
-  fps: number;
-  width: number;
-  height: number;
-  renderPath?: string | null;
-};
+import { HexPicker } from "@/components/ui/hex-color-picker";
+import { Switch } from "@/components/ui/switch";
+import { ContentItem } from "../../_components/use-content-list";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -111,11 +93,31 @@ const LabelWithTooltip = ({
   </div>
 );
 
+const ColorCopyButton = ({
+  value,
+  onCopy,
+}: {
+  value: string;
+  onCopy: () => void;
+}) => (
+  <button
+    type="button"
+    className="flex w-full items-center justify-between rounded-md border border-transparent px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 dark:text-zinc-400 dark:hover:border-white/10 dark:hover:bg-white/5"
+    onClick={onCopy}
+    aria-label={`Copy ${value}`}
+  >
+    <span>{value}</span>
+    <Copy className="h-3.5 w-3.5" />
+  </button>
+);
+
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [item, setItem] = useState<ContentItem | null>(null);
+  const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
+  const [paletteState, setPaletteState] = useState<string[]>([]);
   const [formValues, setFormValues] = useState({
     title: "",
     status: "",
@@ -131,6 +133,7 @@ export default function EditContentPage() {
     fps: "",
     width: "",
     height: "",
+    scalePercent: "100",
   });
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
@@ -154,36 +157,74 @@ export default function EditContentPage() {
   };
   const getDimension = (value: number | string | undefined | null, fallback: number) =>
     Math.max(1, Math.round(getNumber(value, fallback)));
-  const safeSegmentDuration = item
-    ? getNumber(item.segmentDurationSeconds, 4)
-    : 4;
-  const safeFadeDuration = item ? getNumber(item.fadeDurationSeconds, 1) : 1;
-  const safeIntroFadeDuration = item ? getNumber(item.introFadeSeconds, 0) : 0;
-  const safeOutroFadeDuration = item ? getNumber(item.outroFadeSeconds, 0) : 0;
-  const safeAudioFadeInDuration = item ? getNumber(item.audioFadeInSeconds, 0) : 0;
-  const safeAudioFadeOutDuration = item ? getNumber(item.audioFadeOutSeconds, 0) : 0;
-  const safeAudioFadeInOffset = item
-    ? getNumber(item.audioFadeInOffsetSeconds, 0)
-    : 0;
-  const safeAudioFadeOutOffset = item
-    ? getNumber(item.audioFadeOutOffsetSeconds, 0)
-    : 0;
-  const safePlaybackRate = item ? getNumber(item.playbackRate, 1) : 1;
-  const safeVideoDuration = item
-    ? getNumber(
-        item.videoDurationSeconds ?? item.segmentDurationSeconds,
-        safeSegmentDuration
-      )
-    : safeSegmentDuration;
-  const safeFps = item ? getNumber(item.fps, 30) : 30;
-  const safeWidth = item ? getDimension(item.width, 1280) : 1280;
-  const safeHeight = item ? getDimension(item.height, 720) : 720;
+  const safeSegmentDuration = getNumber(
+    formValues.segmentDurationSeconds,
+    item ? getNumber(item.segmentDurationSeconds, 4) : 4
+  );
+  const safeFadeDuration = getNumber(
+    formValues.fadeDurationSeconds,
+    item ? getNumber(item.fadeDurationSeconds, 1) : 1
+  );
+  const safeIntroFadeDuration = getNumber(
+    formValues.introFadeSeconds,
+    item ? getNumber(item.introFadeSeconds, 0) : 0
+  );
+  const safeOutroFadeDuration = getNumber(
+    formValues.outroFadeSeconds,
+    item ? getNumber(item.outroFadeSeconds, 0) : 0
+  );
+  const safeAudioFadeInDuration = getNumber(
+    formValues.audioFadeInSeconds,
+    item ? getNumber(item.audioFadeInSeconds, 0) : 0
+  );
+  const safeAudioFadeOutDuration = getNumber(
+    formValues.audioFadeOutSeconds,
+    item ? getNumber(item.audioFadeOutSeconds, 0) : 0
+  );
+  const safeAudioFadeInOffset = getNumber(
+    formValues.audioFadeInOffsetSeconds,
+    item ? getNumber(item.audioFadeInOffsetSeconds, 0) : 0
+  );
+  const safeAudioFadeOutOffset = getNumber(
+    formValues.audioFadeOutOffsetSeconds,
+    item ? getNumber(item.audioFadeOutOffsetSeconds, 0) : 0
+  );
+  const safePlaybackRate = getNumber(
+    formValues.playbackRate,
+    item ? getNumber(item.playbackRate, 1) : 1
+  );
+  const safeVideoDuration = getNumber(
+    formValues.videoDurationSeconds,
+    item
+      ? getNumber(
+          item.videoDurationSeconds ?? item.segmentDurationSeconds,
+          safeSegmentDuration
+        )
+      : safeSegmentDuration
+  );
+  const safeFps = getNumber(formValues.fps, item ? getNumber(item.fps, 30) : 30);
+  const safeWidth = getDimension(
+    formValues.width,
+    item ? getDimension(item.width, 1280) : 1280
+  );
+  const safeHeight = getDimension(
+    formValues.height,
+    item ? getDimension(item.height, 720) : 720
+  );
+  const safeScalePercent = getNumber(
+    formValues.scalePercent,
+    item ? getNumber(item.scalePercent, 100) : 100
+  );
   const resolvedFps =
     Number.isFinite(safeFps) && safeFps > 0 ? safeFps : 30;
   const resolvedWidth =
     Number.isFinite(safeWidth) && safeWidth > 0 ? safeWidth : 1280;
   const resolvedHeight =
     Number.isFinite(safeHeight) && safeHeight > 0 ? safeHeight : 720;
+  const resolvedScalePercent =
+    Number.isFinite(safeScalePercent) && safeScalePercent >= 0
+      ? safeScalePercent
+      : 100;
   const songDurationSeconds = getNumber(item?.songDurationSeconds, 0);
   const previewDurationSeconds =
     songDurationSeconds > 0 ? songDurationSeconds : safeSegmentDuration;
@@ -230,7 +271,10 @@ export default function EditContentPage() {
             fps: String(data.fps ?? ""),
             width: String(data.width ?? ""),
             height: String(data.height ?? ""),
+            scalePercent: String(data.scalePercent ?? 100),
           });
+          setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
+          setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
         }
       } catch (err) {
         if (active) {
@@ -258,6 +302,12 @@ export default function EditContentPage() {
     return () => URL.revokeObjectURL(url);
   }, [thumbnailFile]);
 
+  useEffect(() => {
+    if (paletteMode === "auto") {
+      setPaletteState(item?.colorPalette ?? []);
+    }
+  }, [item, paletteMode]);
+
   const handleThumbnailChange = (file: File | null) => {
     setThumbnailFile(file);
   };
@@ -278,6 +328,10 @@ export default function EditContentPage() {
       };
       if (formValues.status.trim()) {
         payload.status = formValues.status.trim();
+      }
+      payload.paletteMode = paletteMode;
+      if (paletteMode === "manual" && paletteState.length > 0) {
+        payload.colorPalette = paletteState;
       }
       const fadeDurationSeconds = toOptionalNumber(
         formValues.fadeDurationSeconds
@@ -334,6 +388,10 @@ export default function EditContentPage() {
       const height = toOptionalNumber(formValues.height);
       if (height !== undefined) {
         payload.height = height;
+      }
+      const scalePercent = toOptionalNumber(formValues.scalePercent);
+      if (scalePercent !== undefined) {
+        payload.scalePercent = scalePercent;
       }
       const response = await (thumbnailFile
         ? (() => {
@@ -398,6 +456,16 @@ export default function EditContentPage() {
             }
             if (payload.height !== undefined) {
               formData.append("height", String(payload.height));
+            }
+            if (payload.scalePercent !== undefined) {
+              formData.append("scalePercent", String(payload.scalePercent));
+            }
+            formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
+            if (payload.colorPalette) {
+              formData.append(
+                "colorPalette",
+                JSON.stringify(payload.colorPalette)
+              );
             }
             formData.append("thumbnail", thumbnailFile);
             return fetch(`/api/content/${item.id}`, {
@@ -576,6 +644,116 @@ export default function EditContentPage() {
                     </div>
                   </div>
                 )}
+
+                <Collapsible
+                  // defaultOpen
+                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
+                >
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <Palette className="h-4 w-4" />
+                      </span>
+                      <div className="flex flex-col items-start">
+                        <span>Palette</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Dominant colors
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center -space-x-1">
+                        {paletteState.slice(0, 5).map((color) => (
+                          <span
+                            key={color}
+                            className="h-4 w-4 rounded-full border border-white shadow-sm dark:border-zinc-950"
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                        {paletteState.length === 0 ? (
+                          <span className="text-xs text-slate-400 dark:text-zinc-500">
+                            No palette yet
+                          </span>
+                        ) : null}
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                      <div className="flex items-center text-center justify-center gap-2">
+                        <Pipette className="flex size-5 shrink-0 " />
+                        <span>
+                          {/* {paletteMode === "auto"
+                            ? "Auto palette from thumbnail."
+                            : "Manual palette edits enabled."
+                          } */}
+                          Auto palette from thumbnail.
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                              aria-label="Auto palette info"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" sideOffset={6}>
+                            Auto picks colors from the thumbnail on save. Turn it off to edit
+                            colors manually.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={paletteMode === "auto"}
+                          onCheckedChange={(checked) =>
+                            setPaletteMode(checked ? "auto" : "manual")
+                          }
+                        />
+                      </div>
+                    </div>
+                    {paletteState.length > 0 ? (
+                      <>
+                        <div className="grid gap-2 sm:grid-cols-5">
+                          {paletteState.map((color, index) => (
+                            <div
+                              key={index}
+                              className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white/70 p-2 text-xs text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
+                            >
+                              <HexPicker
+                                color={color}
+                                showLabel={false}
+                                disabled={paletteMode === "auto"}
+                                onChange={(value) => {
+                                  if (paletteMode !== "manual") return;
+                                  setPaletteState((current) => {
+                                    const next = [...current];
+                                    next[index] = value;
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <ColorCopyButton
+                                value={color}
+                                onCopy={() => {
+                                  navigator.clipboard?.writeText(color).catch(() => undefined);
+                                  toast.message(`Copied ${color}`);
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500 dark:border-white/10 dark:text-zinc-400">
+                        Save the content to generate a palette from the thumbnail.
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
 
                 <Collapsible
                   // defaultOpen
@@ -957,6 +1135,31 @@ export default function EditContentPage() {
                         </InputGroupAddon>
                       </InputGroup>
                     </div>
+                    <div className="grid gap-2 sm:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <LabelWithTooltip
+                          htmlFor="scalePercent"
+                          text="Scale (%)"
+                          tip="Zoom the video in or out. 100% keeps the original size."
+                        />
+                        <span className="text-xs text-slate-500 dark:text-zinc-400">
+                          {formValues.scalePercent || "100"}%
+                        </span>
+                      </div>
+                      <Slider
+                        id="scalePercent"
+                        min={0}
+                        max={200}
+                        step={1}
+                        value={[Number(formValues.scalePercent) || 100]}
+                        onValueChange={(value) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            scalePercent: String(value[0]),
+                          }))
+                        }
+                      />
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
                 <input
@@ -1017,6 +1220,8 @@ export default function EditContentPage() {
                   audioFadeOutOffsetSeconds: safeAudioFadeOutOffset,
                   videoDurationSeconds: safeVideoDuration,
                   playbackRate: safePlaybackRate,
+                  scalePercent: resolvedScalePercent,
+                  colorPalette: paletteState,
                   overlapRatio: Number.isFinite(formValues.overlapPercent)
                     ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
                     : null,

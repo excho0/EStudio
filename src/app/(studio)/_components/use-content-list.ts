@@ -3,24 +3,10 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDashboardSocket } from "./dashboard-socket";
+import { z } from "zod";
+import { contentItemSchema } from "@/lib/data/content";
 
-export type ContentItem = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  renderPath?: string;
-  status: "uploaded" | "rendering" | "rendered" | "failed";
-  songDurationSeconds: number;
-  segmentDurationSeconds: number;
-  fadeDurationSeconds: number;
-  videoDurationSeconds?: number;
-  overlapRatio?: number | null;
-  playbackRate: number;
-  fps: number;
-  width: number;
-  height: number;
-};
+export type ContentItem = z.infer<typeof contentItemSchema>;
 
 type UseContentListOptions = {
   query?: string;

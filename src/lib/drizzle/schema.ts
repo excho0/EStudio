@@ -31,6 +31,9 @@ export const contentItems = sqliteTable(
     audioFadeOutOffsetSeconds: real("audio_fade_out_offset_seconds")
       .notNull()
       .default(0),
+    scalePercent: real("scale_percent").notNull().default(100),
+    colorPalette: text("color_palette"),
+    paletteMode: text("palette_mode").notNull().default("auto"),
     overlapRatio: real("overlap_ratio"),
     playbackRate: real("playback_rate").notNull().default(1),
     fps: integer("fps").notNull().default(30),
@@ -71,6 +74,9 @@ export const contentItemsPg = pgTable(
     audioFadeOutOffsetSeconds: pgReal("audio_fade_out_offset_seconds")
       .notNull()
       .default(0),
+    scalePercent: pgReal("scale_percent").notNull().default(100),
+    colorPalette: pgText("color_palette"),
+    paletteMode: pgText("palette_mode").notNull().default("auto"),
     overlapRatio: pgReal("overlap_ratio"),
     playbackRate: pgReal("playback_rate").notNull().default(1),
     fps: pgInteger("fps").notNull().default(30),

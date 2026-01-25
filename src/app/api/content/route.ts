@@ -8,6 +8,7 @@ import {
   resolveContentPath,
   writeContentManifest,
 } from "@/lib/content-store";
+import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
   contentCreateSchema,
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
           fps?: number;
           width?: number;
           height?: number;
+          scalePercent?: number;
         }
       | null;
 
@@ -103,6 +105,9 @@ export async function POST(request: Request) {
       finalizeDraft(payload.videoPath, id, "video"),
       finalizeDraft(payload.songPath, id, "song"),
     ]);
+    const colorPalette = thumbnailPath
+      ? await getPaletteFromPath(resolveContentPath(thumbnailPath))
+      : null;
 
     const overlapRatioValue =
       typeof payload.overlapRatio === "number" ? payload.overlapRatio : null;
@@ -110,6 +115,8 @@ export async function POST(request: Request) {
       id,
       title: payload.title?.trim() || "Untitled",
       status: "uploaded",
+      colorPalette,
+      paletteMode: "auto",
       songDurationSeconds: Number.isFinite(payload.songDurationSeconds)
         ? payload.songDurationSeconds
         : 0,
@@ -153,6 +160,9 @@ export async function POST(request: Request) {
       fps: Number.isFinite(payload.fps) ? payload.fps : 30,
       width: Number.isFinite(payload.width) ? payload.width : 1280,
       height: Number.isFinite(payload.height) ? payload.height : 720,
+      scalePercent: Number.isFinite(payload.scalePercent)
+        ? payload.scalePercent
+        : 100,
     });
 
     const created = await createContentItem(item);
@@ -209,10 +219,16 @@ export async function POST(request: Request) {
     writeUpload(song, id, "song"),
   ]);
 
+  const colorPalette = thumbnailPath
+    ? await getPaletteFromPath(resolveContentPath(thumbnailPath))
+    : null;
+
   const item = contentCreateSchema.parse({
     id,
     title,
     status: "uploaded",
+    colorPalette,
+    paletteMode: "auto",
     songDurationSeconds: Number.isFinite(songDurationSeconds)
       ? songDurationSeconds
       : 0,
@@ -250,6 +266,9 @@ export async function POST(request: Request) {
     fps: Number.isFinite(fps) ? fps : 30,
     width: Number.isFinite(width) ? width : 1280,
     height: Number.isFinite(height) ? height : 720,
+    scalePercent: Number.isFinite(Number(formData.get("scalePercent") ?? 100))
+      ? Number(formData.get("scalePercent") ?? 100)
+      : 100,
   });
 
   const created = await createContentItem(item);

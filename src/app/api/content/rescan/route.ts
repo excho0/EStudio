@@ -36,11 +36,15 @@ export async function POST() {
     try {
       const raw = await fs.readFile(path.join(manifestsDir, file), "utf-8");
       const data = JSON.parse(raw) as Record<string, unknown>;
-      const candidate = {
-        id: data.id,
-        title: data.title ?? "Recovered",
-        status: data.status ?? "uploaded",
-        songDurationSeconds: data.songDurationSeconds ?? 0,
+        const candidate = {
+          id: data.id,
+          title: data.title ?? "Recovered",
+          status: data.status ?? "uploaded",
+          colorPalette: Array.isArray(data.colorPalette)
+            ? data.colorPalette
+            : null,
+          paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
+          songDurationSeconds: data.songDurationSeconds ?? 0,
         segmentDurationSeconds: data.segmentDurationSeconds ?? 4,
         fadeDurationSeconds: data.fadeDurationSeconds ?? 1,
         introFadeSeconds: data.introFadeSeconds ?? 0,

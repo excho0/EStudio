@@ -50,6 +50,8 @@ export const contentItemSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   renderPath: z.string().optional().nullable(),
+  colorPalette: z.array(z.string()).optional().nullable(),
+  paletteMode: z.enum(["auto", "manual"]).default("auto"),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
   songDurationSeconds: z.number().nonnegative(),
   segmentDurationSeconds: z.number().nonnegative(),
@@ -60,6 +62,7 @@ export const contentItemSchema = z.object({
   audioFadeOutSeconds: z.number().nonnegative(),
   audioFadeInOffsetSeconds: z.number().nonnegative(),
   audioFadeOutOffsetSeconds: z.number().nonnegative(),
+  scalePercent: z.number().nonnegative(),
   videoDurationSeconds: z.number().nonnegative().optional().nullable(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive(),
@@ -80,6 +83,8 @@ export const contentCreateSchema = z.object({
   id: z.uuid(),
   title: z.string().min(1),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).default("uploaded"),
+  colorPalette: z.array(z.string()).optional().nullable(),
+  paletteMode: z.enum(["auto", "manual"]).default("auto"),
   songDurationSeconds: z.number().nonnegative().default(0),
   segmentDurationSeconds: z.number().nonnegative().default(4),
   fadeDurationSeconds: z.number().nonnegative().default(1),
@@ -89,6 +94,7 @@ export const contentCreateSchema = z.object({
   audioFadeOutSeconds: z.number().nonnegative().default(0),
   audioFadeInOffsetSeconds: z.number().nonnegative().default(0),
   audioFadeOutOffsetSeconds: z.number().nonnegative().default(0),
+  scalePercent: z.number().nonnegative().default(100),
   videoDurationSeconds: z.number().nonnegative().default(0),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
   playbackRate: z.number().positive().default(1),
@@ -100,6 +106,8 @@ export const contentCreateSchema = z.object({
 export const contentUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  colorPalette: z.array(z.string()).optional().nullable(),
+  paletteMode: z.enum(["auto", "manual"]).optional(),
   songDurationSeconds: z.number().nonnegative().optional(),
   segmentDurationSeconds: z.number().nonnegative().optional(),
   fadeDurationSeconds: z.number().nonnegative().optional(),
@@ -109,6 +117,7 @@ export const contentUpdateSchema = z.object({
   audioFadeOutSeconds: z.number().nonnegative().optional(),
   audioFadeInOffsetSeconds: z.number().nonnegative().optional(),
   audioFadeOutOffsetSeconds: z.number().nonnegative().optional(),
+  scalePercent: z.number().nonnegative().optional(),
   videoDurationSeconds: z.number().nonnegative().optional(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive().optional(),
@@ -117,6 +126,25 @@ export const contentUpdateSchema = z.object({
   height: z.number().int().positive().optional(),
   renderPath: z.string().optional().nullable(),
 });
+
+const parseColorPalette = (value: unknown) => {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry));
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map((entry) => String(entry)) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const serializeColorPalette = (value?: string[] | null) =>
+  value && value.length > 0 ? JSON.stringify(value) : null;
 
 const normalizeRow = (row: unknown): ContentItemRow => {
   const record = row as Record<string, unknown>;
@@ -127,6 +155,8 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     createdAt: toIso(record.createdAt),
     updatedAt: toIso(record.updatedAt),
     renderPath: record.renderPath ?? null,
+    colorPalette: parseColorPalette(record.colorPalette),
+    paletteMode: record.paletteMode ?? "auto",
     videoDurationSeconds: record.videoDurationSeconds ?? null,
     playbackRate: record.playbackRate ?? 1,
     overlapRatio: record.overlapRatio ?? null,
@@ -136,6 +166,7 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     audioFadeOutSeconds: record.audioFadeOutSeconds ?? 0,
     audioFadeInOffsetSeconds: record.audioFadeInOffsetSeconds ?? 0,
     audioFadeOutOffsetSeconds: record.audioFadeOutOffsetSeconds ?? 0,
+    scalePercent: record.scalePercent ?? 100,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);
@@ -273,12 +304,14 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
     pg: async ({ db, table }) => {
       const values: InferInsertModel<typeof schema.contentItems> = {
         ...data,
+        colorPalette: serializeColorPalette(data.colorPalette),
       };
       await db.insert(table).values(values);
     },
     sqlite: async ({ db, table, now }) => {
       const values: InferInsertModel<typeof sqliteSchema.contentItems> = {
         ...data,
+        colorPalette: serializeColorPalette(data.colorPalette),
         createdAt: now,
         updatedAt: now,
       };
@@ -312,6 +345,9 @@ export async function updateContentItem(
         ...cleaned,
         updatedAt: now,
       };
+      if ("colorPalette" in cleaned) {
+        values.colorPalette = serializeColorPalette(cleaned.colorPalette);
+      }
       await db.update(table).set(values).where(eq(table.id, id));
     },
     sqlite: async ({ db, table, now }) => {
@@ -319,6 +355,9 @@ export async function updateContentItem(
         ...cleaned,
         updatedAt: now,
       };
+      if ("colorPalette" in cleaned) {
+        values.colorPalette = serializeColorPalette(cleaned.colorPalette);
+      }
       await db.update(table).set(values).where(eq(table.id, id));
     },
   });

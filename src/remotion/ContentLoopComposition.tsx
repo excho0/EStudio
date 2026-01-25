@@ -15,12 +15,18 @@ import {
 } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
+import { useAudioData } from "@remotion/media-utils";
+import { getAudioSpectrum } from "../lib/audio/fft";
+import { getLogBands } from "../lib/audio/bands";
+import { processAudioBars } from "../lib/audio/processing";
 
 export type ContentLoopProps = {
   title: string;
   thumbnailSrc?: string;
   videoSrc: string;
   audioSrc: string;
+  colorPalette?: string[];
+  scalePercent?: number;
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
   introFadeSeconds?: number;
@@ -50,6 +56,29 @@ type LoopVideoProps = {
   endAt?: number;
   muted?: boolean;
   playbackRate?: number;
+  style?: React.CSSProperties;
+};
+
+const DEFAULT_PALETTE = ["#7CC2FF", "#4F86FF", "#4E56FF"];
+
+const normalizeHex = (value: string) => {
+  const trimmed = value.trim().toUpperCase();
+  if (/^#[0-9A-F]{6}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^[0-9A-F]{6}$/.test(trimmed)) {
+    return `#${trimmed}`;
+  }
+  return null;
+};
+
+const hexToRgba = (hex: string, alpha: number) => {
+  const normalized = normalizeHex(hex);
+  if (!normalized) return `rgba(124,194,255,${alpha})`;
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
@@ -97,11 +126,14 @@ const SegmentLayer: React.FC<{
   videoFrames: number;
   startFrom: number;
   playbackRate?: number;
-}> = ({ duration, videoSrc, videoFrames, startFrom, playbackRate }) => {
+  scale: number;
+}> = ({ duration, videoSrc, videoFrames, startFrom, playbackRate, scale }) => {
   const slices = buildVideoSlices(startFrom, duration, videoFrames);
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill
+      style={{ transform: `scale(${scale})`, transformOrigin: "center center" }}
+    >
       {slices.map((slice) => (
         <Sequence
           key={`${slice.from}-${slice.startFrom}`}
@@ -114,6 +146,11 @@ const SegmentLayer: React.FC<{
             endAt={slice.startFrom + slice.duration}
             muted
             playbackRate={playbackRate}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
           />
         </Sequence>
       ))}
@@ -125,6 +162,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   thumbnailSrc,
   videoSrc,
   audioSrc,
+  colorPalette,
+  scalePercent = 100,
   segmentDurationSeconds,
   fadeDurationSeconds,
   introFadeSeconds = 0,
@@ -161,6 +200,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       : thumbnailSrc
         ? 1
         : 0;
+  const visualizationOpacity =
+    thumbnailSrc && !isRendering
+      ? Math.max(0, Math.min(1, 1 - thumbnailOpacity))
+      : 1;
   const introFadeFrames = Math.max(0, Math.round(introFadeSeconds * fps));
   const outroFadeFrames = Math.max(0, Math.round(outroFadeSeconds * fps));
   const videoFadeInOpacity =
@@ -193,6 +236,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       : 0;
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+  const scaleFactor = Math.min(2, Math.max(0, scalePercent / 100));
   const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
   const fadeFrames = Math.max(0, Math.round(fadeDurationSeconds * fps));
   const audioFadeInFrames = Math.max(0, Math.round(audioFadeInSeconds * fps));
@@ -248,6 +292,60 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     0,
     Math.min(1, audioFadeInOpacity * audioFadeOutOpacity)
   );
+  const audioData = useAudioData(audioSrc ?? "");
+  const fftSize = 2048;
+  const spectrum = useMemo(() => {
+    if (!audioData) return null;
+    const frames = [frame - 2, frame - 1, frame, frame + 1, frame + 2]
+    const spectra = frames.map((currentFrame) =>
+      getAudioSpectrum({
+        audioData,
+        frame: currentFrame,
+        fps,
+        fftSize,
+        dataOffsetInSeconds: -0.05,
+      })
+    );
+    const length = spectra[0]?.length ?? 0;
+    const averaged = new Array(length).fill(0);
+    for (let i = 0; i < length; i += 1) {
+      let sum = 0;
+      for (let j = 0; j < spectra.length; j += 1) {
+        sum += spectra[j][i] ?? 0;
+      }
+      averaged[i] = sum / spectra.length;
+    }
+    return averaged;
+  }, [audioData, frame, fps]);
+  const audioVisualization = useMemo(() => {
+    if (!spectrum || !audioData) return null;
+    return getLogBands({
+      magnitudes: spectrum,
+      sampleRate: audioData.sampleRate,
+      fftSize,
+      bands: 128,
+      minFreq: 60,
+      maxFreq: 20000,
+    });
+  }, [audioData, spectrum]);
+  const audioBars = useMemo(() => {
+    if (!audioVisualization) return null;
+    return audioVisualization;
+  }, [audioVisualization]);
+  const paletteColors = useMemo(() => {
+    if (!colorPalette?.length) return DEFAULT_PALETTE;
+    const cleaned = colorPalette
+      .map((value) => normalizeHex(value))
+      .filter((value): value is string => Boolean(value));
+    const base = cleaned.length ? cleaned : DEFAULT_PALETTE;
+    return base.slice(0, 2);
+  }, [colorPalette]);
+  const accentColor =
+    paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
+  const smoothBars = useMemo(() => {
+    const { next } = processAudioBars(audioBars);
+    return next.length ? next : null;
+  }, [audioBars]);
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
@@ -276,6 +374,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 maxStart === 0 ? 0 : (index * step) % (maxStart + 1)
               }
               playbackRate={resolvedPlaybackRate}
+              scale={scaleFactor}
             />
           </TransitionSeries.Sequence>,
         ];
@@ -303,6 +402,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoSrc,
       maxStart,
       resolvedPlaybackRate,
+      scaleFactor,
     ]
   );
 
@@ -330,7 +430,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
             <TransitionSeries>{series}</TransitionSeries>
           </AbsoluteFill>
           {thumbnailSrc && !isRendering ? (
-            <AbsoluteFill style={{ opacity: thumbnailOpacity }}>
+            <AbsoluteFill
+              style={{
+                opacity: thumbnailOpacity,
+              }}
+            >
               <Img
                 src={thumbnailSrc}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -367,6 +471,66 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         </AbsoluteFill>
       )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
+      {smoothBars ? (
+        <AbsoluteFill
+          style={{
+            justifyContent: "flex-end",
+            // padding: "0 5px 5px", // original
+            padding: "0",
+            opacity: visualizationOpacity,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${smoothBars.length}, minmax(0, 1fr))`,
+              gap: 4,
+              alignItems: "end",
+              height: 80,
+              width: "100%",
+              padding: "0 6px 0",
+              background: "transparent",
+            }}
+          >
+            {smoothBars.map((value, index) => {
+              const barIndex =
+                index < smoothBars.length / 2
+                  ? index
+                  : smoothBars.length - 1 - index;
+              const lowBoost = Math.max(0.9, 1.4 - barIndex / (smoothBars.length / 2));
+              const boosted = Math.min(1, Math.pow(value * 2.2 * lowBoost, 0.7));
+              const shimmer =
+                1 +
+                Math.sin((frame + index) * 0.15) *
+                  0.05 *
+                  (0.2 + value);
+              const clamped = Math.max(0.02, Math.min(1, boosted * shimmer));
+              const shade = paletteColors[index % paletteColors.length];
+              return (
+                <div
+                  key={`bar-${index}`}
+                  style={{
+                    height: `${clamped * 100}%`,
+                    borderRadius: 8,
+                    background: `linear-gradient(180deg, ${hexToRgba(
+                      shade,
+                      0.95
+                    )} 0%, ${hexToRgba(shade, 0.35)} 100%)`,
+                    border: `1px solid ${hexToRgba(accentColor, 0.35)}`,
+                    boxShadow: `inset 0 1px 0 ${hexToRgba(
+                      accentColor,
+                      0.6
+                    )}, 0 0 6px ${hexToRgba(accentColor, 0.3)}`,
+                    opacity: 0.95,
+                    transformOrigin: "center bottom",
+                    // backdropFilter: "blur(2px)",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </AbsoluteFill>
+      ) : null}
       {outroOverlayOpacity > 0 ? (
         <AbsoluteFill
           style={{ backgroundColor: "black", opacity: outroOverlayOpacity }}

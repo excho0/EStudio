@@ -53,6 +53,7 @@ export const RemotionRoot: React.FC = () => {
           videoDurationSeconds: 4,
           playbackRate: 1,
           overlapRatio: 0.25,
+          scalePercent: 100,
           songDurationSeconds: 30,
           fps: 30,
           width: 1280,

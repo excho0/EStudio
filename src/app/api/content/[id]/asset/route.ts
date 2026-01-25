@@ -7,6 +7,16 @@ import { Readable } from "stream";
 
 export const runtime = "nodejs";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Range, Content-Type",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 const mimeByExtension: Record<string, string> = {
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
@@ -81,6 +91,7 @@ export async function GET(
     return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
       status: 206,
       headers: {
+        ...corsHeaders,
         "Content-Type": contentType,
         "Content-Length": String(chunkSize),
         "Content-Range": `bytes ${start}-${safeEnd}/${stat.size}`,
@@ -93,6 +104,7 @@ export async function GET(
   const stream = createReadStream(absolutePath);
   return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
     headers: {
+      ...corsHeaders,
       "Content-Type": contentType,
       "Content-Length": String(stat.size),
       "Accept-Ranges": canRange ? "bytes" : "none",

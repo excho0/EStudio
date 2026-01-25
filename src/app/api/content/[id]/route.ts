@@ -6,9 +6,11 @@ import {
   resolveContentPath,
   removeContentAssetFiles,
   removeContentAssets,
+  findContentAssetPath,
   deleteContentManifest,
   writeContentManifest,
 } from "@/lib/content-store";
+import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
   deleteContentItem,
@@ -64,6 +66,7 @@ export async function PATCH(
     const formData = await request.formData();
     const title = formData.get("title");
     const status = formData.get("status");
+    const paletteMode = formData.get("paletteMode");
     const fadeDurationSeconds = formData.get("fadeDurationSeconds");
     const introFadeSeconds = formData.get("introFadeSeconds");
     const outroFadeSeconds = formData.get("outroFadeSeconds");
@@ -75,6 +78,7 @@ export async function PATCH(
     const fps = formData.get("fps");
     const width = formData.get("width");
     const height = formData.get("height");
+    const scalePercent = formData.get("scalePercent");
     const overlapRatio = formData.get("overlapRatio");
     const thumbnail = formData.get("thumbnail");
 
@@ -89,6 +93,9 @@ export async function PATCH(
     }
     if (typeof status === "string" && status.trim()) {
       payload.status = status.trim();
+    }
+    if (paletteMode === "auto" || paletteMode === "manual") {
+      payload.paletteMode = paletteMode;
     }
     const fadeValue = toOptionalNumber(fadeDurationSeconds);
     if (fadeValue !== undefined) {
@@ -134,17 +141,42 @@ export async function PATCH(
     if (heightValue !== undefined) {
       payload.height = heightValue;
     }
+    const scalePercentValue = toOptionalNumber(scalePercent);
+    if (scalePercentValue !== undefined) {
+      payload.scalePercent = scalePercentValue;
+    }
     const overlapValue = toOptionalNumber(overlapRatio);
     if (overlapValue !== undefined) {
       payload.overlapRatio = Math.min(0.9, Math.max(0, overlapValue));
     }
 
     if (thumbnail instanceof File) {
-      await writeUpload(thumbnail, item.id, "thumbnail");
+      const thumbnailPath = await writeUpload(thumbnail, item.id, "thumbnail");
+      if (payload.paletteMode !== "manual") {
+        payload.colorPalette = await getPaletteFromPath(
+          resolveContentPath(thumbnailPath)
+        );
+      }
       payload.status = item.status;
     }
   } else {
     payload = await request.json();
+  }
+
+  const resolvedPaletteMode =
+    payload.paletteMode === "manual"
+      ? "manual"
+      : payload.paletteMode === "auto"
+        ? "auto"
+        : item.paletteMode ?? "auto";
+
+  if (resolvedPaletteMode === "auto" && !("colorPalette" in payload)) {
+    const thumbnailPath = await findContentAssetPath(item.id, "thumbnail");
+    if (thumbnailPath) {
+      payload.colorPalette = await getPaletteFromPath(
+        resolveContentPath(thumbnailPath)
+      );
+    }
   }
 
   const updated = await updateContentItem(id, payload);

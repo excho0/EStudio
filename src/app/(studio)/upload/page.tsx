@@ -14,6 +14,7 @@ import {
   MoveVertical,
   Monitor,
   Repeat2,
+  ZoomIn,
   SlidersHorizontal,
   Timer,
   Type,
@@ -71,6 +72,7 @@ const initialForm = {
   fps: "30",
   width: "1280",
   height: "720",
+  scalePercent: "100",
 };
 
 const stepper = defineStepper(
@@ -245,6 +247,7 @@ export default function DashboardUploadPage() {
           return next;
         });
       }
+
     })();
   };
 
@@ -389,6 +392,7 @@ export default function DashboardUploadPage() {
       fps: Number(formValues.fps),
       width: Number(formValues.width),
       height: Number(formValues.height),
+      scalePercent: Number(formValues.scalePercent),
     };
 
     setSubmitting(true);
@@ -909,6 +913,31 @@ export default function DashboardUploadPage() {
                           </InputGroupAddon>
                         </InputGroup>
                       </div>
+                      <div className="grid gap-2 sm:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <LabelWithTooltip
+                            htmlFor="scalePercent"
+                            text="Scale (%)"
+                            tip="Zoom the video in or out. 100% keeps the original size."
+                          />
+                          <span className="text-xs text-slate-500 dark:text-zinc-400">
+                            {formValues.scalePercent || "100"}%
+                          </span>
+                        </div>
+                        <Slider
+                          id="scalePercent"
+                          min={0}
+                          max={200}
+                          step={1}
+                          value={[Number(formValues.scalePercent) || 100]}
+                          onValueChange={(value) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              scalePercent: String(value[0]),
+                            }))
+                          }
+                        />
+                      </div>
                     </CollapsibleContent>
                   </Collapsible>
                 </div>
@@ -1014,6 +1043,19 @@ export default function DashboardUploadPage() {
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
                               {formValues.width} x {formValues.height}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
+                            <ZoomIn className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                              Scale
+                            </div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
+                              {formValues.scalePercent || "100"}%
                             </div>
                           </div>
                         </div>
