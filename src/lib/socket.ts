@@ -32,7 +32,11 @@ export const emitRenderProgress = (payload: {
   }
 };
 
-export const emitRenderComplete = (payload: { id: string }) => {
+export const emitRenderComplete = (payload: {
+  id: string;
+  durationSeconds?: number;
+  avgFps?: number;
+}) => {
   const io = getSocketServer();
   if (io) {
     io.emit("render:complete", payload);

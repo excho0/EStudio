@@ -294,6 +294,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   );
   const audioData = useAudioData(audioSrc ?? "");
   const fftSize = 2048;
+
+  // This section handles the raw FFT processing and averaging across frames. (No changes needed here)
   const spectrum = useMemo(() => {
     if (!audioData) return null;
     const frames = [frame - 2, frame - 1, frame];
@@ -304,7 +306,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         frame: currentFrame,
         fps,
         fftSize,
-        dataOffsetInSeconds: -0.015,
+        // dataOffsetInSeconds: -0.015,
       })
     );
     const length = spectra[1]?.length ?? 0;
@@ -317,27 +319,29 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       averaged[i] = sum;
     }
     return averaged;
-  }, [audioData, frame, fps]);
+  }, [audioData, frame, fps, getAudioSpectrum]);
+
+  // This section handles grouping FFT bins into musical (logarithmic) bands. (No changes needed here)
   const audioVisualization = useMemo(() => {
     if (!spectrum || !audioData) return null;
     return getLogBands({
       magnitudes: spectrum,
       sampleRate: audioData.sampleRate,
       fftSize,
-      bands: 96,
+      bands: 128,
       minFreq: 60,
       maxFreq: 20000,
     });
-  }, [audioData, spectrum]);
+  }, [audioData, spectrum, getLogBands]);
+
+  // FIX 1: Removed manual low/tilt attenuation here. 
+  // Let `processAudioBars` handle all aesthetic shaping.
   const audioBars = useMemo(() => {
     if (!audioVisualization) return null;
-    return audioVisualization.map((value, index) => {
-      const bandT = index / (audioVisualization.length - 1);
-      const lowAtten = 0.6 + bandT * 0.8;
-      const tilt = 0.85 + bandT * 0.6;
-      return value * lowAtten * tilt;
-    });
+    // We now just return the raw logarithmic data
+    return audioVisualization;
   }, [audioVisualization]);
+
   const paletteColors = useMemo(() => {
     if (!colorPalette?.length) return DEFAULT_PALETTE;
     const cleaned = colorPalette
@@ -346,13 +350,125 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const base = cleaned.length ? cleaned : DEFAULT_PALETTE;
     return base.slice(0, 2);
   }, [colorPalette]);
+
+
   const accentColor =
     paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
-  const enableSoftGate = false;
+
+
+
+  // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
+  // for a sharper AE look.
   const smoothBars = useMemo(() => {
-    const { next } = processAudioBars(audioBars, { enableSoftGate });
-    return next.length ? next : null;
-  }, [audioBars, enableSoftGate]);
+    if (!audioData) return null;
+
+    // CONFIGURATION
+    const LOOKBACK_FRAMES = 12;  // How far back we look for temporal smoothing
+    const DECAY_FACTOR = 0.4;    // Controls the "Release" (Gravity)
+    const INPUT_SMOOTHING = 4;   // Controls the "Attack" (removes jitter). 
+    const SPATIAL_SMOOTHING = 1; // Smooth across neighboring bars
+    const BANDS = 128;            // Fewer bands = less noise / more stability
+                                 // Higher = less jitter, but punchiness is softer.
+
+    // 1. Fetch a batch of raw history
+    // We need extra frames to calculate the rolling average for the oldest lookback frame
+    const totalFramesNeeded = LOOKBACK_FRAMES + INPUT_SMOOTHING;
+    const range = Array.from({ length: totalFramesNeeded }, (_, i) => i);
+
+    const rawHistory = range.map((offset) => {
+      const targetFrame = frame - offset;
+      
+      const spectrum = getAudioSpectrum({
+        audioData,
+        frame: targetFrame,
+        fps,
+        fftSize,
+      });
+
+      const bands = getLogBands({
+        magnitudes: spectrum,
+        sampleRate: audioData.sampleRate,
+        fftSize,
+        bands: BANDS,
+        minFreq: 60,
+        maxFreq: 20000,
+      });
+
+      // Use our stateless processor
+      const { next } = processAudioBars(bands, {
+        maxOutput: 100,
+        gain: 2.0,
+        curve: 0.8, 
+        noiseFloor: 0.04,
+      });
+      return next;
+    });
+
+    // 2. Average the history (Input Smoothing / "Attack")
+    // This kills the jitter by saying "The value at T is actually the average of T, T-1, T-2"
+    const smoothedHistory: number[][] = [];
+    
+    // We only need to compute smoothed values for the 'LOOKBACK' window
+    for (let i = 0; i < LOOKBACK_FRAMES; i++) {
+      const currentRaw = rawHistory[i];
+      if (!currentRaw) {
+        smoothedHistory.push([]);
+        continue;
+      }
+
+      // Average this frame with its neighbors to remove FFT noise
+      const smoothedFrame = currentRaw.map((val, barIdx) => {
+        let sum = val;
+        let count = 1;
+        
+        // Add previous frames to the average
+        for (let j = 1; j < INPUT_SMOOTHING; j++) {
+          const pastFrame = rawHistory[i + j];
+          if (pastFrame) {
+            sum += pastFrame[barIdx];
+            count++;
+          }
+        }
+        return sum / count;
+      });
+      
+      smoothedHistory.push(smoothedFrame);
+    }
+
+    const currentSmoothedBars = smoothedHistory[0];
+    if (!currentSmoothedBars) return null;
+
+    // 3. Apply Decay Physics (Release) with weighted averaging (less jitter).
+    const temporalBars = currentSmoothedBars.map((_, barIdx) => {
+      let weightedSum = 0;
+      let weightTotal = 0;
+      for (let timeOffset = 0; timeOffset < smoothedHistory.length; timeOffset += 1) {
+        const pastBars = smoothedHistory[timeOffset];
+        if (!pastBars) continue;
+        const weight = Math.pow(DECAY_FACTOR, timeOffset);
+        weightedSum += pastBars[barIdx] * weight;
+        weightTotal += weight;
+      }
+      return weightTotal > 0 ? weightedSum / weightTotal : 0;
+    });
+
+    // 4. Spatial smoothing (across adjacent bars) to reduce "noisy" movement.
+    const spatialBars = temporalBars.map((_, barIdx) => {
+      let sum = 0;
+      let count = 0;
+      for (let offset = -SPATIAL_SMOOTHING; offset <= SPATIAL_SMOOTHING; offset += 1) {
+        const idx = barIdx + offset;
+        if (idx < 0 || idx >= temporalBars.length) continue;
+        sum += temporalBars[idx];
+        count += 1;
+      }
+      return count > 0 ? sum / count : 0;
+    });
+
+    return spatialBars;
+
+  }, [audioData, frame, fps, getAudioSpectrum, getLogBands]);
+
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
@@ -482,9 +598,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",
-            // padding: "0 5px 5px", // original
             padding: "0",
-            opacity: visualizationOpacity,
+            opacity: visualizationOpacity * introOutroOpacity,
           }}
         >
           <div
@@ -493,52 +608,36 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               gridTemplateColumns: `repeat(${smoothBars.length}, minmax(0, 1fr))`,
               gap: 4,
               alignItems: "end",
-              height: 80,
+              height: 80, // Target height in pixels
               width: "100%",
               padding: "0 6px 0",
               background: "transparent",
             }}
           >
             {smoothBars.map((value, index) => {
-              const barIndex =
-                index < smoothBars.length / 2
-                  ? index
-                  : smoothBars.length - 1 - index;
-              const lowBoost = Math.max(
-                1,
-                1.8 - barIndex / (smoothBars.length / 2)
-              );
-              const boosted = Math.pow(value * 2.2 * lowBoost, 1.05);
-              const shimmer =
-                1 +
-                Math.sin((frame + index) * 0.15) *
-                  0.015 *
-                  (0.2 + value);
-              const minVisible =
-                0.13 +
-                (1 -
-                  barIndex / Math.max(1, smoothBars.length / 2)) *
-                  0.02;
-              const clamped = Math.max(minVisible, boosted * shimmer);
+              
+              // FIX 3: Removed all manual boosting/shimmer/minVisible hacks.
+              // We use the 'value' directly from processAudioBars().
+              const clamped = value; 
+
               const shade = paletteColors[index % paletteColors.length];
               return (
                 <div
                   key={`bar-${index}`}
                   style={{
-                    height: `${clamped * 160}%`,
+                    // Height is simply clamped value * max height (80%)
+                    height: `${clamped * 80}%`, 
                     borderRadius: 5,
                     background: `linear-gradient(180deg, ${hexToRgba(
                       shade,
                       0.95
                     )} 0%, ${hexToRgba(shade, 0.35)} 100%)`,
-                    // border: `1px solid ${hexToRgba(accentColor, 0.35)}`,
                     boxShadow: `inset 0 1px 0 ${hexToRgba(
                       accentColor,
                       0.6
                     )}, 0 0 6px ${hexToRgba(accentColor, 0.3)}`,
                     opacity: 0.95,
                     transformOrigin: "center bottom",
-                    // backdropFilter: "blur(2px)",
                   }}
                 />
               );

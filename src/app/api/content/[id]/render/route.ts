@@ -578,7 +578,7 @@ const startRenderJob = async ({
     lastProgressPercent.delete(id);
     emitContentUpdate({ type: "content:status", id, status: "rendered" });
     emitContentUpdate({ type: "content:rendered", id, item: updated });
-    emitRenderComplete({ id });
+    emitRenderComplete({ id, durationSeconds: elapsedSeconds, avgFps });
   } catch (error) {
     await updateContentItem(id, { status: "failed" });
     emitContentUpdate({ type: "content:status", id, status: "failed" });
