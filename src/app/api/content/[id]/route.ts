@@ -9,6 +9,7 @@ import {
   findContentAssetPath,
   deleteContentManifest,
   writeContentManifest,
+  getContentRenderPath,
 } from "@/lib/content-store";
 import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
@@ -214,7 +215,7 @@ export async function DELETE(
 
   await Promise.all([
     removeContentAssets(item.id),
-    item.renderPath ? fs.rm(resolveContentPath(item.renderPath), { force: true }) : null,
+    fs.rm(resolveContentPath(getContentRenderPath(item.id, ".mp4")), { force: true }),
   ]);
 
   await deleteContentItem(id);

@@ -4,8 +4,9 @@ import path from "path";
 import { spawn } from "child_process";
 import { NextResponse } from "next/server";
 import {
-  contentPaths,
   ensureContentStore,
+  getContentRenderPath,
+  resolveContentPath,
 } from "@/lib/content-store";
 import {
   emitContentUpdate,
@@ -18,7 +19,6 @@ export const runtime = "nodejs";
 
 type RenderJob = {
   id: string;
-  renderPath: string;
   browserLabel: string;
   chromeMode: "chrome-for-testing" | "headless-shell";
   serveUrl: string;
@@ -245,7 +245,6 @@ const runFfmpeg = (binary: string, args: string[]) =>
 
 const startRenderJob = async ({
   id,
-  renderPath,
   browserLabel,
   chromeMode,
   serveUrl,
@@ -573,7 +572,6 @@ const startRenderJob = async ({
 
     const updated = await updateContentItem(id, {
       status: "rendered",
-      renderPath,
     });
     lastProgressPercent.delete(id);
     emitContentUpdate({ type: "content:status", id, status: "rendered" });
@@ -612,9 +610,8 @@ export async function POST(
   await updateContentItem(id, { status: "rendering" });
   emitContentUpdate({ type: "content:status", id, status: "rendering" });
 
-  const outputFileName = `${id}.mp4`;
-  const outputPath = path.join(contentPaths.rendersDir, outputFileName);
-  const renderPath = path.relative(contentPaths.baseDir, outputPath);
+  const renderPath = getContentRenderPath(id, ".mp4");
+  const outputPath = resolveContentPath(renderPath);
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
   const compositionId = "ContentLoop";
 
@@ -651,7 +648,6 @@ export async function POST(
   const browserLabel = resolvedBrowser ?? "auto";
   void startRenderJob({
     id,
-    renderPath,
     browserLabel,
     chromeMode,
     serveUrl,

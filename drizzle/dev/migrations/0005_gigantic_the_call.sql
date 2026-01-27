@@ -1,0 +1,1 @@
+ALTER TABLE `content_items` DROP COLUMN `render_path`;

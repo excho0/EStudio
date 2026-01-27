@@ -17,7 +17,6 @@ export const contentItems = sqliteTable(
     title: text("title").notNull(),
     status: text("status").notNull().default("uploaded"),
     // asset paths derived from content id
-    renderPath: text("render_path"),
     songDurationSeconds: real("song_duration_seconds").notNull().default(0),
     segmentDurationSeconds: real("segment_duration_seconds").notNull().default(0),
     videoDurationSeconds: real("video_duration_seconds").notNull().default(0),
@@ -62,7 +61,6 @@ export const contentItemsPg = pgTable(
     title: pgText("title").notNull(),
     status: pgText("status").notNull().default("uploaded"),
     // asset paths derived from content id
-    renderPath: pgText("render_path"),
     songDurationSeconds: pgReal("song_duration_seconds").notNull().default(0),
     segmentDurationSeconds: pgReal("segment_duration_seconds").notNull().default(0),
     videoDurationSeconds: pgReal("video_duration_seconds").notNull().default(0),

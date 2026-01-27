@@ -39,6 +39,11 @@ export function getContentAssetDir(id: string) {
   return path.join("uploads", "videos", id);
 }
 
+export function getContentRenderPath(id: string, extension = ".mp4") {
+  const safeExtension = extension.startsWith(".") ? extension : `.${extension}`;
+  return path.join("renders", `${id}${safeExtension}`);
+}
+
 export async function findContentAssetPath(
   id: string,
   kind: ContentAssetKind

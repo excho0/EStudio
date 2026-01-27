@@ -1,7 +1,11 @@
 import { createReadStream, promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { findContentAssetPath, resolveContentPath } from "@/lib/content-store";
+import {
+  findContentAssetPath,
+  getContentRenderPath,
+  resolveContentPath,
+} from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
 import { Readable } from "stream";
 
@@ -93,7 +97,7 @@ export async function GET(
 
   const relativePath =
     type === "render"
-      ? item.renderPath
+      ? getContentRenderPath(item.id, ".mp4")
       : await findContentAssetPath(
           item.id,
           type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"

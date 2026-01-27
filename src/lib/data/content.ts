@@ -49,7 +49,6 @@ export const contentItemSchema = z.object({
   title: z.string().min(1),
   createdAt: z.string(),
   updatedAt: z.string(),
-  renderPath: z.string().optional().nullable(),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: z.enum(["auto", "manual"]).default("auto"),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
@@ -130,7 +129,6 @@ export const contentUpdateSchema = z.object({
   fps: z.number().int().positive().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
-  renderPath: z.string().optional().nullable(),
 });
 
 const parseColorPalette = (value: unknown) => {
@@ -160,7 +158,6 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     ...record,
     createdAt: toIso(record.createdAt),
     updatedAt: toIso(record.updatedAt),
-    renderPath: record.renderPath ?? null,
     colorPalette: parseColorPalette(record.colorPalette),
     paletteMode: record.paletteMode ?? "auto",
     videoDurationSeconds: record.videoDurationSeconds ?? null,
@@ -341,9 +338,9 @@ export async function updateContentItem(
   const cleaned = Object.fromEntries(
     Object.entries(data).filter(([key, value]) => {
       if (value === undefined) return false;
-      if (value === null) {
-        return key === "renderPath";
-      }
+    if (value === null) {
+      return false;
+    }
       return true;
     })
   ) as typeof data;

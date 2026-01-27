@@ -109,7 +109,7 @@ export default function LibraryPage() {
       onSelect: () => handleRender(item.id),
       disabled: renderingId === item.id,
     },
-    ...(item.renderPath
+    ...(item.status === "rendered"
       ? [
           {
             label: "Download",
