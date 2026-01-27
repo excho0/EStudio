@@ -25,6 +25,8 @@ export type ContentLoopProps = {
   thumbnailSrc?: string;
   videoSrc: string;
   audioSrc: string;
+  visualizationEnabled?: boolean;
+  visualizationBars?: number;
   colorPalette?: string[];
   scalePercent?: number;
   segmentDurationSeconds: number;
@@ -162,6 +164,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   thumbnailSrc,
   videoSrc,
   audioSrc,
+  visualizationEnabled = true,
+  visualizationBars = 128,
   colorPalette,
   scalePercent = 100,
   segmentDurationSeconds,
@@ -294,9 +298,14 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   );
   const audioData = useAudioData(audioSrc ?? "");
   const fftSize = 2048;
+  const resolvedVisualizationBars = Math.min(
+    256,
+    Math.max(16, Math.round(Number(visualizationBars) || 128))
+  );
 
   // This section handles the raw FFT processing and averaging across frames. (No changes needed here)
   const spectrum = useMemo(() => {
+    if (!visualizationEnabled) return null;
     if (!audioData) return null;
     const frames = [frame - 2, frame - 1, frame];
     const weights = [0.2, 0.3, 0.5];
@@ -323,24 +332,26 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
   // This section handles grouping FFT bins into musical (logarithmic) bands. (No changes needed here)
   const audioVisualization = useMemo(() => {
+    if (!visualizationEnabled) return null;
     if (!spectrum || !audioData) return null;
     return getLogBands({
       magnitudes: spectrum,
       sampleRate: audioData.sampleRate,
       fftSize,
-      bands: 128,
+      bands: resolvedVisualizationBars,
       minFreq: 60,
       maxFreq: 20000,
     });
-  }, [audioData, spectrum, getLogBands]);
+  }, [audioData, spectrum, getLogBands, resolvedVisualizationBars, visualizationEnabled]);
 
   // FIX 1: Removed manual low/tilt attenuation here. 
   // Let `processAudioBars` handle all aesthetic shaping.
   const audioBars = useMemo(() => {
+    if (!visualizationEnabled) return null;
     if (!audioVisualization) return null;
     // We now just return the raw logarithmic data
     return audioVisualization;
-  }, [audioVisualization]);
+  }, [audioVisualization, visualizationEnabled]);
 
   const paletteColors = useMemo(() => {
     if (!colorPalette?.length) return DEFAULT_PALETTE;
@@ -360,6 +371,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
   // for a sharper AE look.
   const smoothBars = useMemo(() => {
+    if (!visualizationEnabled) return null;
     if (!audioData) return null;
 
     // CONFIGURATION
@@ -367,7 +379,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const DECAY_FACTOR = 0.4;    // Controls the "Release" (Gravity)
     const INPUT_SMOOTHING = 4;   // Controls the "Attack" (removes jitter). 
     const SPATIAL_SMOOTHING = 1; // Smooth across neighboring bars
-    const BANDS = 128;            // Fewer bands = less noise / more stability
+    const BANDS = resolvedVisualizationBars; // Fewer bands = less noise / more stability
                                  // Higher = less jitter, but punchiness is softer.
 
     // 1. Fetch a batch of raw history
@@ -467,7 +479,15 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
     return spatialBars;
 
-  }, [audioData, frame, fps, getAudioSpectrum, getLogBands]);
+  }, [
+    audioData,
+    frame,
+    fps,
+    getAudioSpectrum,
+    getLogBands,
+    resolvedVisualizationBars,
+    visualizationEnabled,
+  ]);
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {

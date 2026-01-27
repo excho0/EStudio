@@ -63,6 +63,8 @@ export const contentItemSchema = z.object({
   audioFadeInOffsetSeconds: z.number().nonnegative(),
   audioFadeOutOffsetSeconds: z.number().nonnegative(),
   scalePercent: z.number().nonnegative(),
+  visualizationEnabled: z.boolean().default(true),
+  visualizationBars: z.number().int().positive().default(128),
   videoDurationSeconds: z.number().nonnegative().optional().nullable(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive(),
@@ -95,6 +97,8 @@ export const contentCreateSchema = z.object({
   audioFadeInOffsetSeconds: z.number().nonnegative().default(0),
   audioFadeOutOffsetSeconds: z.number().nonnegative().default(0),
   scalePercent: z.number().nonnegative().default(100),
+  visualizationEnabled: z.boolean().default(true),
+  visualizationBars: z.number().int().positive().default(128),
   videoDurationSeconds: z.number().nonnegative().default(0),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
   playbackRate: z.number().positive().default(1),
@@ -118,6 +122,8 @@ export const contentUpdateSchema = z.object({
   audioFadeInOffsetSeconds: z.number().nonnegative().optional(),
   audioFadeOutOffsetSeconds: z.number().nonnegative().optional(),
   scalePercent: z.number().nonnegative().optional(),
+  visualizationEnabled: z.boolean().optional(),
+  visualizationBars: z.number().int().positive().optional(),
   videoDurationSeconds: z.number().nonnegative().optional(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive().optional(),
@@ -167,6 +173,11 @@ const normalizeRow = (row: unknown): ContentItemRow => {
     audioFadeInOffsetSeconds: record.audioFadeInOffsetSeconds ?? 0,
     audioFadeOutOffsetSeconds: record.audioFadeOutOffsetSeconds ?? 0,
     scalePercent: record.scalePercent ?? 100,
+    visualizationEnabled:
+      typeof record.visualizationEnabled === "boolean"
+        ? record.visualizationEnabled
+        : Boolean(record.visualizationEnabled ?? true),
+    visualizationBars: record.visualizationBars ?? 128,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);
@@ -312,6 +323,7 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
       const values: InferInsertModel<typeof sqliteSchema.contentItems> = {
         ...data,
         colorPalette: serializeColorPalette(data.colorPalette),
+        visualizationEnabled: data.visualizationEnabled ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -357,6 +369,9 @@ export async function updateContentItem(
       };
       if ("colorPalette" in cleaned) {
         values.colorPalette = serializeColorPalette(cleaned.colorPalette);
+      }
+      if ("visualizationEnabled" in cleaned) {
+        values.visualizationEnabled = cleaned.visualizationEnabled ? 1 : 0;
       }
       await db.update(table).set(values).where(eq(table.id, id));
     },

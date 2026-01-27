@@ -29,6 +29,13 @@
       "when": 1769298966918,
       "tag": "0003_high_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1769544598606,
+      "tag": "0004_long_firelord",
+      "breakpoints": true
     }
   ]
 }

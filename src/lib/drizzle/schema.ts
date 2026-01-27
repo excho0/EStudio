@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import {
   index as pgIndex,
+  boolean as pgBoolean,
   integer as pgInteger,
   pgTable,
   text as pgText,
@@ -32,6 +33,8 @@ export const contentItems = sqliteTable(
       .notNull()
       .default(0),
     scalePercent: real("scale_percent").notNull().default(100),
+    visualizationEnabled: integer("visualization_enabled").notNull().default(1),
+    visualizationBars: integer("visualization_bars").notNull().default(128),
     colorPalette: text("color_palette"),
     paletteMode: text("palette_mode").notNull().default("auto"),
     overlapRatio: real("overlap_ratio"),
@@ -75,6 +78,8 @@ export const contentItemsPg = pgTable(
       .notNull()
       .default(0),
     scalePercent: pgReal("scale_percent").notNull().default(100),
+    visualizationEnabled: pgBoolean("visualization_enabled").notNull().default(true),
+    visualizationBars: pgInteger("visualization_bars").notNull().default(128),
     colorPalette: pgText("color_palette"),
     paletteMode: pgText("palette_mode").notNull().default("auto"),
     overlapRatio: pgReal("overlap_ratio"),

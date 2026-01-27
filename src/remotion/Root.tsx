@@ -43,6 +43,8 @@ export const RemotionRoot: React.FC = () => {
           thumbnailSrc: "",
           videoSrc: "",
           audioSrc: "",
+          visualizationEnabled: true,
+          visualizationBars: 128,
           segmentDurationSeconds: 4,
           fadeDurationSeconds: 1,
           introFadeSeconds: 0,

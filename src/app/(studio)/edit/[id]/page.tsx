@@ -24,6 +24,8 @@ import {
   XCircle,
   Pipette,
   Copy,
+  AudioLines,
+  Eye,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -128,6 +130,8 @@ export default function EditContentPage() {
     audioFadeOutSeconds: "",
     audioFadeInOffsetSeconds: "",
     audioFadeOutOffsetSeconds: "",
+    visualizationEnabled: true,
+    visualizationBars: "128",
     playbackRate: "",
     overlapPercent: 25,
     fps: "",
@@ -215,6 +219,22 @@ export default function EditContentPage() {
     formValues.scalePercent,
     item ? getNumber(item.scalePercent, 100) : 100
   );
+  const safeVisualizationEnabled =
+    typeof formValues.visualizationEnabled === "boolean"
+      ? formValues.visualizationEnabled
+      : item?.visualizationEnabled ?? true;
+  const safeVisualizationBars = Math.min(
+    256,
+    Math.max(
+      16,
+      Math.round(
+        getNumber(
+          formValues.visualizationBars,
+          item ? getNumber(item.visualizationBars, 128) : 128
+        )
+      )
+    )
+  );
   const resolvedFps =
     Number.isFinite(safeFps) && safeFps > 0 ? safeFps : 30;
   const resolvedWidth =
@@ -266,6 +286,8 @@ export default function EditContentPage() {
             audioFadeOutSeconds: String(data.audioFadeOutSeconds ?? ""),
             audioFadeInOffsetSeconds: String(data.audioFadeInOffsetSeconds ?? ""),
             audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
+            visualizationEnabled: data.visualizationEnabled ?? true,
+            visualizationBars: String(data.visualizationBars ?? 128),
             playbackRate: String(data.playbackRate ?? ""),
             overlapPercent,
             fps: String(data.fps ?? ""),
@@ -393,6 +415,11 @@ export default function EditContentPage() {
       if (scalePercent !== undefined) {
         payload.scalePercent = scalePercent;
       }
+      payload.visualizationEnabled = Boolean(formValues.visualizationEnabled);
+      const visualizationBars = toOptionalNumber(formValues.visualizationBars);
+      if (visualizationBars !== undefined) {
+        payload.visualizationBars = Math.min(256, Math.max(16, Math.round(visualizationBars)));
+      }
       const response = await (thumbnailFile
         ? (() => {
             const formData = new FormData();
@@ -459,6 +486,16 @@ export default function EditContentPage() {
             }
             if (payload.scalePercent !== undefined) {
               formData.append("scalePercent", String(payload.scalePercent));
+            }
+            formData.append(
+              "visualizationEnabled",
+              String(payload.visualizationEnabled ?? true)
+            );
+            if (payload.visualizationBars !== undefined) {
+              formData.append(
+                "visualizationBars",
+                String(payload.visualizationBars)
+              );
             }
             formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
             if (payload.colorPalette) {
@@ -752,6 +789,116 @@ export default function EditContentPage() {
                         Save the content to generate a palette from the thumbnail.
                       </div>
                     )}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Collapsible
+                  // defaultOpen
+                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
+                >
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
+                    <div className="flex items-center gap-3 text-left">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                        <AudioLines className="h-4 w-4" />
+                      </span>
+                      <div className="flex flex-col items-start">
+                        <span>Visualization</span>
+                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                          Bars + density
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                      <div className="flex items-center text-center justify-center gap-2">
+                        <Eye className="flex size-5 shrink-0 " />
+                        <span>
+                          {/* {paletteMode === "auto"
+                            ? "Auto palette from thumbnail."
+                            : "Manual palette edits enabled."
+                          } */}
+                          Bars Visibility
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                              aria-label="Auto palette info"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" sideOffset={6}>
+                            Toggle audio visualization bars in the video.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={formValues.visualizationEnabled}
+                          onCheckedChange={(checked) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              visualizationEnabled: checked,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-col px-2">
+                      <div className="flex items-center justify-between">
+                        <LabelWithTooltip
+                          htmlFor="visualizationBars"
+                          text="Bar count"
+                          tip="Lower values feel chunkier and smoother; higher values are more detailed."
+                        />
+                        <span>{safeVisualizationBars}</span>
+                      </div>
+                      <Slider
+                        id="visualizationBars"
+                        min={16}
+                        max={128}
+                        step={1}
+                        value={[safeVisualizationBars]}
+                        disabled={!formValues.visualizationEnabled}
+                        onValueChange={(value) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            visualizationBars: String(value[0] ?? 128),
+                          }))
+                        }
+                      />
+                    </div>
+                    {/* <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="visualizationBarsInput"
+                        text="Bar count input"
+                        tip="Exact number of bars to render."
+                      />
+                      <InputGroup className="bg-white dark:bg-white/5">
+                        <InputGroupInput
+                          id="visualizationBarsInput"
+                          type="number"
+                          min="16"
+                          max="256"
+                          step="1"
+                          value={formValues.visualizationBars}
+                          disabled={!formValues.visualizationEnabled}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              visualizationBars: event.target.value,
+                            }))
+                          }
+                        />
+                        <InputGroupAddon>
+                          <MoveHorizontal />
+                        </InputGroupAddon>
+                      </InputGroup>
+                    </div> */}
                   </CollapsibleContent>
                 </Collapsible>
 
@@ -1218,6 +1365,8 @@ export default function EditContentPage() {
                   audioFadeOutSeconds: safeAudioFadeOutDuration,
                   audioFadeInOffsetSeconds: safeAudioFadeInOffset,
                   audioFadeOutOffsetSeconds: safeAudioFadeOutOffset,
+                  visualizationEnabled: safeVisualizationEnabled,
+                  visualizationBars: safeVisualizationBars,
                   videoDurationSeconds: safeVideoDuration,
                   playbackRate: safePlaybackRate,
                   scalePercent: resolvedScalePercent,

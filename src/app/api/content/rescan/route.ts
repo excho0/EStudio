@@ -32,19 +32,46 @@ export async function POST() {
   let skipped = 0;
   const errors: string[] = [];
 
+  const manifestEntries: Array<{
+    file: string;
+    data: Record<string, unknown>;
+    sortTime: number;
+  }> = [];
+
   for (const file of manifestFiles) {
     try {
-      const raw = await fs.readFile(path.join(manifestsDir, file), "utf-8");
+      const fullPath = path.join(manifestsDir, file);
+      const [raw, stat] = await Promise.all([
+        fs.readFile(fullPath, "utf-8"),
+        fs.stat(fullPath),
+      ]);
       const data = JSON.parse(raw) as Record<string, unknown>;
-        const candidate = {
-          id: data.id,
-          title: data.title ?? "Recovered",
-          status: data.status ?? "uploaded",
-          colorPalette: Array.isArray(data.colorPalette)
-            ? data.colorPalette
-            : null,
-          paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
-          songDurationSeconds: data.songDurationSeconds ?? 0,
+      const createdAt =
+        typeof data.createdAt === "string" ? Date.parse(data.createdAt) : NaN;
+      const sortTime = Number.isFinite(createdAt) ? createdAt : stat.mtimeMs;
+      manifestEntries.push({ file, data, sortTime });
+    } catch (error) {
+      errors.push(
+        `Failed to read ${file}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      skipped += 1;
+    }
+  }
+
+  manifestEntries.sort((a, b) => a.sortTime - b.sortTime);
+
+  for (const entry of manifestEntries) {
+    try {
+      const data = entry.data;
+      const candidate = {
+        id: data.id,
+        title: data.title ?? "Recovered",
+        status: data.status ?? "uploaded",
+        colorPalette: Array.isArray(data.colorPalette) ? data.colorPalette : null,
+        paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
+        songDurationSeconds: data.songDurationSeconds ?? 0,
         segmentDurationSeconds: data.segmentDurationSeconds ?? 4,
         fadeDurationSeconds: data.fadeDurationSeconds ?? 1,
         introFadeSeconds: data.introFadeSeconds ?? 0,
@@ -53,6 +80,9 @@ export async function POST() {
         audioFadeOutSeconds: data.audioFadeOutSeconds ?? 0,
         audioFadeInOffsetSeconds: data.audioFadeInOffsetSeconds ?? 0,
         audioFadeOutOffsetSeconds: data.audioFadeOutOffsetSeconds ?? 0,
+        scalePercent: data.scalePercent ?? 100,
+        visualizationEnabled: data.visualizationEnabled ?? true,
+        visualizationBars: data.visualizationBars ?? 128,
         videoDurationSeconds: data.videoDurationSeconds ?? 0,
         overlapRatio: data.overlapRatio ?? null,
         playbackRate: data.playbackRate ?? 1,
@@ -80,7 +110,7 @@ export async function POST() {
       created += 1;
     } catch (error) {
       errors.push(
-        `Failed to import ${file}: ${
+        `Failed to import ${entry.file}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );

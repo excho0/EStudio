@@ -74,6 +74,8 @@ export async function PATCH(
     const audioFadeOutSeconds = formData.get("audioFadeOutSeconds");
     const audioFadeInOffsetSeconds = formData.get("audioFadeInOffsetSeconds");
     const audioFadeOutOffsetSeconds = formData.get("audioFadeOutOffsetSeconds");
+    const visualizationEnabled = formData.get("visualizationEnabled");
+    const visualizationBars = formData.get("visualizationBars");
     const playbackRate = formData.get("playbackRate");
     const fps = formData.get("fps");
     const width = formData.get("width");
@@ -124,6 +126,14 @@ export async function PATCH(
     const audioFadeOutOffsetValue = toOptionalNumber(audioFadeOutOffsetSeconds);
     if (audioFadeOutOffsetValue !== undefined) {
       payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetValue;
+    }
+    if (typeof visualizationEnabled === "string") {
+      payload.visualizationEnabled =
+        visualizationEnabled === "true" || visualizationEnabled === "1";
+    }
+    const visualizationBarsValue = toOptionalNumber(visualizationBars);
+    if (visualizationBarsValue !== undefined) {
+      payload.visualizationBars = Math.max(1, Math.round(visualizationBarsValue));
     }
     const playbackValue = toOptionalNumber(playbackRate);
     if (playbackValue !== undefined) {

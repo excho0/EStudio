@@ -634,6 +634,8 @@ export async function POST(
     audioFadeOutSeconds: item.audioFadeOutSeconds,
     audioFadeInOffsetSeconds: item.audioFadeInOffsetSeconds,
     audioFadeOutOffsetSeconds: item.audioFadeOutOffsetSeconds,
+    visualizationEnabled: item.visualizationEnabled,
+    visualizationBars: item.visualizationBars,
     videoDurationSeconds: item.videoDurationSeconds ?? item.segmentDurationSeconds,
     overlapRatio: item.overlapRatio ?? null,
     playbackRate: item.playbackRate ?? 1,
