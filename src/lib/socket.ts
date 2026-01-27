@@ -31,3 +31,10 @@ export const emitRenderProgress = (payload: {
     io.emit("render:progress", payload);
   }
 };
+
+export const emitRenderComplete = (payload: { id: string }) => {
+  const io = getSocketServer();
+  if (io) {
+    io.emit("render:complete", payload);
+  }
+};

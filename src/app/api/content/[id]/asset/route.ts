@@ -7,6 +7,21 @@ import { Readable } from "stream";
 
 export const runtime = "nodejs";
 
+type AssetCacheEntry = {
+  buffer: Buffer;
+  contentType: string;
+  size: number;
+  mtimeMs: number;
+  accessedAt: number;
+};
+
+const assetCache = new Map<string, AssetCacheEntry>();
+let assetCacheSize = 0;
+const maxCacheMb = Number(process.env.ASSET_MEMORY_CACHE_MAX_MB ?? "128");
+const maxCacheBytes = Number.isFinite(maxCacheMb)
+  ? Math.max(0, maxCacheMb) * 1024 * 1024
+  : 0;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -27,6 +42,40 @@ const mimeByExtension: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+};
+
+const shouldCacheAsset = (contentType: string, size: number) => {
+  if (maxCacheBytes <= 0) return false;
+  if (size > maxCacheBytes) return false;
+  return contentType.startsWith("audio/") || contentType.startsWith("image/");
+};
+
+const cacheAsset = (
+  key: string,
+  entry: Omit<AssetCacheEntry, "accessedAt">
+) => {
+  const cached: AssetCacheEntry = {
+    ...entry,
+    accessedAt: Date.now(),
+  };
+  if (assetCache.has(key)) {
+    const existing = assetCache.get(key);
+    if (existing) {
+      assetCacheSize -= existing.size;
+    }
+  }
+  assetCache.set(key, cached);
+  assetCacheSize += cached.size;
+
+  if (assetCacheSize <= maxCacheBytes) return;
+  const entries = Array.from(assetCache.entries()).sort(
+    (a, b) => a[1].accessedAt - b[1].accessedAt
+  );
+  for (const [entryKey, value] of entries) {
+    assetCache.delete(entryKey);
+    assetCacheSize -= value.size;
+    if (assetCacheSize <= maxCacheBytes) break;
+  }
 };
 
 export async function GET(
@@ -96,6 +145,40 @@ export async function GET(
         "Content-Length": String(chunkSize),
         "Content-Range": `bytes ${start}-${safeEnd}/${stat.size}`,
         "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  }
+
+  if (shouldCacheAsset(contentType, stat.size)) {
+    const cacheKey = absolutePath;
+    const cached = assetCache.get(cacheKey);
+    if (cached && cached.mtimeMs === stat.mtimeMs) {
+      cached.accessedAt = Date.now();
+      return new NextResponse(cached.buffer, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": cached.contentType,
+          "Content-Length": String(cached.size),
+          "Accept-Ranges": canRange ? "bytes" : "none",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
+    }
+
+    const buffer = await fs.readFile(absolutePath);
+    cacheAsset(cacheKey, {
+      buffer,
+      contentType,
+      size: buffer.length,
+      mtimeMs: stat.mtimeMs,
+    });
+    return new NextResponse(buffer, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": contentType,
+        "Content-Length": String(buffer.length),
+        "Accept-Ranges": canRange ? "bytes" : "none",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

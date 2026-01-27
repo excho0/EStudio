@@ -5,6 +5,7 @@ import {
   ContentLoopComposition,
   ContentLoopProps,
 } from "./ContentLoopComposition";
+import { AudioOnlyComposition, AudioOnlyProps } from "./AudioOnlyComposition";
 import { TemplateVideo } from "./TemplateVideo";
 
 export const RemotionRoot: React.FC = () => {
@@ -75,6 +76,37 @@ export const RemotionRoot: React.FC = () => {
             fps,
             width,
             height,
+            durationInFrames,
+            props,
+          };
+        }}
+      />
+      <Composition
+        id="ContentLoopAudio"
+        component={AudioOnlyComposition}
+        defaultProps={{
+          audioSrc: "",
+          audioFadeInSeconds: 0,
+          audioFadeOutSeconds: 0,
+          audioFadeInOffsetSeconds: 0,
+          audioFadeOutOffsetSeconds: 0,
+          songDurationSeconds: 30,
+          fps: 30,
+        }}
+        calculateMetadata={({ props }: { props: AudioOnlyProps }) => {
+          const fps = Number.isFinite(props.fps ?? NaN) ? props.fps ?? 30 : 30;
+          const songDurationSeconds = Number.isFinite(props.songDurationSeconds ?? NaN)
+            ? props.songDurationSeconds ?? 1
+            : 1;
+          const durationInFrames = Math.max(
+            1,
+            Math.round(songDurationSeconds * fps)
+          );
+
+          return {
+            fps,
+            width: 2,
+            height: 2,
             durationInFrames,
             props,
           };
