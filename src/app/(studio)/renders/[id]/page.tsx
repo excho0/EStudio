@@ -1,0 +1,440 @@
+"use client";
+
+import { JSX, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Download, Film } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table } from "@/components/ui/table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
+import { useVirtualizer } from "@tanstack/react-virtual";
+
+type RenderItem = {
+  name: string;
+  size: number;
+  mtimeMs: number;
+  assetUrl: string;
+};
+
+type RenderListResponse = {
+  page: number;
+  limit: number;
+  total: number;
+  items: RenderItem[];
+};
+
+const formatBytes = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / Math.pow(1024, index);
+  return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
+const formatDateTime = (value: number) =>
+  new Date(value).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+export default function RendersPage() {
+  const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
+
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const [data, setData] = useState<RenderListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const isMobile = useIsMobile();
+  const items = data?.items ?? [];
+  const desktopScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const desktopVirtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => desktopScrollRef.current,
+    estimateSize: () => 76,
+    overscan: 10,
+    getItemKey: (index) => items[index]?.name ?? index,
+  });
+  const mobileVirtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => mobileScrollRef.current,
+    estimateSize: () => 120,
+    overscan: 10,
+    getItemKey: (index) => items[index]?.name ?? index,
+  });
+
+  const totalPages = useMemo(() => {
+    if (!data) return 1;
+    return Math.max(1, Math.ceil(data.total / data.limit));
+  }, [data]);
+  const canGoBack = page > 1;
+  const canGoNext = page < totalPages;
+
+  const getPageItems = () => {
+    if (totalPages <= 1) return [];
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+    const pages = new Set<number>([
+      1,
+      totalPages,
+      page,
+      Math.max(1, page - 1),
+      Math.min(totalPages, page + 1),
+    ]);
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/content/${id}/renders?page=${page}&limit=${limit}`);
+        if (!response.ok) {
+          throw new Error("Failed to load renders.");
+        }
+        const payload = (await response.json()) as RenderListResponse;
+        if (!cancelled) {
+          setData(payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setData({ page, limit, total: 0, items: [] });
+          const message = error instanceof Error ? error.message : "Failed to load renders.";
+          toast.error(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, page]);
+
+  const DesktopSkeletonRows = () => (
+    <Table className="-mb-12">
+      <thead>
+        <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+          <th className="py-3">Render</th>
+          <th>Size</th>
+          <th>Updated</th>
+          <th className="text-right">Action</th>
+        </tr>
+      </thead>
+      <tbody className="text-sm">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <tr
+            key={`skeleton-row-${index}`}
+            className="border-t border-slate-200 dark:border-white/10"
+          >
+            <td className="py-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-12 w-16 rounded-md" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+            </td>
+            <td>
+              <Skeleton className="h-6 w-24 rounded-full" />
+            </td>
+            <td>
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </td>
+            <td className="text-right">
+              <div className="flex justify-end">
+                <Skeleton className="h-8 w-10 rounded-md" />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+
+  const MobileSkeletonCards = () => (
+    <div className="grid gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={`skeleton-card-${index}`}
+          className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
+        >
+          <div className="flex flex-1 gap-3">
+            <Skeleton className="h-16 w-20 rounded-md" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-36" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+            </div>
+          </div>
+          <Skeleton className="h-8 w-10 rounded-md" />
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h2 className="text-lg font-semibold">Renders</h2>
+            <p className="text-sm text-slate-500 dark:text-zinc-400">
+              Review and download rendered outputs for this video.
+            </p>
+          </div>
+        </div>
+        <Button asChild variant="outline">
+          <Link href={`/edit/${id}`}>Back to details</Link>
+        </Button>
+      </div>
+
+      {!isHydrated ? (
+        <></>
+      ) : loading ? (
+        isMobile ? (
+          <MobileSkeletonCards />
+        ) : (
+          <DesktopSkeletonRows />
+        )
+      ) : data && data.items.length > 0 ? (
+        <div className="mt-2">
+          {isMobile ? (
+            <ScrollArea className="h-[50svh]" viewportRef={mobileScrollRef}>
+              <div
+                className="relative"
+                style={{ height: mobileVirtualizer.getTotalSize() }}
+              >
+                {mobileVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = items[virtualRow.index];
+                  if (!item) return null;
+                  return (
+                    <div
+                      key={item.name}
+                      data-index={virtualRow.index}
+                      ref={mobileVirtualizer.measureElement}
+                      className="absolute left-0 top-0 w-full px-1 py-1"
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-16 w-20 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                              <Film className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-foreground">{item.name}</div>
+                              <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                {formatBytes(item.size)} · {formatDateTime(item.mtimeMs)}
+                              </div>
+                            </div>
+                          </div>
+                          <Button asChild variant="secondary" size="sm">
+                            <a href={item.assetUrl} download>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          ) : (
+            <>
+              <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-zinc-950/80">
+                <Table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[55%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[10%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                      <th className="py-3">Render</th>
+                      <th>Size</th>
+                      <th>Updated</th>
+                      <th className="text-center">Action</th>
+                    </tr>
+                  </thead>
+                </Table>
+              </div>
+              <ScrollArea className="h-[60svh]" viewportRef={desktopScrollRef}>
+                <Table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[55%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[10%]" />
+                  </colgroup>
+                  <tbody className="text-sm">
+                    {desktopVirtualizer.getVirtualItems()[0]?.start ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          style={{ height: desktopVirtualizer.getVirtualItems()[0].start }}
+                        />
+                      </tr>
+                    ) : null}
+                    {desktopVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const item = items[virtualRow.index];
+                      if (!item) return null;
+                      return (
+                        <tr
+                          key={item.name}
+                          data-index={virtualRow.index}
+                          ref={desktopVirtualizer.measureElement}
+                          className="border-t border-slate-200 dark:border-white/10"
+                        >
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-16 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                              <Film className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                Render asset
+                              </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-slate-600 dark:text-zinc-300">
+                            {formatBytes(item.size)}
+                          </td>
+                          <td className="text-slate-600 dark:text-zinc-300">
+                            {formatDateTime(item.mtimeMs)}
+                          </td>
+                          <td className="text-center">
+                            <Button asChild variant="secondary" size="sm">
+                              <a href={item.assetUrl} download>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                              </a>
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {desktopVirtualizer.getVirtualItems().length ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          style={{
+                            height:
+                              desktopVirtualizer.getTotalSize() -
+                              desktopVirtualizer.getVirtualItems()[
+                                desktopVirtualizer.getVirtualItems().length - 1
+                              ].end,
+                          }}
+                        />
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </Table>
+              </ScrollArea>
+            </>
+          )}
+          <div
+            className={cn(
+              "mt-6 flex items-center justify-center transition-opacity",
+              totalPages > 1 || page > 1 ? "visible" : "invisible"
+            )}
+          >
+            {totalPages > 1 || page > 1 ? (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      aria-disabled={!canGoBack || loading}
+                    />
+                  </PaginationItem>
+                  {getPageItems().flatMap((pageNumber, index, list) => {
+                    const items: JSX.Element[] = [];
+                    const previous = list[index - 1];
+                    if (typeof previous === "number" && pageNumber - previous > 1) {
+                      items.push(
+                        <PaginationItem key={`ellipsis-${previous}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      );
+                    }
+                    items.push(
+                      <PaginationItem key={pageNumber}>
+                        <PaginationLink
+                          isActive={pageNumber === page}
+                          onClick={() => setPage(pageNumber)}
+                          aria-disabled={loading}
+                        >
+                          {pageNumber}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                    return items;
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                      onClick={() =>
+                        setPage((current) => Math.min(totalPages, current + 1))
+                      }
+                      aria-disabled={!canGoNext || loading}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            ) : (
+              <div className="h-10" />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-zinc-400">
+          No renders yet. Run a render from the library page.
+        </div>
+      )}
+    </div>
+  );
+}

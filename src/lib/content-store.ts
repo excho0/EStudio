@@ -39,9 +39,38 @@ export function getContentAssetDir(id: string) {
   return path.join("uploads", "videos", id);
 }
 
-export function getContentRenderPath(id: string, extension = ".mp4") {
-  const safeExtension = extension.startsWith(".") ? extension : `.${extension}`;
-  return path.join("renders", `${id}${safeExtension}`);
+export function getContentRenderPath(id: string, fileName: string) {
+  return path.join("renders", id, fileName);
+}
+
+export function getContentRenderDir(id: string) {
+  return path.join("renders", id);
+}
+
+export async function findLatestRenderPath(id: string) {
+  const dir = resolveContentPath(getContentRenderDir(id));
+  let entries: string[] = [];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return null;
+  }
+  const candidates = entries.filter((entry) => entry.toLowerCase().endsWith(".mp4"));
+  if (candidates.length === 0) return null;
+
+  let latest: { name: string; mtimeMs: number } | null = null;
+  for (const name of candidates) {
+    try {
+      const stat = await fs.stat(path.join(dir, name));
+      if (!latest || stat.mtimeMs > latest.mtimeMs) {
+        latest = { name, mtimeMs: stat.mtimeMs };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return latest ? path.join(getContentRenderDir(id), latest.name) : null;
 }
 
 export async function findContentAssetPath(

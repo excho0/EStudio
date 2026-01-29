@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import { NextResponse } from "next/server";
 import {
   ensureContentStore,
+  getContentRenderDir,
   getContentRenderPath,
   resolveContentPath,
 } from "@/lib/content-store";
@@ -14,6 +15,7 @@ import {
   emitRenderProgress,
 } from "@/lib/socket";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
+import { getSlug } from "@/lib/helpers";
 
 export const runtime = "nodejs";
 
@@ -610,7 +612,20 @@ export async function POST(
   await updateContentItem(id, { status: "rendering" });
   emitContentUpdate({ type: "content:status", id, status: "rendering" });
 
-  const renderPath = getContentRenderPath(id, ".mp4");
+  const renderDir = resolveContentPath(getContentRenderDir(id));
+  await fs.mkdir(renderDir, { recursive: true });
+  let nextIndex = 1;
+  try {
+    const entries = await fs.readdir(renderDir);
+    const mp4Count = entries.filter((entry) => entry.toLowerCase().endsWith(".mp4"))
+      .length;
+    nextIndex = mp4Count + 1;
+  } catch {
+    nextIndex = 1;
+  }
+  const slug = getSlug(item.title) || "untitled";
+  const fileName = `${slug}_${nextIndex}.mp4`;
+  const renderPath = getContentRenderPath(id, fileName);
   const outputPath = resolveContentPath(renderPath);
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
   const compositionId = "ContentLoop";

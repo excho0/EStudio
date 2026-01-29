@@ -3,7 +3,8 @@ import path from "path";
 import { NextResponse } from "next/server";
 import {
   findContentAssetPath,
-  getContentRenderPath,
+  findLatestRenderPath,
+  getContentRenderDir,
   resolveContentPath,
 } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
@@ -94,10 +95,19 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
+  const renderName = searchParams.get("name");
 
   const relativePath =
     type === "render"
-      ? getContentRenderPath(item.id, ".mp4")
+      ? renderName
+        ? (() => {
+            const safeName = path.basename(renderName);
+            if (safeName !== renderName || !safeName.toLowerCase().endsWith(".mp4")) {
+              return null;
+            }
+            return path.join(getContentRenderDir(item.id), safeName);
+          })()
+        : await findLatestRenderPath(item.id)
       : await findContentAssetPath(
           item.id,
           type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"

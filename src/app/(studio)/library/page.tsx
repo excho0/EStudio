@@ -112,9 +112,9 @@ export default function LibraryPage() {
     ...(item.status === "rendered"
       ? [
           {
-            label: "Download",
+            label: "Renders",
             icon: Download,
-            href: `/api/content/${item.id}/asset?type=render`,
+            onSelect: () => router.push(`/renders/${item.id}`),
           },
         ]
       : []),
