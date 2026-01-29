@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/components/route-transition";
 import { useState } from "react";
 import { MenuIcon, PanelsTopLeft } from "lucide-react";
 

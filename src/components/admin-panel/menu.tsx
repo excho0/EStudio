@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/components/route-transition";
 import { Ellipsis } from "lucide-react";
 import { usePathname } from "next/navigation";
 

@@ -9,15 +9,19 @@ import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { SidebarToggle } from "./sidebar-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  RouteTransitionProvider,
+  useRouteTransition,
+} from "@/components/route-transition";
 
-export default function AdminPanelLayout({
-  children
-}: {
-  children: React.ReactNode;
-}) {
+function AdminPanelShell({ children }: { children: React.ReactNode }) {
   const sidebar = useStore(useSidebar, (x) => x);
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(max-width: 1024px)");
+  const pathname = usePathname();
+  const { isTransitioning } = useRouteTransition();
   if (!sidebar) return null;
   const { isOpen, toggleOpen, getOpenState, settings } = sidebar;
 
@@ -53,8 +57,15 @@ export default function AdminPanelLayout({
           !settings.disabled && (!getOpenState() ? "lg:ml-[90px]" : "lg:ml-72")
         )}
       >
-
-        {children}
+        <motion.div
+          key={pathname}
+          initial={false}
+          animate={{ opacity: isTransitioning ? 0 : 1 }}
+          transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+          style={{ willChange: "opacity" }}
+        >
+          {children}
+        </motion.div>
       </main>
       {/* <footer
         className={cn(
@@ -65,5 +76,13 @@ export default function AdminPanelLayout({
         <Footer />
       </footer> */}
     </>
+  );
+}
+
+export default function AdminPanelLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteTransitionProvider>
+      <AdminPanelShell>{children}</AdminPanelShell>
+    </RouteTransitionProvider>
   );
 }

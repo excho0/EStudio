@@ -1,7 +1,7 @@
 "use client";
 
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/components/route-transition";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Download, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
