@@ -541,12 +541,14 @@ export default function EditContentPage() {
           </p>
         </div>
         <Button
+          asChild
           variant="outline"
           className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-          onClick={() => router.push("/library")}
         >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Library
+          <Link href="/library">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Library
+          </Link>
         </Button>
       </div>
 
@@ -1328,11 +1330,11 @@ export default function EditContentPage() {
                   {saving ? "Saving..." : "Save changes"}
                 </Button>
                 <Button
+                  asChild
                   variant="outline"
                   className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                  onClick={() => router.push("/library")}
                 >
-                  Cancel
+                  <Link href="/library">Cancel</Link>
                 </Button>
               </div>
             </div>

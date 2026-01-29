@@ -6,6 +6,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useRouteTransition } from "@/components/route-transition";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,6 +65,7 @@ export function ResponsiveActionMenu({
 }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
+  const { startTransition } = useRouteTransition();
 
   const trigger = (
     <Button
@@ -138,19 +140,23 @@ export function ResponsiveActionMenu({
               }
 
               if (item.href) {
+                const href = item.href;
                 return (
                   <Button
                     key={`link-${item.label}`}
                     variant="ghost"
                     className="justify-start gap-2"
-                    asChild
+                    onClick={() => {
+                      startTransition(href);
+                      setOpen(false);
+                    }}
                   >
-                    <a href={item.href}>
+                    <>
                       {item.icon ? (
                         <item.icon className="h-4 w-4 shrink-0" />
                       ) : null}
                       {item.label}
-                    </a>
+                    </>
                   </Button>
                 );
               }
@@ -232,14 +238,20 @@ export function ResponsiveActionMenu({
           }
 
           if (item.href) {
+            const href = item.href;
             return (
-              <DropdownMenuItem key={`link-${item.label}`} asChild>
-                <a href={item.href} className="flex items-center gap-2">
-                  {item.icon ? (
-                    <item.icon className="h-4 w-4 shrink-0" />
-                  ) : null}
-                  {item.label}
-                </a>
+              <DropdownMenuItem
+                key={`link-${item.label}`}
+                className="flex items-center gap-2"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  startTransition(href);
+                }}
+              >
+                {item.icon ? (
+                  <item.icon className="h-4 w-4 shrink-0" />
+                ) : null}
+                {item.label}
               </DropdownMenuItem>
             );
           }

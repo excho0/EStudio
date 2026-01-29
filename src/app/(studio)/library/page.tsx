@@ -101,7 +101,7 @@ export default function LibraryPage() {
     {
       label: "Details",
       icon: Eye,
-      onSelect: () => router.push(`/edit/${item.id}`),
+      href: `/edit/${item.id}`,
     },
     {
       label: renderingId === item.id ? "Rendering..." : "Render",
@@ -114,7 +114,7 @@ export default function LibraryPage() {
           {
             label: "Renders",
             icon: Download,
-            onSelect: () => router.push(`/renders/${item.id}`),
+            href: `/renders/${item.id}`,
           },
         ]
       : []),
