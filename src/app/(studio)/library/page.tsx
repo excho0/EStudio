@@ -26,8 +26,8 @@ import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   CheckCircle2,
-  Download,
   Eye,
+  Film,
   Loader2,
   Play,
   Trash2,
@@ -35,7 +35,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -49,7 +48,6 @@ export default function LibraryPage() {
     page,
     limit,
   });
-  const router = useRouter();
   const [renderingId, setRenderingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const renderProgress = useRenderProgress();
@@ -104,7 +102,7 @@ export default function LibraryPage() {
       href: `/edit/${item.id}`,
     },
     {
-      label: renderingId === item.id ? "Rendering..." : "Render",
+      label: renderingId === item.id ? "Rendering..." : "Render now",
       icon: Play,
       onSelect: () => handleRender(item.id),
       disabled: renderingId === item.id,
@@ -112,8 +110,8 @@ export default function LibraryPage() {
     ...(item.status === "rendered"
       ? [
           {
-            label: "Renders",
-            icon: Download,
+            label: "View renders",
+            icon: Film,
             href: `/renders/${item.id}`,
           },
         ]
@@ -125,7 +123,13 @@ export default function LibraryPage() {
       icon: Trash2,
       description:
         "This will remove the upload and rendered file from local storage. This action cannot be undone.",
-      onConfirm: () => handleDelete(item.id),
+      confirmCheckbox: {
+        label: "Keep rendered files",
+        defaultChecked: false,
+        valueKey: "keepRenders" as const,
+      },
+      onConfirm: (options: { keepRenders?: boolean } | undefined) =>
+        handleDelete(item.id, options?.keepRenders),
       destructive: true,
     },
   ];
@@ -162,9 +166,16 @@ export default function LibraryPage() {
     return Array.from(pages).sort((a, b) => a - b);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, keepRenders?: boolean) => {
     setError(null);
-    const response = await fetch(`/api/content/${id}`, { method: "DELETE" });
+    const params = new URLSearchParams();
+    if (keepRenders) {
+      params.set("keepRenders", "1");
+    }
+    const query = params.toString();
+    const response = await fetch(`/api/content/${id}${query ? `?${query}` : ""}`, {
+      method: "DELETE",
+    });
 
     if (!response.ok) {
       setError("Delete failed. Please try again.");

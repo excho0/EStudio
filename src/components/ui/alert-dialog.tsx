@@ -118,13 +118,19 @@ function AlertDialogDescription({
   )
 }
 
+type ButtonVariants = NonNullable<Parameters<typeof buttonVariants>[0]>;
+type AlertDialogActionProps = React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  variant?: ButtonVariants["variant"];
+};
+
 function AlertDialogAction({
   className,
+  variant,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+}: AlertDialogActionProps) {
   return (
     <AlertDialogPrimitive.Action
-      className={cn(buttonVariants(), className)}
+      className={cn(buttonVariants({ variant }), className)}
       {...props}
     />
   )

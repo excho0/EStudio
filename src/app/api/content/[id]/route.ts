@@ -203,23 +203,28 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const keepRenders = searchParams.get("keepRenders") === "1";
   const item = await getContentItem(id);
 
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await Promise.all([
-    removeContentAssets(item.id),
-    fs.rm(resolveContentPath(getContentRenderDir(item.id)), {
-      force: true,
-      recursive: true,
-    }),
-  ]);
+  const removals = [removeContentAssets(item.id)];
+  if (!keepRenders) {
+    removals.push(
+      fs.rm(resolveContentPath(getContentRenderDir(item.id)), {
+        force: true,
+        recursive: true,
+      })
+    );
+  }
+  await Promise.all(removals);
 
   await deleteContentItem(id);
   await deleteContentManifest(id);

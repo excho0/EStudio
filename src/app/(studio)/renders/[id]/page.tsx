@@ -3,11 +3,12 @@
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/components/route-transition";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, Film } from "lucide-react";
+import { ArrowLeft, Download, Eye, Film, List, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table } from "@/components/ui/table";
+import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
 import {
   Pagination,
   PaginationContent,
@@ -141,6 +142,34 @@ export default function RendersPage() {
     };
   }, [id, page]);
 
+  const handleDeleteRender = async (name: string) => {
+    if (!id) return;
+    try {
+      const response = await fetch(
+        `/api/content/${id}/renders/${encodeURIComponent(name)}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to delete render.");
+      }
+      setData((current) => {
+        if (!current) return current;
+        const nextItems = current.items.filter((item) => item.name !== name);
+        return {
+          ...current,
+          total: Math.max(0, current.total - 1),
+          items: nextItems,
+        };
+      });
+      toast.success("Render deleted.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete render.";
+      toast.error(message);
+    } finally {
+      return;
+    }
+  };
+
   const DesktopSkeletonRows = () => (
     <Table className="-mb-12">
       <thead>
@@ -222,7 +251,10 @@ export default function RendersPage() {
           </div>
         </div>
         <Button asChild variant="outline">
-          <Link href={`/edit/${id}`}>Back to details</Link>
+          <Link href={`/edit/${id}`}>
+            <List className="h-4 w-4" />
+            <span>Go to details</span>
+          </Link>
         </Button>
       </div>
 
@@ -266,12 +298,31 @@ export default function RendersPage() {
                               </div>
                             </div>
                           </div>
-                          <Button asChild variant="secondary" size="sm">
-                            <a href={item.assetUrl} download>
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </a>
-                          </Button>
+                          <ResponsiveActionMenu
+                            triggerClassName="h-9"
+                            items={[
+                              {
+                                label: "Preview",
+                                icon: Eye,
+                                onSelect: () => window.open(item.assetUrl, "_blank"),
+                              },
+                              {
+                                label: "Download",
+                                icon: Download,
+                                href: item.assetUrl,
+                              },
+                              { type: "separator" },
+                              {
+                                type: "confirm",
+                                label: "Delete",
+                                icon: Trash2,
+                                description:
+                                  "This will remove the rendered file from local storage. This action cannot be undone.",
+                                onConfirm: () => handleDeleteRender(item.name),
+                                destructive: true,
+                              },
+                            ]}
+                          />
                         </div>
                       </div>
                     </div>
@@ -345,14 +396,33 @@ export default function RendersPage() {
                           <td className="text-slate-600 dark:text-zinc-300">
                             {formatDateTime(item.mtimeMs)}
                           </td>
-                          <td className="text-center">
-                            <Button asChild variant="secondary" size="sm">
-                              <a href={item.assetUrl} download>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </a>
-                            </Button>
-                          </td>
+                        <td className="text-center">
+                          <ResponsiveActionMenu
+                            triggerClassName="h-9"
+                            items={[
+                              {
+                                label: "Preview",
+                                icon: Eye,
+                                onSelect: () => window.open(item.assetUrl, "_blank"),
+                              },
+                              {
+                                label: "Download",
+                                icon: Download,
+                                href: item.assetUrl,
+                              },
+                              { type: "separator" },
+                              {
+                                type: "confirm",
+                                label: "Delete",
+                                icon: Trash2,
+                                description:
+                                  "This will remove the rendered file from local storage. This action cannot be undone.",
+                                onConfirm: () => handleDeleteRender(item.name),
+                                destructive: true,
+                              },
+                            ]}
+                          />
+                        </td>
                         </tr>
                       );
                     })}

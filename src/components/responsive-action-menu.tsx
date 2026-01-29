@@ -32,12 +32,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type ActionItem =
   | {
       type?: "item";
       label: string;
-      icon?: React.ComponentType<{ className?: string }>;
+      icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
       onSelect?: () => void;
       href?: string;
       disabled?: boolean;
@@ -48,9 +49,14 @@ type ActionItem =
       type: "confirm";
       label: string;
       description: string;
-      icon?: React.ComponentType<{ className?: string }>;
-      onConfirm: () => void;
+      icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+      onConfirm: (options?: { keepRenders?: boolean }) => void;
       destructive?: boolean;
+      confirmCheckbox?: {
+        label: string;
+        defaultChecked?: boolean;
+        valueKey?: "keepRenders";
+      };
     };
 
 export function ResponsiveActionMenu({
@@ -65,6 +71,9 @@ export function ResponsiveActionMenu({
 }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
+  const [confirmValues, setConfirmValues] = React.useState<Record<string, boolean>>(
+    {}
+  );
   const { startTransition } = useRouteTransition();
 
   const trigger = (
@@ -97,6 +106,10 @@ export function ResponsiveActionMenu({
               }
 
               if (item.type === "confirm") {
+                const checkboxKey = item.confirmCheckbox?.valueKey ?? "keepRenders";
+                const stateKey = `${item.label}:${checkboxKey}`;
+                const checked =
+                  confirmValues[stateKey] ?? item.confirmCheckbox?.defaultChecked ?? false;
                 return (
                   <AlertDialog key={`confirm-${item.label}`}>
                     <AlertDialogTrigger asChild>
@@ -120,14 +133,30 @@ export function ResponsiveActionMenu({
                           {item.description}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
+                      {item.confirmCheckbox ? (
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground sm:justify-start sm:text-left justify-center text-center">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              setConfirmValues((current) => ({
+                                ...current,
+                                [stateKey]: value === true,
+                              }));
+                            }}
+                          />
+                          {item.confirmCheckbox.label}
+                        </label>
+                      ) : null}
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          className={cn(
-                            item.destructive && "bg-red-600 text-white hover:bg-red-500"
-                          )}
+                          variant={item.destructive ? "destructive" : "default"}
                           onClick={() => {
-                            item.onConfirm();
+                            item.onConfirm(
+                              item.confirmCheckbox
+                                ? { [checkboxKey]: checked }
+                                : undefined
+                            );
                             setOpen(false);
                           }}
                         >
@@ -145,7 +174,10 @@ export function ResponsiveActionMenu({
                   <Button
                     key={`link-${item.label}`}
                     variant="ghost"
-                    className="justify-start gap-2"
+                    className={cn(
+                      "justify-start gap-2",
+                      item.destructive && "text-red-600 hover:text-red-600"
+                    )}
                     onClick={() => {
                       startTransition(href);
                       setOpen(false);
@@ -198,6 +230,10 @@ export function ResponsiveActionMenu({
           }
 
           if (item.type === "confirm") {
+            const checkboxKey = item.confirmCheckbox?.valueKey ?? "keepRenders";
+            const stateKey = `${item.label}:${checkboxKey}`;
+            const checked =
+              confirmValues[stateKey] ?? item.confirmCheckbox?.defaultChecked ?? false;
             return (
               <AlertDialog key={`confirm-${item.label}`}>
                 <AlertDialogTrigger asChild>
@@ -206,7 +242,9 @@ export function ResponsiveActionMenu({
                     onSelect={(event) => event.preventDefault()}
                   >
                     {item.icon ? (
-                      <item.icon className="h-4 w-4 shrink-0" />
+                      <item.icon
+                        className="h-4 w-4 shrink-0 text-red-600!"
+                      />
                     ) : null}
                     {item.label}
                   </DropdownMenuItem>
@@ -218,14 +256,30 @@ export function ResponsiveActionMenu({
                       {item.description}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  {item.confirmCheckbox ? (
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground sm:justify-start sm:text-left justify-center text-center">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          setConfirmValues((current) => ({
+                            ...current,
+                            [stateKey]: value === true,
+                          }));
+                        }}
+                      />
+                      {item.confirmCheckbox.label}
+                    </label>
+                  ) : null}
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                      className={cn(
-                        item.destructive && "bg-red-600 text-white hover:bg-red-500"
-                      )}
+                      variant="destructive"
                       onClick={() => {
-                        item.onConfirm();
+                        item.onConfirm(
+                          item.confirmCheckbox
+                            ? { [checkboxKey]: checked }
+                            : undefined
+                        );
                         setOpen(false);
                       }}
                     >
@@ -242,14 +296,24 @@ export function ResponsiveActionMenu({
             return (
               <DropdownMenuItem
                 key={`link-${item.label}`}
-                className="flex items-center gap-2"
+                className={cn(
+                  "flex items-center gap-2",
+                  item.destructive && "text-red-600 focus:text-red-600"
+                )}
                 onSelect={(event) => {
                   event.preventDefault();
                   startTransition(href);
                 }}
               >
                 {item.icon ? (
-                  <item.icon className="h-4 w-4 shrink-0" />
+                  <item.icon
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      item.destructive
+                        ? "text-red-600!"
+                        : "text-current"
+                    )}
+                  />
                 ) : null}
                 {item.label}
               </DropdownMenuItem>
@@ -261,13 +325,22 @@ export function ResponsiveActionMenu({
               key={`action-${item.label}`}
               onSelect={() => item.onSelect?.()}
               disabled={item.disabled}
+              className={cn(
+                "flex items-center gap-2",
+                item.destructive && "text-red-600 focus:text-red-600"
+              )}
             >
-              <span className="flex items-center gap-2">
-                {item.icon ? (
-                  <item.icon className="h-4 w-4 shrink-0" />
-                ) : null}
-                {item.label}
-              </span>
+              {item.icon ? (
+                <item.icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    item.destructive
+                      ? "text-red-600"
+                      : "text-current"
+                  )}
+                />
+              ) : null}
+              {item.label}
             </DropdownMenuItem>
           );
         })}

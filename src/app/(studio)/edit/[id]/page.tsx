@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@/components/route-transition";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
@@ -115,7 +115,6 @@ const ColorCopyButton = ({
 
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [item, setItem] = useState<ContentItem | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
@@ -533,24 +532,24 @@ export default function EditContentPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+        <Button
+          asChild
+          variant="ghost"
+        >
+          <Link href="/library">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
         <div>
           <h2 className="text-lg font-semibold">Content Details</h2>
           <p className="text-sm text-slate-500 dark:text-zinc-400">
             Review metadata and render settings for this item.
           </p>
         </div>
-        <Button
-          asChild
-          variant="outline"
-          className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-        >
-          <Link href="/library">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Library
-          </Link>
-        </Button>
       </div>
+    </div>
 
       <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
           {loading ? (
