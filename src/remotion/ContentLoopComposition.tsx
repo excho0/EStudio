@@ -303,56 +303,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     Math.max(16, Math.round(Number(visualizationBars) || 128))
   );
 
-  // This section handles the raw FFT processing and averaging across frames. (No changes needed here)
-  const spectrum = useMemo(() => {
-    if (!visualizationEnabled) return null;
-    if (!audioData) return null;
-    const frames = [frame - 2, frame - 1, frame];
-    const weights = [0.2, 0.3, 0.5];
-    const spectra = frames.map((currentFrame) =>
-      getAudioSpectrum({
-        audioData,
-        frame: currentFrame,
-        fps,
-        fftSize,
-        // dataOffsetInSeconds: -0.015,
-      })
-    );
-    const length = spectra[1]?.length ?? 0;
-    const averaged = new Array(length).fill(0);
-    for (let i = 0; i < length; i += 1) {
-      let sum = 0;
-      for (let j = 0; j < spectra.length; j += 1) {
-        sum += (spectra[j][i] ?? 0) * weights[j];
-      }
-      averaged[i] = sum;
-    }
-    return averaged;
-  }, [audioData, frame, fps, getAudioSpectrum]);
-
-  // This section handles grouping FFT bins into musical (logarithmic) bands. (No changes needed here)
-  const audioVisualization = useMemo(() => {
-    if (!visualizationEnabled) return null;
-    if (!spectrum || !audioData) return null;
-    return getLogBands({
-      magnitudes: spectrum,
-      sampleRate: audioData.sampleRate,
-      fftSize,
-      bands: resolvedVisualizationBars,
-      minFreq: 60,
-      maxFreq: 20000,
-    });
-  }, [audioData, spectrum, getLogBands, resolvedVisualizationBars, visualizationEnabled]);
-
-  // FIX 1: Removed manual low/tilt attenuation here. 
-  // Let `processAudioBars` handle all aesthetic shaping.
-  const audioBars = useMemo(() => {
-    if (!visualizationEnabled) return null;
-    if (!audioVisualization) return null;
-    // We now just return the raw logarithmic data
-    return audioVisualization;
-  }, [audioVisualization, visualizationEnabled]);
-
   const paletteColors = useMemo(() => {
     if (!colorPalette?.length) return DEFAULT_PALETTE;
     const cleaned = colorPalette
@@ -483,8 +433,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     audioData,
     frame,
     fps,
-    getAudioSpectrum,
-    getLogBands,
     resolvedVisualizationBars,
     visualizationEnabled,
   ]);

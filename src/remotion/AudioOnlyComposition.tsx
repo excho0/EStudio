@@ -31,9 +31,7 @@ export const AudioOnlyComposition: React.FC<AudioOnlyProps> = ({
     Math.round(audioFadeOutOffsetSeconds * fps)
   );
   const audioFadeInStart = audioFadeInOffsetFrames;
-  const audioFadeInEnd = audioFadeInStart + audioFadeInFrames;
   const audioFadeOutEnd = Math.max(0, durationInFrames - audioFadeOutOffsetFrames);
-  const audioFadeOutStart = Math.max(0, audioFadeOutEnd - audioFadeOutFrames);
 
   const fadeInProgress =
     audioFadeInFrames > 0

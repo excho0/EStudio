@@ -34,7 +34,6 @@ export const getLogBands = ({
   const focusMax = clamp(DEFAULT_FOCUS_MAX, focusMin + 1, max);
   const focusRatio = DEFAULT_FOCUS_RATIO;
   const lowRatio = DEFAULT_LOW_RATIO;
-  const highRatio = Math.max(0.05, 1 - focusRatio - lowRatio);
 
   const bandsLow = Math.max(1, Math.round(bands * lowRatio));
   const bandsMid = Math.max(1, Math.round(bands * focusRatio));

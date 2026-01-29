@@ -336,11 +336,11 @@ export async function updateContentItem(
 ) {
   const data = contentUpdateSchema.parse(updates);
   const cleaned = Object.fromEntries(
-    Object.entries(data).filter(([key, value]) => {
+    Object.entries(data).filter(([, value]) => {
       if (value === undefined) return false;
-    if (value === null) {
-      return false;
-    }
+      if (value === null) {
+        return false;
+      }
       return true;
     })
   ) as typeof data;
