@@ -43,6 +43,13 @@
       "when": 1769546296996,
       "tag": "0005_gigantic_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1769796021918,
+      "tag": "0006_overrated_nebula",
+      "breakpoints": true
     }
   ]
 }

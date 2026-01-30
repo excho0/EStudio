@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/components/route-transition";
 import { useParams } from "next/navigation";
 import {
@@ -26,6 +26,11 @@ import {
   Copy,
   AudioLines,
   Eye,
+  Sparkles,
+  ChartNoAxesColumn,
+  Spotlight,
+  RotateCw,
+  Save,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -131,6 +136,9 @@ export default function EditContentPage() {
     audioFadeOutOffsetSeconds: "",
     visualizationEnabled: true,
     visualizationBars: "128",
+    edgeRaysEnabled: true,
+    edgeRaysIntensity: "85",
+    edgeRaysVocalBalance: "60",
     playbackRate: "",
     overlapPercent: 25,
     fps: "",
@@ -144,6 +152,11 @@ export default function EditContentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<{
+    formValues: typeof formValues;
+    paletteMode: "auto" | "manual";
+    paletteState: string[];
+  } | null>(null);
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
   const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
@@ -234,6 +247,34 @@ export default function EditContentPage() {
       )
     )
   );
+  const safeEdgeRaysEnabled =
+    typeof formValues.edgeRaysEnabled === "boolean"
+      ? formValues.edgeRaysEnabled
+      : item?.edgeRaysEnabled ?? true;
+  const safeEdgeRaysIntensity = Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        getNumber(
+          formValues.edgeRaysIntensity,
+          item ? getNumber(item.edgeRaysIntensity, 0.85) * 100 : 85
+        )
+      )
+    )
+  );
+  const safeEdgeRaysVocalBalance = Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        getNumber(
+          formValues.edgeRaysVocalBalance,
+          item ? getNumber(item.edgeRaysVocalBalance, 0.6) * 100 : 60
+        )
+      )
+    )
+  );
   const resolvedFps =
     Number.isFinite(safeFps) && safeFps > 0 ? safeFps : 30;
   const resolvedWidth =
@@ -287,6 +328,13 @@ export default function EditContentPage() {
             audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
             visualizationEnabled: data.visualizationEnabled ?? true,
             visualizationBars: String(data.visualizationBars ?? 128),
+            edgeRaysEnabled: data.edgeRaysEnabled ?? true,
+            edgeRaysIntensity: String(
+              Math.round((data.edgeRaysIntensity ?? 0.85) * 100)
+            ),
+            edgeRaysVocalBalance: String(
+              Math.round((data.edgeRaysVocalBalance ?? 0.6) * 100)
+            ),
             playbackRate: String(data.playbackRate ?? ""),
             overlapPercent,
             fps: String(data.fps ?? ""),
@@ -296,6 +344,36 @@ export default function EditContentPage() {
           });
           setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
           setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
+          setInitialSnapshot({
+            formValues: {
+              title: data.title,
+              status: data.status,
+              fadeDurationSeconds: String(data.fadeDurationSeconds ?? ""),
+              introFadeSeconds: String(data.introFadeSeconds ?? ""),
+              outroFadeSeconds: String(data.outroFadeSeconds ?? ""),
+              audioFadeInSeconds: String(data.audioFadeInSeconds ?? ""),
+              audioFadeOutSeconds: String(data.audioFadeOutSeconds ?? ""),
+              audioFadeInOffsetSeconds: String(data.audioFadeInOffsetSeconds ?? ""),
+              audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
+              visualizationEnabled: data.visualizationEnabled ?? true,
+              visualizationBars: String(data.visualizationBars ?? 128),
+              edgeRaysEnabled: data.edgeRaysEnabled ?? true,
+              edgeRaysIntensity: String(
+                Math.round((data.edgeRaysIntensity ?? 0.85) * 100)
+              ),
+              edgeRaysVocalBalance: String(
+                Math.round((data.edgeRaysVocalBalance ?? 0.6) * 100)
+              ),
+              playbackRate: String(data.playbackRate ?? ""),
+              overlapPercent,
+              fps: String(data.fps ?? ""),
+              width: String(data.width ?? ""),
+              height: String(data.height ?? ""),
+              scalePercent: String(data.scalePercent ?? 100),
+            },
+            paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
+            paletteState: Array.isArray(data.colorPalette) ? data.colorPalette : [],
+          });
         }
       } catch (err) {
         if (active) {
@@ -336,7 +414,6 @@ export default function EditContentPage() {
   const handleSave = async () => {
     if (!item) return;
     setSaving(true);
-    setError(null);
     try {
       const toOptionalNumber = (value: string) => {
         const trimmed = value.trim();
@@ -419,6 +496,21 @@ export default function EditContentPage() {
       if (visualizationBars !== undefined) {
         payload.visualizationBars = Math.min(256, Math.max(16, Math.round(visualizationBars)));
       }
+      payload.edgeRaysEnabled = Boolean(formValues.edgeRaysEnabled);
+      const edgeRaysIntensity = toOptionalNumber(formValues.edgeRaysIntensity);
+      if (edgeRaysIntensity !== undefined) {
+        payload.edgeRaysIntensity = Math.min(
+          1,
+          Math.max(0, Math.round(edgeRaysIntensity) / 100)
+        );
+      }
+      const edgeRaysVocalBalance = toOptionalNumber(formValues.edgeRaysVocalBalance);
+      if (edgeRaysVocalBalance !== undefined) {
+        payload.edgeRaysVocalBalance = Math.min(
+          1,
+          Math.max(0, Math.round(edgeRaysVocalBalance) / 100)
+        );
+      }
       const response = await (thumbnailFile
         ? (() => {
             const formData = new FormData();
@@ -496,6 +588,22 @@ export default function EditContentPage() {
                 String(payload.visualizationBars)
               );
             }
+            formData.append(
+              "edgeRaysEnabled",
+              String(payload.edgeRaysEnabled ?? true)
+            );
+            if (payload.edgeRaysIntensity !== undefined) {
+              formData.append(
+                "edgeRaysIntensity",
+                String(payload.edgeRaysIntensity)
+              );
+            }
+            if (payload.edgeRaysVocalBalance !== undefined) {
+              formData.append(
+                "edgeRaysVocalBalance",
+                String(payload.edgeRaysVocalBalance)
+              );
+            }
             formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
             if (payload.colorPalette) {
               formData.append(
@@ -522,18 +630,75 @@ export default function EditContentPage() {
       setThumbnailFile(null);
       setThumbnailPreview(null);
       setThumbnailVersion(Date.now());
+      setInitialSnapshot({
+        formValues: {
+          title: updated.title,
+          status: updated.status,
+          fadeDurationSeconds: String(updated.fadeDurationSeconds ?? ""),
+          introFadeSeconds: String(updated.introFadeSeconds ?? ""),
+          outroFadeSeconds: String(updated.outroFadeSeconds ?? ""),
+          audioFadeInSeconds: String(updated.audioFadeInSeconds ?? ""),
+          audioFadeOutSeconds: String(updated.audioFadeOutSeconds ?? ""),
+          audioFadeInOffsetSeconds: String(updated.audioFadeInOffsetSeconds ?? ""),
+          audioFadeOutOffsetSeconds: String(updated.audioFadeOutOffsetSeconds ?? ""),
+          visualizationEnabled: updated.visualizationEnabled ?? true,
+          visualizationBars: String(updated.visualizationBars ?? 128),
+          edgeRaysEnabled: updated.edgeRaysEnabled ?? true,
+          edgeRaysIntensity: String(
+            Math.round((updated.edgeRaysIntensity ?? 0.85) * 100)
+          ),
+          edgeRaysVocalBalance: String(
+            Math.round((updated.edgeRaysVocalBalance ?? 0.6) * 100)
+          ),
+          playbackRate: String(updated.playbackRate ?? ""),
+          overlapPercent: Math.round((updated.overlapRatio ?? 0.25) * 100),
+          fps: String(updated.fps ?? ""),
+          width: String(updated.width ?? ""),
+          height: String(updated.height ?? ""),
+          scalePercent: String(updated.scalePercent ?? 100),
+        },
+        paletteMode: updated.paletteMode === "manual" ? "manual" : "auto",
+        paletteState: Array.isArray(updated.colorPalette) ? updated.colorPalette : [],
+      });
       toast.success("Content updated.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save.");
+      const message = err instanceof Error ? err.message : "Failed to save.";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
   };
 
+  const isDirty = useMemo(() => {
+    if (!initialSnapshot) return false;
+    const current = {
+      formValues,
+      paletteMode,
+      paletteState,
+      hasThumbnail: Boolean(thumbnailFile),
+    };
+    const baseline = {
+      formValues: initialSnapshot.formValues,
+      paletteMode: initialSnapshot.paletteMode,
+      paletteState: initialSnapshot.paletteState,
+      hasThumbnail: false,
+    };
+    return JSON.stringify(current) !== JSON.stringify(baseline);
+  }, [formValues, paletteMode, paletteState, thumbnailFile, initialSnapshot]);
+
+  const handleRevert = () => {
+    if (!initialSnapshot) return;
+    setFormValues(initialSnapshot.formValues);
+    setPaletteMode(initialSnapshot.paletteMode);
+    setPaletteState(initialSnapshot.paletteState);
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
         <Button
           asChild
           variant="ghost"
@@ -542,12 +707,32 @@ export default function EditContentPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold">Content Details</h2>
           <p className="text-sm text-slate-500 dark:text-zinc-400">
             Review metadata and render settings for this item.
           </p>
         </div>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        <Button
+          onClick={handleSave}
+          loading={saving}
+          disabled={!isDirty || saving}
+          className="gap-2"
+        >
+          <Save className="size-5" />
+          <span className="hidden sm:inline">Save</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+          onClick={handleRevert}
+          disabled={!isDirty}
+        >
+          <RotateCw className="size-5" />
+          <span className="hidden sm:inline">Revert changes</span>
+        </Button>
       </div>
     </div>
 
@@ -805,101 +990,168 @@ export default function EditContentPage() {
                       <div className="flex flex-col items-start">
                         <span>Visualization</span>
                         <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Bars + density
+                          Bars + edge rays
                         </span>
                       </div>
                     </div>
                     <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                      <div className="flex items-center text-center justify-center gap-2">
-                        <Eye className="flex size-5 shrink-0 " />
-                        <span>
-                          {/* {paletteMode === "auto"
-                            ? "Auto palette from thumbnail."
-                            : "Manual palette edits enabled."
-                          } */}
-                          Bars Visibility
-                        </span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-                              aria-label="Auto palette info"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" sideOffset={6}>
-                            Toggle audio visualization bars in the video.
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={formValues.visualizationEnabled}
-                          onCheckedChange={(checked) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              visualizationEnabled: checked,
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-col px-2">
-                      <div className="flex items-center justify-between">
-                        <LabelWithTooltip
-                          htmlFor="visualizationBars"
-                          text="Bar count"
-                          tip="Lower values feel chunkier and smoother; higher values are more detailed."
-                        />
-                        <span>{safeVisualizationBars}</span>
-                      </div>
-                      <Slider
-                        id="visualizationBars"
-                        min={16}
-                        max={128}
-                        step={1}
-                        value={[safeVisualizationBars]}
-                        disabled={!formValues.visualizationEnabled}
-                        onValueChange={(value) =>
-                          setFormValues((current) => ({
-                            ...current,
-                            visualizationBars: String(value[0] ?? 128),
-                          }))
-                        }
-                      />
-                    </div>
-                    {/* <div className="grid gap-2">
-                      <LabelWithTooltip
-                        htmlFor="visualizationBarsInput"
-                        text="Bar count input"
-                        tip="Exact number of bars to render."
-                      />
-                      <InputGroup className="bg-white dark:bg-white/5">
-                        <InputGroupInput
-                          id="visualizationBarsInput"
-                          type="number"
-                          min="16"
-                          max="256"
-                          step="1"
-                          value={formValues.visualizationBars}
-                          disabled={!formValues.visualizationEnabled}
-                          onChange={(event) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              visualizationBars: event.target.value,
-                            }))
-                          }
-                        />
-                        <InputGroupAddon>
-                          <MoveHorizontal />
-                        </InputGroupAddon>
-                      </InputGroup>
-                    </div> */}
+                    <Collapsible defaultOpen className="rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:text-zinc-200 dark:hover:bg-white/5">
+                        <div className="flex items-center gap-2">
+                          <ChartNoAxesColumn className="h-4 w-4" />
+                          <span>Bars</span>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="grid gap-3 overflow-hidden p-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                          <div className="flex items-center text-center justify-center gap-2">
+                            <Eye className="flex size-5 shrink-0 " />
+                            <span>Bars Visibility</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                                  aria-label="Auto palette info"
+                                >
+                                  <Info className="h-3.5 w-3.5" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={6}>
+                                Toggle audio visualization bars in the video.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={formValues.visualizationEnabled}
+                              onCheckedChange={(checked) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  visualizationEnabled: checked,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-col px-2">
+                          <div className="flex items-center justify-between">
+                            <LabelWithTooltip
+                              htmlFor="visualizationBars"
+                              text="Bar count"
+                              tip="Lower values feel chunkier and smoother; higher values are more detailed."
+                            />
+                            <span>{safeVisualizationBars}</span>
+                          </div>
+                          <Slider
+                            id="visualizationBars"
+                            min={16}
+                            max={128}
+                            step={1}
+                            value={[safeVisualizationBars]}
+                            disabled={!formValues.visualizationEnabled}
+                            onValueChange={(value) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                visualizationBars: String(value[0] ?? 128),
+                              }))
+                            }
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    <Collapsible defaultOpen className="rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:text-zinc-200 dark:hover:bg-white/5">
+                        <div className="flex items-center gap-2">
+                          <Spotlight className="h-4 w-4" />
+                          <span>Edge rays</span>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="grid gap-2 overflow-hidden p-2 text-xs text-slate-500 dark:text-zinc-400 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4" />
+                            <span>Edge rays visibility</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                                  aria-label="Edge rays info"
+                                >
+                                  <Info className="h-3.5 w-3.5" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={6}>
+                                Toggle the audio-reactive corner glow.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <Switch
+                            checked={formValues.edgeRaysEnabled}
+                            onCheckedChange={(checked) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                edgeRaysEnabled: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2 px-2">
+                          <div className="flex items-center justify-between">
+                            <LabelWithTooltip
+                              htmlFor="edgeRaysIntensity"
+                              text="Intensity"
+                              tip="Higher values make the glow punchier and brighter."
+                            />
+                            <span>{safeEdgeRaysIntensity}%</span>
+                          </div>
+                            <Slider
+                              id="edgeRaysIntensity"
+                              min={30}
+                              max={100}
+                              step={1}
+                              value={[safeEdgeRaysIntensity]}
+                              disabled={!formValues.edgeRaysEnabled}
+                              onValueChange={(value) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  edgeRaysIntensity: String(value[0] ?? 85),
+                                }))
+                              }
+                            />
+                          </div>
+                        <div className="flex flex-col gap-2 px-2">
+                          <div className="flex items-center justify-between">
+                            <LabelWithTooltip
+                              htmlFor="edgeRaysVocalBalance"
+                              text="Vocal balance"
+                              tip="Bias the glow toward vocals (higher) or bass hits (lower)."
+                            />
+                            <span>{safeEdgeRaysVocalBalance}%</span>
+                          </div>
+                          <Slider
+                            id="edgeRaysVocalBalance"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={[safeEdgeRaysVocalBalance]}
+                            disabled={!formValues.edgeRaysEnabled}
+                            onValueChange={(value) =>
+                              setFormValues((current) => ({
+                                ...current,
+                                edgeRaysVocalBalance: String(value[0] ?? 60),
+                              }))
+                            }
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </CollapsibleContent>
                 </Collapsible>
 
@@ -1321,21 +1573,6 @@ export default function EditContentPage() {
                   }
                 />
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? "Saving..." : "Save changes"}
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                >
-                  <Link href="/library">Cancel</Link>
-                </Button>
-              </div>
             </div>
         ) : (
           <div className="text-sm text-slate-500 dark:text-zinc-400">
@@ -1368,6 +1605,9 @@ export default function EditContentPage() {
                   audioFadeOutOffsetSeconds: safeAudioFadeOutOffset,
                   visualizationEnabled: safeVisualizationEnabled,
                   visualizationBars: safeVisualizationBars,
+                  edgeRaysEnabled: safeEdgeRaysEnabled,
+                  edgeRaysIntensity: safeEdgeRaysIntensity / 100,
+                  edgeRaysVocalBalance: safeEdgeRaysVocalBalance / 100,
                   videoDurationSeconds: safeVideoDuration,
                   playbackRate: safePlaybackRate,
                   scalePercent: resolvedScalePercent,

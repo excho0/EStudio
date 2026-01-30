@@ -64,6 +64,9 @@ export const contentItemSchema = z.object({
   scalePercent: z.number().nonnegative(),
   visualizationEnabled: z.boolean().default(true),
   visualizationBars: z.number().int().positive().default(128),
+  edgeRaysEnabled: z.boolean().default(true),
+  edgeRaysIntensity: z.number().min(0).max(1).default(0.85),
+  edgeRaysVocalBalance: z.number().min(0).max(1).default(0.6),
   videoDurationSeconds: z.number().nonnegative().optional().nullable(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive(),
@@ -98,6 +101,9 @@ export const contentCreateSchema = z.object({
   scalePercent: z.number().nonnegative().default(100),
   visualizationEnabled: z.boolean().default(true),
   visualizationBars: z.number().int().positive().default(128),
+  edgeRaysEnabled: z.boolean().default(true),
+  edgeRaysIntensity: z.number().min(0).max(1).default(0.85),
+  edgeRaysVocalBalance: z.number().min(0).max(1).default(0.6),
   videoDurationSeconds: z.number().nonnegative().default(0),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
   playbackRate: z.number().positive().default(1),
@@ -123,6 +129,9 @@ export const contentUpdateSchema = z.object({
   scalePercent: z.number().nonnegative().optional(),
   visualizationEnabled: z.boolean().optional(),
   visualizationBars: z.number().int().positive().optional(),
+  edgeRaysEnabled: z.boolean().optional(),
+  edgeRaysIntensity: z.number().min(0).max(1).optional(),
+  edgeRaysVocalBalance: z.number().min(0).max(1).optional(),
   videoDurationSeconds: z.number().nonnegative().optional(),
   overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
   playbackRate: z.number().positive().optional(),
@@ -175,6 +184,12 @@ const normalizeRow = (row: unknown): ContentItemRow => {
         ? record.visualizationEnabled
         : Boolean(record.visualizationEnabled ?? true),
     visualizationBars: record.visualizationBars ?? 128,
+    edgeRaysEnabled:
+      typeof record.edgeRaysEnabled === "boolean"
+        ? record.edgeRaysEnabled
+        : Boolean(record.edgeRaysEnabled ?? true),
+    edgeRaysIntensity: record.edgeRaysIntensity ?? 0.85,
+    edgeRaysVocalBalance: record.edgeRaysVocalBalance ?? 0.6,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);
@@ -321,6 +336,7 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
         ...data,
         colorPalette: serializeColorPalette(data.colorPalette),
         visualizationEnabled: data.visualizationEnabled ? 1 : 0,
+        edgeRaysEnabled: data.edgeRaysEnabled ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -350,25 +366,30 @@ export async function updateContentItem(
   }
   await withContentDb({
     pg: async ({ db, table, now }) => {
+      const { colorPalette, ...rest } = cleaned;
       const values: Partial<InferInsertModel<typeof schema.contentItems>> = {
-        ...cleaned,
+        ...rest,
         updatedAt: now,
       };
-      if ("colorPalette" in cleaned) {
-        values.colorPalette = serializeColorPalette(cleaned.colorPalette);
+      if (colorPalette !== undefined) {
+        values.colorPalette = serializeColorPalette(colorPalette);
       }
       await db.update(table).set(values).where(eq(table.id, id));
     },
     sqlite: async ({ db, table, now }) => {
+      const { colorPalette, visualizationEnabled, edgeRaysEnabled, ...rest } = cleaned;
       const values: Partial<InferInsertModel<typeof sqliteSchema.contentItems>> = {
-        ...cleaned,
+        ...rest,
         updatedAt: now,
       };
-      if ("colorPalette" in cleaned) {
-        values.colorPalette = serializeColorPalette(cleaned.colorPalette);
+      if (colorPalette !== undefined) {
+        values.colorPalette = serializeColorPalette(colorPalette);
       }
-      if ("visualizationEnabled" in cleaned) {
-        values.visualizationEnabled = cleaned.visualizationEnabled ? 1 : 0;
+      if (visualizationEnabled !== undefined) {
+        values.visualizationEnabled = visualizationEnabled ? 1 : 0;
+      }
+      if (edgeRaysEnabled !== undefined) {
+        values.edgeRaysEnabled = edgeRaysEnabled ? 1 : 0;
       }
       await db.update(table).set(values).where(eq(table.id, id));
     },

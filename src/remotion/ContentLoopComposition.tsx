@@ -27,6 +27,9 @@ export type ContentLoopProps = {
   audioSrc: string;
   visualizationEnabled?: boolean;
   visualizationBars?: number;
+  edgeRaysEnabled?: boolean;
+  edgeRaysIntensity?: number;
+  edgeRaysVocalBalance?: number;
   colorPalette?: string[];
   scalePercent?: number;
   segmentDurationSeconds: number;
@@ -81,6 +84,25 @@ const hexToRgba = (hex: string, alpha: number) => {
   const g = Number.parseInt(normalized.slice(3, 5), 16);
   const b = Number.parseInt(normalized.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const mixHex = (first: string, second: string, amount: number) => {
+  const a = normalizeHex(first);
+  const b = normalizeHex(second);
+  if (!a || !b) return first;
+  const t = Math.max(0, Math.min(1, amount));
+  const ar = Number.parseInt(a.slice(1, 3), 16);
+  const ag = Number.parseInt(a.slice(3, 5), 16);
+  const ab = Number.parseInt(a.slice(5, 7), 16);
+  const br = Number.parseInt(b.slice(1, 3), 16);
+  const bg = Number.parseInt(b.slice(3, 5), 16);
+  const bb = Number.parseInt(b.slice(5, 7), 16);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const b2 = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g
+    .toString(16)
+    .padStart(2, "0")}${b2.toString(16).padStart(2, "0")}`;
 };
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
@@ -166,6 +188,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   audioSrc,
   visualizationEnabled = true,
   visualizationBars = 128,
+  edgeRaysEnabled = true,
+  edgeRaysIntensity = 0.85,
+  edgeRaysVocalBalance = 0.6,
   colorPalette,
   scalePercent = 100,
   segmentDurationSeconds,
@@ -316,12 +341,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const accentColor =
     paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
 
+  const glowColor = useMemo(() => {
+    const primary = paletteColors[0] ?? DEFAULT_PALETTE[0];
+    const secondary = paletteColors[1] ?? primary;
+    const blended = mixHex(primary, secondary, 0.5);
+    return mixHex(blended, "#FFFFFF", 0.4);
+  }, [paletteColors]);
+
 
 
   // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
   // for a sharper AE look.
   const smoothBars = useMemo(() => {
-    if (!visualizationEnabled) return null;
+    if (!visualizationEnabled && !edgeRaysEnabled) return null;
     if (!audioData) return null;
 
     // CONFIGURATION
@@ -427,15 +459,77 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       return count > 0 ? sum / count : 0;
     });
 
-    return spatialBars;
+    return {
+      bars: spatialBars,
+      currentBars: currentSmoothedBars,
+    };
 
-  }, [
+    }, [
     audioData,
+    edgeRaysEnabled,
     frame,
     fps,
     resolvedVisualizationBars,
     visualizationEnabled,
   ]);
+
+  const breathIntensity = useMemo(() => {
+    if (!audioData) return 0;
+    const currentBars = smoothBars?.currentBars;
+    if (!currentBars || currentBars.length === 0) return 0;
+    const totalBars = currentBars.length;
+    const lowBandRatio = 0.18;
+    const vocalBandStartRatio = 0.25;
+    const vocalBandEndRatio = 0.55;
+    const lowCount = Math.max(1, Math.floor(totalBars * lowBandRatio));
+    let lowSum = 0;
+    for (let i = 0; i < lowCount; i += 1) {
+      lowSum += currentBars[i] ?? 0;
+    }
+    const lowAvg = lowSum / lowCount;
+
+    const vocalStart = Math.max(0, Math.floor(totalBars * vocalBandStartRatio));
+    const vocalEnd = Math.max(vocalStart + 1, Math.floor(totalBars * vocalBandEndRatio));
+    let vocalSum = 0;
+    let vocalCount = 0;
+    for (let i = vocalStart; i < vocalEnd && i < totalBars; i += 1) {
+      vocalSum += currentBars[i] ?? 0;
+      vocalCount += 1;
+    }
+    const vocalAvg = vocalCount > 0 ? vocalSum / vocalCount : 0;
+
+    const vocalWeight = Math.min(1, Math.max(0, edgeRaysVocalBalance));
+    const lowWeight = 1 - vocalWeight;
+    const combined = lowAvg * lowWeight + vocalAvg * vocalWeight;
+    const min = 0.12;
+    const max = 0.85;
+    const floor = 0.01;
+    const curve = 0.6;
+    const normalized = Math.max(
+      0,
+      Math.min(1, (combined - floor) / Math.max(1e-6, 1 - floor))
+    );
+    const shaped = Math.pow(normalized, curve);
+    return min + (max - min) * shaped;
+  }, [audioData, edgeRaysVocalBalance, smoothBars]);
+
+  const glowRef = useRef(0);
+  const glowIntensity = useMemo(() => {
+    const intensityScale = 0.4 + edgeRaysIntensity * 1.2;
+    const target = Math.min(1, breathIntensity * intensityScale);
+    if (frame === 0) {
+      glowRef.current = target;
+      return target;
+    }
+    const current = glowRef.current;
+    const attack = 0.85;
+    const release = 0.08;
+    const next = target > current
+      ? current + (target - current) * attack
+      : current + (target - current) * release;
+    glowRef.current = next;
+    return next;
+  }, [breathIntensity, edgeRaysIntensity, frame]);
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
@@ -561,8 +655,41 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       )}
+      {edgeRaysEnabled && glowIntensity > 0 ? (
+        <AbsoluteFill 
+          style={{
+            pointerEvents: "none", opacity: visualizationOpacity * introOutroOpacity,
+          }
+        }
+          
+        >
+          {[
+            { top: 0, left: 0, transform: "translate(-50%, -50%)" },
+            { top: 0, right: 0, transform: "translate(50%, -50%)" },
+            { bottom: 0, left: 0, transform: "translate(-50%, 50%)" },
+            { bottom: 0, right: 0, transform: "translate(50%, 50%)" },
+          ].map((position, index) => (
+            <div
+              key={`glow-${index}`}
+              style={{
+                position: "absolute",
+                width: 420,
+                height: 420,
+                ...position,
+                background: `radial-gradient(circle at 30% 30%, ${hexToRgba(
+                  glowColor,
+                  glowIntensity
+                )} 0%, ${hexToRgba(glowColor, 0)} 70%)`,
+                filter: `blur(${140 + glowIntensity * 180}px)`,
+                opacity: 1,
+                mixBlendMode: "normal",
+              }}
+            />
+          ))}
+        </AbsoluteFill>
+      ) : null}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
-      {smoothBars ? (
+      {visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",
@@ -573,7 +700,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${smoothBars.length}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${smoothBars.bars.length}, minmax(0, 1fr))`,
               gap: 4,
               alignItems: "end",
               height: 80, // Target height in pixels
@@ -582,7 +709,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               background: "transparent",
             }}
           >
-            {smoothBars.map((value, index) => {
+            {smoothBars.bars.map((value, index) => {
               
               // FIX 3: Removed all manual boosting/shimmer/minVisible hacks.
               // We use the 'value' directly from processAudioBars().

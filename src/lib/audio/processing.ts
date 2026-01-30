@@ -1,7 +1,5 @@
 // lib/audio/processing.ts
 
-const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
-
 type ProcessAudioBarsOptions = {
   // We keep these for styling the bars (EQ)
   maxOutput?: number;
@@ -10,7 +8,7 @@ type ProcessAudioBarsOptions = {
   noiseFloor?: number;
   lowBoost?: number;
   midBoost?: number;
-  
+
   // These are NO LONGER USED here (moved to component logic)
   // but kept in type definition so your code doesn't break immediately
   fps?: number;
@@ -18,6 +16,8 @@ type ProcessAudioBarsOptions = {
   releaseMs?: number;
   durationAveragingFrames?: number;
 };
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 export const processAudioBars = (
   bars: number[] | null,
