@@ -58,12 +58,7 @@ export function getMenuList(): Group[] {
           href: "/upload",
           label: "Upload",
           icon: Upload,
-        },
-        {
-          href: "/preview",
-          label: "Preview",
-          icon: Sparkles,
-        },
+        }
       ],
     },
     {
