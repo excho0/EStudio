@@ -100,6 +100,294 @@ const LabelWithTooltip = ({
   </div>
 );
 
+const SettingToggleRow = ({
+  icon: Icon,
+  label,
+  tip,
+  checked,
+  onCheckedChange,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tip: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) => (
+  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+    <div className="flex items-center gap-2">
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+            aria-label={`${label} info`}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>
+          {tip}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+    <Switch checked={checked} onCheckedChange={onCheckedChange} />
+  </div>
+);
+
+const SettingSliderRow = ({
+  id,
+  label,
+  tip,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  disabled,
+  onValueChange,
+}: {
+  id: string;
+  label: string;
+  tip: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  disabled?: boolean;
+  onValueChange: (value: number) => void;
+}) => (
+  <div className="flex flex-col gap-2 px-2">
+    <div className="flex items-center justify-between">
+      <LabelWithTooltip htmlFor={id} text={label} tip={tip} />
+      <span>
+        {value}
+        {suffix ?? ""}
+      </span>
+    </div>
+    <Slider
+      id={id}
+      min={min}
+      max={max}
+      step={step}
+      value={[value]}
+      disabled={disabled}
+      onValueChange={(value) => onValueChange(value[0] ?? min)}
+    />
+  </div>
+);
+
+const defaultFormValues = {
+  title: "",
+  status: "",
+  segmentDurationSeconds: "",
+  fadeDurationSeconds: "",
+  introFadeSeconds: "",
+  outroFadeSeconds: "",
+  audioFadeInSeconds: "",
+  audioFadeOutSeconds: "",
+  audioFadeInOffsetSeconds: "",
+  audioFadeOutOffsetSeconds: "",
+  visualizationEnabled: true,
+  visualizationBars: "128",
+  edgeRaysEnabled: true,
+  edgeRaysIntensity: "85",
+  edgeRaysVocalBalance: "60",
+  videoDurationSeconds: "",
+  playbackRate: "",
+  overlapPercent: 25,
+  fps: "",
+  width: "",
+  height: "",
+  scalePercent: "100",
+};
+
+type FormValues = typeof defaultFormValues;
+
+const buildFormValuesFromItem = (item: ContentItem): FormValues => {
+  const overlapPercent = Number.isFinite(item.overlapRatio)
+    ? Math.round(Number(item.overlapRatio) * 100)
+    : 25;
+  return {
+    title: item.title,
+    status: item.status,
+    segmentDurationSeconds: String(item.segmentDurationSeconds ?? ""),
+    fadeDurationSeconds: String(item.fadeDurationSeconds ?? ""),
+    introFadeSeconds: String(item.introFadeSeconds ?? ""),
+    outroFadeSeconds: String(item.outroFadeSeconds ?? ""),
+    audioFadeInSeconds: String(item.audioFadeInSeconds ?? ""),
+    audioFadeOutSeconds: String(item.audioFadeOutSeconds ?? ""),
+    audioFadeInOffsetSeconds: String(item.audioFadeInOffsetSeconds ?? ""),
+    audioFadeOutOffsetSeconds: String(item.audioFadeOutOffsetSeconds ?? ""),
+    visualizationEnabled: item.visualizationEnabled ?? true,
+    visualizationBars: String(item.visualizationBars ?? 128),
+    edgeRaysEnabled: item.edgeRaysEnabled ?? true,
+    edgeRaysIntensity: String(Math.round((item.edgeRaysIntensity ?? 0.85) * 100)),
+    edgeRaysVocalBalance: String(
+      Math.round((item.edgeRaysVocalBalance ?? 0.6) * 100)
+    ),
+    videoDurationSeconds: String(item.videoDurationSeconds ?? ""),
+    playbackRate: String(item.playbackRate ?? ""),
+    overlapPercent,
+    fps: String(item.fps ?? ""),
+    width: String(item.width ?? ""),
+    height: String(item.height ?? ""),
+    scalePercent: String(item.scalePercent ?? 100),
+  };
+};
+
+type PaletteMode = "auto" | "manual";
+
+const buildSnapshotFromItem = (item: ContentItem) => ({
+  formValues: buildFormValuesFromItem(item),
+  paletteMode: (item.paletteMode === "manual" ? "manual" : "auto") as PaletteMode,
+  paletteState: Array.isArray(item.colorPalette) ? item.colorPalette : [],
+});
+
+const toOptionalNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const buildPayloadFromForm = (
+  formValues: FormValues,
+  paletteMode: PaletteMode,
+  paletteState: string[]
+) => {
+  const payload: Record<string, unknown> = {
+    title: (formValues.title ?? "").trim(),
+    paletteMode,
+    visualizationEnabled: Boolean(formValues.visualizationEnabled),
+    edgeRaysEnabled: Boolean(formValues.edgeRaysEnabled),
+  };
+  if ((formValues.status ?? "").trim()) {
+    payload.status = (formValues.status ?? "").trim();
+  }
+  if (paletteMode === "manual" && paletteState.length > 0) {
+    payload.colorPalette = paletteState;
+  }
+
+  const fadeDurationSeconds = toOptionalNumber(formValues.fadeDurationSeconds);
+  if (fadeDurationSeconds !== undefined) payload.fadeDurationSeconds = fadeDurationSeconds;
+  const segmentDurationSeconds = toOptionalNumber(formValues.segmentDurationSeconds);
+  if (segmentDurationSeconds !== undefined) {
+    payload.segmentDurationSeconds = segmentDurationSeconds;
+  }
+  const introFadeSeconds = toOptionalNumber(formValues.introFadeSeconds);
+  if (introFadeSeconds !== undefined) payload.introFadeSeconds = introFadeSeconds;
+  const outroFadeSeconds = toOptionalNumber(formValues.outroFadeSeconds);
+  if (outroFadeSeconds !== undefined) payload.outroFadeSeconds = outroFadeSeconds;
+  const audioFadeInSeconds = toOptionalNumber(formValues.audioFadeInSeconds);
+  if (audioFadeInSeconds !== undefined) payload.audioFadeInSeconds = audioFadeInSeconds;
+  const audioFadeOutSeconds = toOptionalNumber(formValues.audioFadeOutSeconds);
+  if (audioFadeOutSeconds !== undefined) payload.audioFadeOutSeconds = audioFadeOutSeconds;
+  const audioFadeInOffsetSeconds = toOptionalNumber(formValues.audioFadeInOffsetSeconds);
+  if (audioFadeInOffsetSeconds !== undefined) {
+    payload.audioFadeInOffsetSeconds = audioFadeInOffsetSeconds;
+  }
+  const audioFadeOutOffsetSeconds = toOptionalNumber(formValues.audioFadeOutOffsetSeconds);
+  if (audioFadeOutOffsetSeconds !== undefined) {
+    payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetSeconds;
+  }
+  const playbackRate = toOptionalNumber(formValues.playbackRate);
+  if (playbackRate !== undefined) payload.playbackRate = playbackRate;
+  const overlapRatio = Number.isFinite(formValues.overlapPercent)
+    ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
+    : undefined;
+  if (overlapRatio !== undefined) payload.overlapRatio = overlapRatio;
+  const fps = toOptionalNumber(formValues.fps);
+  if (fps !== undefined) payload.fps = fps;
+  const width = toOptionalNumber(formValues.width);
+  if (width !== undefined) payload.width = width;
+  const height = toOptionalNumber(formValues.height);
+  if (height !== undefined) payload.height = height;
+  const scalePercent = toOptionalNumber(formValues.scalePercent);
+  if (scalePercent !== undefined) payload.scalePercent = scalePercent;
+  const visualizationBars = toOptionalNumber(formValues.visualizationBars);
+  if (visualizationBars !== undefined) {
+    payload.visualizationBars = Math.min(256, Math.max(16, Math.round(visualizationBars)));
+  }
+  const edgeRaysIntensity = toOptionalNumber(formValues.edgeRaysIntensity);
+  if (edgeRaysIntensity !== undefined) {
+    payload.edgeRaysIntensity = Math.min(1, Math.max(0, Math.round(edgeRaysIntensity) / 100));
+  }
+  const edgeRaysVocalBalance = toOptionalNumber(formValues.edgeRaysVocalBalance);
+  if (edgeRaysVocalBalance !== undefined) {
+    payload.edgeRaysVocalBalance = Math.min(
+      1,
+      Math.max(0, Math.round(edgeRaysVocalBalance) / 100)
+    );
+  }
+  const videoDurationSeconds = toOptionalNumber(formValues.videoDurationSeconds);
+  if (videoDurationSeconds !== undefined) {
+    payload.videoDurationSeconds = videoDurationSeconds;
+  }
+  return payload;
+};
+
+const appendPayloadToFormData = (payload: Record<string, unknown>, formData: FormData) => {
+  formData.append("title", String(payload.title ?? ""));
+  if (payload.status) formData.append("status", String(payload.status));
+  if (payload.fadeDurationSeconds !== undefined) {
+    formData.append("fadeDurationSeconds", String(payload.fadeDurationSeconds));
+  }
+  if (payload.introFadeSeconds !== undefined) {
+    formData.append("introFadeSeconds", String(payload.introFadeSeconds));
+  }
+  if (payload.outroFadeSeconds !== undefined) {
+    formData.append("outroFadeSeconds", String(payload.outroFadeSeconds));
+  }
+  if (payload.audioFadeInSeconds !== undefined) {
+    formData.append("audioFadeInSeconds", String(payload.audioFadeInSeconds));
+  }
+  if (payload.audioFadeOutSeconds !== undefined) {
+    formData.append("audioFadeOutSeconds", String(payload.audioFadeOutSeconds));
+  }
+  if (payload.audioFadeInOffsetSeconds !== undefined) {
+    formData.append("audioFadeInOffsetSeconds", String(payload.audioFadeInOffsetSeconds));
+  }
+  if (payload.audioFadeOutOffsetSeconds !== undefined) {
+    formData.append("audioFadeOutOffsetSeconds", String(payload.audioFadeOutOffsetSeconds));
+  }
+  if (payload.playbackRate !== undefined) {
+    formData.append("playbackRate", String(payload.playbackRate));
+  }
+  if (payload.overlapRatio !== undefined) {
+    formData.append("overlapRatio", String(payload.overlapRatio));
+  }
+  if (payload.fps !== undefined) {
+    formData.append("fps", String(payload.fps));
+  }
+  if (payload.width !== undefined) {
+    formData.append("width", String(payload.width));
+  }
+  if (payload.height !== undefined) {
+    formData.append("height", String(payload.height));
+  }
+  if (payload.scalePercent !== undefined) {
+    formData.append("scalePercent", String(payload.scalePercent));
+  }
+  formData.append("visualizationEnabled", String(payload.visualizationEnabled ?? true));
+  if (payload.visualizationBars !== undefined) {
+    formData.append("visualizationBars", String(payload.visualizationBars));
+  }
+  formData.append("edgeRaysEnabled", String(payload.edgeRaysEnabled ?? true));
+  if (payload.edgeRaysIntensity !== undefined) {
+    formData.append("edgeRaysIntensity", String(payload.edgeRaysIntensity));
+  }
+  if (payload.edgeRaysVocalBalance !== undefined) {
+    formData.append("edgeRaysVocalBalance", String(payload.edgeRaysVocalBalance));
+  }
+  formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
+  if (payload.colorPalette) {
+    formData.append("colorPalette", JSON.stringify(payload.colorPalette));
+  }
+};
+
 const ColorCopyButton = ({
   value,
   onCopy,
@@ -124,28 +412,7 @@ export default function EditContentPage() {
   const [item, setItem] = useState<ContentItem | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
   const [paletteState, setPaletteState] = useState<string[]>([]);
-  const [formValues, setFormValues] = useState({
-    title: "",
-    status: "",
-    fadeDurationSeconds: "",
-    introFadeSeconds: "",
-    outroFadeSeconds: "",
-    audioFadeInSeconds: "",
-    audioFadeOutSeconds: "",
-    audioFadeInOffsetSeconds: "",
-    audioFadeOutOffsetSeconds: "",
-    visualizationEnabled: true,
-    visualizationBars: "128",
-    edgeRaysEnabled: true,
-    edgeRaysIntensity: "85",
-    edgeRaysVocalBalance: "60",
-    playbackRate: "",
-    overlapPercent: 25,
-    fps: "",
-    width: "",
-    height: "",
-    scalePercent: "100",
-  });
+  const [formValues, setFormValues] = useState<FormValues>(defaultFormValues);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
@@ -153,8 +420,8 @@ export default function EditContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<{
-    formValues: typeof formValues;
-    paletteMode: "auto" | "manual";
+    formValues: FormValues;
+    paletteMode: PaletteMode;
     paletteState: string[];
   } | null>(null);
   const isTablet = useMediaQuery("(max-width: 1024px)");
@@ -313,67 +580,11 @@ export default function EditContentPage() {
         if (active) {
           setItem(data);
           setThumbnailVersion(Date.now());
-          const overlapPercent = Number.isFinite(data.overlapRatio)
-            ? Math.round(Number(data.overlapRatio) * 100)
-            : 25;
-          setFormValues({
-            title: data.title,
-            status: data.status,
-            fadeDurationSeconds: String(data.fadeDurationSeconds ?? ""),
-            introFadeSeconds: String(data.introFadeSeconds ?? ""),
-            outroFadeSeconds: String(data.outroFadeSeconds ?? ""),
-            audioFadeInSeconds: String(data.audioFadeInSeconds ?? ""),
-            audioFadeOutSeconds: String(data.audioFadeOutSeconds ?? ""),
-            audioFadeInOffsetSeconds: String(data.audioFadeInOffsetSeconds ?? ""),
-            audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
-            visualizationEnabled: data.visualizationEnabled ?? true,
-            visualizationBars: String(data.visualizationBars ?? 128),
-            edgeRaysEnabled: data.edgeRaysEnabled ?? true,
-            edgeRaysIntensity: String(
-              Math.round((data.edgeRaysIntensity ?? 0.85) * 100)
-            ),
-            edgeRaysVocalBalance: String(
-              Math.round((data.edgeRaysVocalBalance ?? 0.6) * 100)
-            ),
-            playbackRate: String(data.playbackRate ?? ""),
-            overlapPercent,
-            fps: String(data.fps ?? ""),
-            width: String(data.width ?? ""),
-            height: String(data.height ?? ""),
-            scalePercent: String(data.scalePercent ?? 100),
-          });
+          const nextFormValues = buildFormValuesFromItem(data);
+          setFormValues(nextFormValues);
           setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
           setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
-          setInitialSnapshot({
-            formValues: {
-              title: data.title,
-              status: data.status,
-              fadeDurationSeconds: String(data.fadeDurationSeconds ?? ""),
-              introFadeSeconds: String(data.introFadeSeconds ?? ""),
-              outroFadeSeconds: String(data.outroFadeSeconds ?? ""),
-              audioFadeInSeconds: String(data.audioFadeInSeconds ?? ""),
-              audioFadeOutSeconds: String(data.audioFadeOutSeconds ?? ""),
-              audioFadeInOffsetSeconds: String(data.audioFadeInOffsetSeconds ?? ""),
-              audioFadeOutOffsetSeconds: String(data.audioFadeOutOffsetSeconds ?? ""),
-              visualizationEnabled: data.visualizationEnabled ?? true,
-              visualizationBars: String(data.visualizationBars ?? 128),
-              edgeRaysEnabled: data.edgeRaysEnabled ?? true,
-              edgeRaysIntensity: String(
-                Math.round((data.edgeRaysIntensity ?? 0.85) * 100)
-              ),
-              edgeRaysVocalBalance: String(
-                Math.round((data.edgeRaysVocalBalance ?? 0.6) * 100)
-              ),
-              playbackRate: String(data.playbackRate ?? ""),
-              overlapPercent,
-              fps: String(data.fps ?? ""),
-              width: String(data.width ?? ""),
-              height: String(data.height ?? ""),
-              scalePercent: String(data.scalePercent ?? 100),
-            },
-            paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
-            paletteState: Array.isArray(data.colorPalette) ? data.colorPalette : [],
-          });
+          setInitialSnapshot(buildSnapshotFromItem(data));
         }
       } catch (err) {
         if (active) {
@@ -415,202 +626,11 @@ export default function EditContentPage() {
     if (!item) return;
     setSaving(true);
     try {
-      const toOptionalNumber = (value: string) => {
-        const trimmed = value.trim();
-        if (!trimmed) return undefined;
-        const parsed = Number(trimmed);
-        return Number.isFinite(parsed) ? parsed : undefined;
-      };
-      const payload: Record<string, unknown> = {
-        title: formValues.title.trim(),
-      };
-      if (formValues.status.trim()) {
-        payload.status = formValues.status.trim();
-      }
-      payload.paletteMode = paletteMode;
-      if (paletteMode === "manual" && paletteState.length > 0) {
-        payload.colorPalette = paletteState;
-      }
-      const fadeDurationSeconds = toOptionalNumber(
-        formValues.fadeDurationSeconds
-      );
-      if (fadeDurationSeconds !== undefined) {
-        payload.fadeDurationSeconds = fadeDurationSeconds;
-      }
-      const introFadeSeconds = toOptionalNumber(formValues.introFadeSeconds);
-      if (introFadeSeconds !== undefined) {
-        payload.introFadeSeconds = introFadeSeconds;
-      }
-      const outroFadeSeconds = toOptionalNumber(formValues.outroFadeSeconds);
-      if (outroFadeSeconds !== undefined) {
-        payload.outroFadeSeconds = outroFadeSeconds;
-      }
-      const audioFadeInSeconds = toOptionalNumber(formValues.audioFadeInSeconds);
-      if (audioFadeInSeconds !== undefined) {
-        payload.audioFadeInSeconds = audioFadeInSeconds;
-      }
-      const audioFadeOutSeconds = toOptionalNumber(formValues.audioFadeOutSeconds);
-      if (audioFadeOutSeconds !== undefined) {
-        payload.audioFadeOutSeconds = audioFadeOutSeconds;
-      }
-      const audioFadeInOffsetSeconds = toOptionalNumber(
-        formValues.audioFadeInOffsetSeconds
-      );
-      if (audioFadeInOffsetSeconds !== undefined) {
-        payload.audioFadeInOffsetSeconds = audioFadeInOffsetSeconds;
-      }
-      const audioFadeOutOffsetSeconds = toOptionalNumber(
-        formValues.audioFadeOutOffsetSeconds
-      );
-      if (audioFadeOutOffsetSeconds !== undefined) {
-        payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetSeconds;
-      }
-      const playbackRate = toOptionalNumber(formValues.playbackRate);
-      if (playbackRate !== undefined) {
-        payload.playbackRate = playbackRate;
-      }
-      const overlapRatio = Number.isFinite(formValues.overlapPercent)
-        ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
-        : undefined;
-      if (overlapRatio !== undefined) {
-        payload.overlapRatio = overlapRatio;
-      }
-      const fps = toOptionalNumber(formValues.fps);
-      if (fps !== undefined) {
-        payload.fps = fps;
-      }
-      const width = toOptionalNumber(formValues.width);
-      if (width !== undefined) {
-        payload.width = width;
-      }
-      const height = toOptionalNumber(formValues.height);
-      if (height !== undefined) {
-        payload.height = height;
-      }
-      const scalePercent = toOptionalNumber(formValues.scalePercent);
-      if (scalePercent !== undefined) {
-        payload.scalePercent = scalePercent;
-      }
-      payload.visualizationEnabled = Boolean(formValues.visualizationEnabled);
-      const visualizationBars = toOptionalNumber(formValues.visualizationBars);
-      if (visualizationBars !== undefined) {
-        payload.visualizationBars = Math.min(256, Math.max(16, Math.round(visualizationBars)));
-      }
-      payload.edgeRaysEnabled = Boolean(formValues.edgeRaysEnabled);
-      const edgeRaysIntensity = toOptionalNumber(formValues.edgeRaysIntensity);
-      if (edgeRaysIntensity !== undefined) {
-        payload.edgeRaysIntensity = Math.min(
-          1,
-          Math.max(0, Math.round(edgeRaysIntensity) / 100)
-        );
-      }
-      const edgeRaysVocalBalance = toOptionalNumber(formValues.edgeRaysVocalBalance);
-      if (edgeRaysVocalBalance !== undefined) {
-        payload.edgeRaysVocalBalance = Math.min(
-          1,
-          Math.max(0, Math.round(edgeRaysVocalBalance) / 100)
-        );
-      }
+      const payload = buildPayloadFromForm(formValues, paletteMode, paletteState);
       const response = await (thumbnailFile
         ? (() => {
             const formData = new FormData();
-            formData.append("title", String(payload.title ?? ""));
-            if (payload.status) {
-              formData.append("status", String(payload.status));
-            }
-            if (payload.fadeDurationSeconds !== undefined) {
-              formData.append(
-                "fadeDurationSeconds",
-                String(payload.fadeDurationSeconds)
-              );
-            }
-            if (payload.introFadeSeconds !== undefined) {
-              formData.append(
-                "introFadeSeconds",
-                String(payload.introFadeSeconds)
-              );
-            }
-            if (payload.outroFadeSeconds !== undefined) {
-              formData.append(
-                "outroFadeSeconds",
-                String(payload.outroFadeSeconds)
-              );
-            }
-            if (payload.audioFadeInSeconds !== undefined) {
-              formData.append(
-                "audioFadeInSeconds",
-                String(payload.audioFadeInSeconds)
-              );
-            }
-            if (payload.audioFadeOutSeconds !== undefined) {
-              formData.append(
-                "audioFadeOutSeconds",
-                String(payload.audioFadeOutSeconds)
-              );
-            }
-            if (payload.audioFadeInOffsetSeconds !== undefined) {
-              formData.append(
-                "audioFadeInOffsetSeconds",
-                String(payload.audioFadeInOffsetSeconds)
-              );
-            }
-            if (payload.audioFadeOutOffsetSeconds !== undefined) {
-              formData.append(
-                "audioFadeOutOffsetSeconds",
-                String(payload.audioFadeOutOffsetSeconds)
-              );
-            }
-            if (payload.playbackRate !== undefined) {
-              formData.append("playbackRate", String(payload.playbackRate));
-            }
-            if (payload.overlapRatio !== undefined) {
-              formData.append("overlapRatio", String(payload.overlapRatio));
-            }
-            if (payload.fps !== undefined) {
-              formData.append("fps", String(payload.fps));
-            }
-            if (payload.width !== undefined) {
-              formData.append("width", String(payload.width));
-            }
-            if (payload.height !== undefined) {
-              formData.append("height", String(payload.height));
-            }
-            if (payload.scalePercent !== undefined) {
-              formData.append("scalePercent", String(payload.scalePercent));
-            }
-            formData.append(
-              "visualizationEnabled",
-              String(payload.visualizationEnabled ?? true)
-            );
-            if (payload.visualizationBars !== undefined) {
-              formData.append(
-                "visualizationBars",
-                String(payload.visualizationBars)
-              );
-            }
-            formData.append(
-              "edgeRaysEnabled",
-              String(payload.edgeRaysEnabled ?? true)
-            );
-            if (payload.edgeRaysIntensity !== undefined) {
-              formData.append(
-                "edgeRaysIntensity",
-                String(payload.edgeRaysIntensity)
-              );
-            }
-            if (payload.edgeRaysVocalBalance !== undefined) {
-              formData.append(
-                "edgeRaysVocalBalance",
-                String(payload.edgeRaysVocalBalance)
-              );
-            }
-            formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
-            if (payload.colorPalette) {
-              formData.append(
-                "colorPalette",
-                JSON.stringify(payload.colorPalette)
-              );
-            }
+            appendPayloadToFormData(payload, formData);
             formData.append("thumbnail", thumbnailFile);
             return fetch(`/api/content/${item.id}`, {
               method: "PATCH",
@@ -630,36 +650,7 @@ export default function EditContentPage() {
       setThumbnailFile(null);
       setThumbnailPreview(null);
       setThumbnailVersion(Date.now());
-      setInitialSnapshot({
-        formValues: {
-          title: updated.title,
-          status: updated.status,
-          fadeDurationSeconds: String(updated.fadeDurationSeconds ?? ""),
-          introFadeSeconds: String(updated.introFadeSeconds ?? ""),
-          outroFadeSeconds: String(updated.outroFadeSeconds ?? ""),
-          audioFadeInSeconds: String(updated.audioFadeInSeconds ?? ""),
-          audioFadeOutSeconds: String(updated.audioFadeOutSeconds ?? ""),
-          audioFadeInOffsetSeconds: String(updated.audioFadeInOffsetSeconds ?? ""),
-          audioFadeOutOffsetSeconds: String(updated.audioFadeOutOffsetSeconds ?? ""),
-          visualizationEnabled: updated.visualizationEnabled ?? true,
-          visualizationBars: String(updated.visualizationBars ?? 128),
-          edgeRaysEnabled: updated.edgeRaysEnabled ?? true,
-          edgeRaysIntensity: String(
-            Math.round((updated.edgeRaysIntensity ?? 0.85) * 100)
-          ),
-          edgeRaysVocalBalance: String(
-            Math.round((updated.edgeRaysVocalBalance ?? 0.6) * 100)
-          ),
-          playbackRate: String(updated.playbackRate ?? ""),
-          overlapPercent: Math.round((updated.overlapRatio ?? 0.25) * 100),
-          fps: String(updated.fps ?? ""),
-          width: String(updated.width ?? ""),
-          height: String(updated.height ?? ""),
-          scalePercent: String(updated.scalePercent ?? 100),
-        },
-        paletteMode: updated.paletteMode === "manual" ? "manual" : "auto",
-        paletteState: Array.isArray(updated.colorPalette) ? updated.colorPalette : [],
-      });
+      setInitialSnapshot(buildSnapshotFromItem(updated));
       toast.success("Content updated.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save.";
@@ -1006,61 +997,34 @@ export default function EditContentPage() {
                         <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                       </CollapsibleTrigger>
                       <CollapsibleContent className="grid gap-3 overflow-hidden p-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                          <div className="flex items-center text-center justify-center gap-2">
-                            <Eye className="flex size-5 shrink-0 " />
-                            <span>Bars Visibility</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-                                  aria-label="Auto palette info"
-                                >
-                                  <Info className="h-3.5 w-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" sideOffset={6}>
-                                Toggle audio visualization bars in the video.
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={formValues.visualizationEnabled}
-                              onCheckedChange={(checked) =>
-                                setFormValues((current) => ({
-                                  ...current,
-                                  visualizationEnabled: checked,
-                                }))
-                              }
-                            />
-                          </div>
-                        </div>
-                        <div className="flex gap-2 flex-col px-2">
-                          <div className="flex items-center justify-between">
-                            <LabelWithTooltip
-                              htmlFor="visualizationBars"
-                              text="Bar count"
-                              tip="Lower values feel chunkier and smoother; higher values are more detailed."
-                            />
-                            <span>{safeVisualizationBars}</span>
-                          </div>
-                          <Slider
-                            id="visualizationBars"
-                            min={16}
-                            max={128}
-                            step={1}
-                            value={[safeVisualizationBars]}
-                            disabled={!formValues.visualizationEnabled}
-                            onValueChange={(value) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                visualizationBars: String(value[0] ?? 128),
-                              }))
-                            }
-                          />
-                        </div>
+                        <SettingToggleRow
+                          icon={Eye}
+                          label="Bars visibility"
+                          tip="Toggle audio visualization bars in the video."
+                          checked={formValues.visualizationEnabled}
+                          onCheckedChange={(checked) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              visualizationEnabled: checked,
+                            }))
+                          }
+                        />
+                        <SettingSliderRow
+                          id="visualizationBars"
+                          label="Bar count"
+                          tip="Lower values feel chunkier and smoother; higher values are more detailed."
+                          value={safeVisualizationBars}
+                          min={16}
+                          max={128}
+                          step={1}
+                          disabled={!formValues.visualizationEnabled}
+                          onValueChange={(value) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              visualizationBars: String(value),
+                            }))
+                          }
+                        />
                       </CollapsibleContent>
                     </Collapsible>
 
@@ -1073,83 +1037,52 @@ export default function EditContentPage() {
                         <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
                       </CollapsibleTrigger>
                       <CollapsibleContent className="grid gap-2 overflow-hidden p-2 text-xs text-slate-500 dark:text-zinc-400 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4" />
-                            <span>Edge rays visibility</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-                                  aria-label="Edge rays info"
-                                >
-                                  <Info className="h-3.5 w-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" sideOffset={6}>
-                                Toggle the audio-reactive corner glow.
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <Switch
-                            checked={formValues.edgeRaysEnabled}
-                            onCheckedChange={(checked) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                edgeRaysEnabled: checked,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2 px-2">
-                          <div className="flex items-center justify-between">
-                            <LabelWithTooltip
-                              htmlFor="edgeRaysIntensity"
-                              text="Intensity"
-                              tip="Higher values make the glow punchier and brighter."
-                            />
-                            <span>{safeEdgeRaysIntensity}%</span>
-                          </div>
-                            <Slider
-                              id="edgeRaysIntensity"
-                              min={30}
-                              max={100}
-                              step={1}
-                              value={[safeEdgeRaysIntensity]}
-                              disabled={!formValues.edgeRaysEnabled}
-                              onValueChange={(value) =>
-                                setFormValues((current) => ({
-                                  ...current,
-                                  edgeRaysIntensity: String(value[0] ?? 85),
-                                }))
-                              }
-                            />
-                          </div>
-                        <div className="flex flex-col gap-2 px-2">
-                          <div className="flex items-center justify-between">
-                            <LabelWithTooltip
-                              htmlFor="edgeRaysVocalBalance"
-                              text="Vocal balance"
-                              tip="Bias the glow toward vocals (higher) or bass hits (lower)."
-                            />
-                            <span>{safeEdgeRaysVocalBalance}%</span>
-                          </div>
-                          <Slider
-                            id="edgeRaysVocalBalance"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={[safeEdgeRaysVocalBalance]}
-                            disabled={!formValues.edgeRaysEnabled}
-                            onValueChange={(value) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                edgeRaysVocalBalance: String(value[0] ?? 60),
-                              }))
-                            }
-                          />
-                        </div>
+                        <SettingToggleRow
+                          icon={Sparkles}
+                          label="Edge rays visibility"
+                          tip="Toggle the audio-reactive corner glow."
+                          checked={formValues.edgeRaysEnabled}
+                          onCheckedChange={(checked) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              edgeRaysEnabled: checked,
+                            }))
+                          }
+                        />
+                        <SettingSliderRow
+                          id="edgeRaysIntensity"
+                          label="Intensity"
+                          tip="Higher values make the glow punchier and brighter."
+                          value={safeEdgeRaysIntensity}
+                          min={30}
+                          max={100}
+                          step={1}
+                          suffix="%"
+                          disabled={!formValues.edgeRaysEnabled}
+                          onValueChange={(value) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              edgeRaysIntensity: String(value),
+                            }))
+                          }
+                        />
+                        <SettingSliderRow
+                          id="edgeRaysVocalBalance"
+                          label="Vocal balance"
+                          tip="Bias the glow toward vocals (higher) or bass hits (lower)."
+                          value={safeEdgeRaysVocalBalance}
+                          min={0}
+                          max={100}
+                          step={1}
+                          suffix="%"
+                          disabled={!formValues.edgeRaysEnabled}
+                          onValueChange={(value) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              edgeRaysVocalBalance: String(value),
+                            }))
+                          }
+                        />
                       </CollapsibleContent>
                     </Collapsible>
                   </CollapsibleContent>
