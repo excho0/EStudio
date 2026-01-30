@@ -50,6 +50,7 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
   useEffect(() => {
     const handlePopState = () => {
       if (activeRef.current) return;
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
       setIsTransitioning(true);
       if (safetyTimeoutRef.current) {
         window.clearTimeout(safetyTimeoutRef.current);
@@ -77,9 +78,9 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
     const resolvedOptions = options ?? {};
     timeoutRef.current = window.setTimeout(() => {
       if (resolvedOptions.replace) {
-        router.replace(href, { scroll: resolvedOptions.scroll });
+        router.replace(href, { scroll: resolvedOptions.scroll ?? true });
       } else {
-        router.push(href, { scroll: resolvedOptions.scroll });
+        router.push(href, { scroll: resolvedOptions.scroll ?? true });
       }
       activeRef.current = false;
     }, 200);
