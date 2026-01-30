@@ -1,10 +1,11 @@
 import { Link } from "@/components/route-transition";
 import { useState } from "react";
-import { MenuIcon, PanelsTopLeft } from "lucide-react";
+import { MenuIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/admin-panel/menu";
 import { useDashboardSocket } from "@/app/(studio)/_components/dashboard-socket";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import {
   Sheet,
   SheetHeader,
@@ -32,7 +33,14 @@ export function SheetMenu() {
             asChild
           >
             <Link href="/dashboard" className="flex items-center gap-2">
-              <PanelsTopLeft className="w-6 h-6 mr-1" />
+              <ImageWithSkeleton
+                src="/favicon.png"
+                alt="logo"
+                width={42}
+                height={42}
+                wrapperClassName="rounded-full"
+                className="rounded-full"
+              />
               <SheetTitle className="font-bold text-lg">Excho Studio</SheetTitle>
             </Link>
           </Button>
