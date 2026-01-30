@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Excho Engine",
+  title: "EStudio",
   description: "AI-powered video content creation and rendering platform",
 };
 

@@ -41,7 +41,7 @@ export function SheetMenu() {
                 wrapperClassName="rounded-full"
                 className="rounded-full"
               />
-              <SheetTitle className="font-bold text-lg">Excho Studio</SheetTitle>
+              <SheetTitle className="font-bold text-lg">EStudio</SheetTitle>
             </Link>
           </Button>
         </SheetHeader>

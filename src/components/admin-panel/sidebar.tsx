@@ -50,7 +50,7 @@ export function Sidebar() {
                   : "translate-x-0 opacity-100"
               )}
             >
-              Excho Studio
+              EStudio
             </h1>
           </Link>
         </Button>
