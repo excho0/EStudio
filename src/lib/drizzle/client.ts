@@ -39,6 +39,7 @@ export function getDrizzleDb(): DrizzleDb {
   }
   const driver = process.env.DB_DRIVER?.toLowerCase();
   const postgresUrl = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
+  const sqliteUrl = process.env.SQLITE_URL;
   if (driver === "postgres") {
     if (!postgresUrl) {
       throw new Error("DB_DRIVER=postgres but no POSTGRES_URL/DATABASE_URL set.");
@@ -47,6 +48,10 @@ export function getDrizzleDb(): DrizzleDb {
     return cachedDb;
   }
   if (driver === "sqlite") {
+    cachedDb = createSqliteDb();
+    return cachedDb;
+  }
+  if (sqliteUrl) {
     cachedDb = createSqliteDb();
     return cachedDb;
   }

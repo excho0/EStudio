@@ -1,14 +1,117 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 import {
   index as pgIndex,
   boolean as pgBoolean,
   integer as pgInteger,
   pgTable,
+  primaryKey as pgPrimaryKey,
   text as pgText,
   timestamp as pgTimestamp,
   real as pgReal,
 } from "drizzle-orm/pg-core";
+
+export const users = sqliteTable("user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: integer("emailVerified", { mode: "timestamp_ms" }),
+  image: text("image"),
+});
+
+export const accounts = sqliteTable(
+  "account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => [
+    primaryKey({
+      columns: [account.provider, account.providerAccountId],
+    }),
+  ]
+);
+
+export const sessions = sqliteTable("session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const verificationTokens = sqliteTable(
+  "verificationToken",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+  },
+  (verificationToken) => [
+    primaryKey({
+      columns: [verificationToken.identifier, verificationToken.token],
+    }),
+  ]
+);
+
+export const authenticators = sqliteTable(
+  "authenticator",
+  {
+    credentialID: text("credentialID").notNull().unique(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    providerAccountId: text("providerAccountId").notNull(),
+    credentialPublicKey: text("credentialPublicKey").notNull(),
+    counter: integer("counter").notNull(),
+    credentialDeviceType: text("credentialDeviceType").notNull(),
+    credentialBackedUp: integer("credentialBackedUp", { mode: "boolean" }).notNull(),
+    transports: text("transports"),
+  },
+  (authenticator) => [
+    primaryKey({
+      columns: [authenticator.userId, authenticator.credentialID],
+    }),
+  ]
+);
+
+export const appTokens = sqliteTable(
+  "app_token",
+  {
+    token: text("token").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    payload: text("payload"),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    expires: integer("expires", { mode: "timestamp_ms" }).notNull(),
+  },
+  (token) => [
+    index("app_token_user_id_idx").on(token.userId),
+    index("app_token_type_idx").on(token.type),
+  ]
+);
 
 export const contentItems = sqliteTable(
   "content_items",
@@ -104,10 +207,117 @@ export const contentItemsPg = pgTable(
   ]
 );
 
+export const usersPg = pgTable("user", {
+  id: pgText("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: pgText("name"),
+  email: pgText("email").unique(),
+  emailVerified: pgTimestamp("emailVerified", { mode: "date" }),
+  image: pgText("image"),
+});
+
+export const accountsPg = pgTable(
+  "account",
+  {
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    type: pgText("type").notNull(),
+    provider: pgText("provider").notNull(),
+    providerAccountId: pgText("providerAccountId").notNull(),
+    refresh_token: pgText("refresh_token"),
+    access_token: pgText("access_token"),
+    expires_at: pgInteger("expires_at"),
+    token_type: pgText("token_type"),
+    scope: pgText("scope"),
+    id_token: pgText("id_token"),
+    session_state: pgText("session_state"),
+  },
+  (account) => [
+    pgPrimaryKey({
+      columns: [account.provider, account.providerAccountId],
+    }),
+  ]
+);
+
+export const sessionsPg = pgTable("session", {
+  sessionToken: pgText("sessionToken").primaryKey(),
+  userId: pgText("userId")
+    .notNull()
+    .references(() => usersPg.id, { onDelete: "cascade" }),
+  expires: pgTimestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokensPg = pgTable(
+  "verificationToken",
+  {
+    identifier: pgText("identifier").notNull(),
+    token: pgText("token").notNull(),
+    expires: pgTimestamp("expires", { mode: "date" }).notNull(),
+  },
+  (verificationToken) => [
+    pgPrimaryKey({
+      columns: [verificationToken.identifier, verificationToken.token],
+    }),
+  ]
+);
+
+export const authenticatorsPg = pgTable(
+  "authenticator",
+  {
+    credentialID: pgText("credentialID").notNull().unique(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    providerAccountId: pgText("providerAccountId").notNull(),
+    credentialPublicKey: pgText("credentialPublicKey").notNull(),
+    counter: pgInteger("counter").notNull(),
+    credentialDeviceType: pgText("credentialDeviceType").notNull(),
+    credentialBackedUp: pgBoolean("credentialBackedUp").notNull(),
+    transports: pgText("transports"),
+  },
+  (authenticator) => [
+    pgPrimaryKey({
+      columns: [authenticator.userId, authenticator.credentialID],
+    }),
+  ]
+);
+
+export const appTokensPg = pgTable(
+  "app_token",
+  {
+    token: pgText("token").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    type: pgText("type").notNull(),
+    payload: pgText("payload"),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    expires: pgTimestamp("expires", { mode: "date" }).notNull(),
+  },
+  (token) => [
+    pgIndex("app_token_user_id_idx").on(token.userId),
+    pgIndex("app_token_type_idx").on(token.type),
+  ]
+);
+
 export const sqliteSchema = {
+  users,
+  accounts,
+  sessions,
+  verificationTokens,
+  authenticators,
+  appTokens,
   contentItems,
 };
 
 export const schema = {
+  users: usersPg,
+  accounts: accountsPg,
+  sessions: sessionsPg,
+  verificationTokens: verificationTokensPg,
+  authenticators: authenticatorsPg,
+  appTokens: appTokensPg,
   contentItems: contentItemsPg,
 };
