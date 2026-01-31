@@ -1,0 +1,303 @@
+import { promises as fs } from "fs";
+import path from "path";
+import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+
+import type { Session } from "next-auth";
+import { auth } from "@/auth";
+import {
+  getDrizzleDb,
+  type PostgresDrizzleDb,
+  type SqliteDrizzleDb,
+} from "@/lib/drizzle/client";
+import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+
+export const runtime = "nodejs";
+
+const resolveIsPostgres = () => {
+  const driver = process.env.DB_DRIVER?.toLowerCase();
+  if (driver === "sqlite") return false;
+  if (driver === "postgres") return true;
+  if (process.env.SQLITE_URL) return false;
+  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
+};
+
+const isPostgres = resolveIsPostgres();
+
+const getSessionEmail = (session: Session | null) =>
+  session?.user?.email ?? null;
+
+const fetchUserByEmail = async (email: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    const [user] = await (db as PostgresDrizzleDb)
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email))
+      .limit(1);
+    return user ?? null;
+  }
+  const [user] = await (db as SqliteDrizzleDb)
+    .select()
+    .from(sqliteSchema.users)
+    .where(eq(sqliteSchema.users.email, email))
+    .limit(1);
+  return user ?? null;
+};
+
+const fetchAccounts = async (userId: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    return (db as PostgresDrizzleDb)
+      .select({
+        provider: schema.accounts.provider,
+        access_token: schema.accounts.access_token,
+      })
+      .from(schema.accounts)
+      .where(eq(schema.accounts.userId, userId));
+  }
+  return (db as SqliteDrizzleDb)
+    .select({
+      provider: sqliteSchema.accounts.provider,
+      access_token: sqliteSchema.accounts.access_token,
+    })
+    .from(sqliteSchema.accounts)
+    .where(eq(sqliteSchema.accounts.userId, userId));
+};
+
+export async function GET() {
+  const session = await auth();
+  const email = getSessionEmail(session);
+  if (!email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = await fetchUserByEmail(email);
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const accounts = await fetchAccounts(user.id);
+  const connected = accounts
+    .map((account) => account.provider)
+    .filter((provider): provider is string => Boolean(provider));
+
+  const profiles: Record<string, { image?: string | null; name?: string | null }> = {};
+  const cacheDir = path.join(process.cwd(), "data", "users", user.id, "cache");
+  await fs.mkdir(cacheDir, { recursive: true });
+  const cacheTtlMs: number | null = null;
+
+  const readProfileCache = async (filePath: string) => {
+    try {
+      const raw = await fs.readFile(filePath, "utf8");
+      return JSON.parse(raw) as {
+        fetchedAt: number;
+        name?: string | null;
+        image?: string | null;
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const writeProfileCache = async (
+    filePath: string,
+    data: { fetchedAt: number; name?: string | null; image?: string | null }
+  ) => {
+    await fs.writeFile(filePath, JSON.stringify(data), "utf8");
+  };
+
+  const fetchGoogleProfile = async (token: string) => {
+    const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      name?: string | null;
+      picture?: string | null;
+    };
+    return { name: payload.name ?? null, image: payload.picture ?? null };
+  };
+
+  const fetchGithubProfile = async (token: string) => {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      name?: string | null;
+      login?: string | null;
+      avatar_url?: string | null;
+    };
+    return {
+      name: payload.name ?? payload.login ?? null,
+      image: payload.avatar_url ?? null,
+    };
+  };
+
+  const fetchDiscordProfile = async (token: string) => {
+    const response = await fetch("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      id?: string | null;
+      username?: string | null;
+      global_name?: string | null;
+      avatar?: string | null;
+    };
+    const image =
+      payload.id && payload.avatar
+        ? `https://cdn.discordapp.com/avatars/${payload.id}/${payload.avatar}.png`
+        : null;
+    return {
+      name: payload.global_name ?? payload.username ?? null,
+      image,
+    };
+  };
+
+  const providerFetchers: Record<
+    string,
+    (token: string) => Promise<{ name?: string | null; image?: string | null } | null>
+  > = {
+    google: fetchGoogleProfile,
+    github: fetchGithubProfile,
+    discord: fetchDiscordProfile,
+  };
+
+  await Promise.all(
+    connected.map(async (provider) => {
+      const cacheFile = path.join(cacheDir, `${provider}-profile.json`);
+      const cached = await readProfileCache(cacheFile);
+      if (cached?.fetchedAt && (cacheTtlMs === null || Date.now() - cached.fetchedAt < cacheTtlMs)) {
+        profiles[provider] = {
+          name: cached.name ?? null,
+          image: cached.image ?? null,
+        };
+        return;
+      }
+      const account = accounts.find((item) => item.provider === provider);
+      const fetcher = providerFetchers[provider];
+      if (!account?.access_token || !fetcher) {
+        profiles[provider] = { name: null, image: null };
+        return;
+      }
+      const profile = await fetcher(account.access_token);
+      if (profile) {
+        profiles[provider] = profile;
+        await writeProfileCache(cacheFile, {
+          fetchedAt: Date.now(),
+          name: profile.name ?? null,
+          image: profile.image ?? null,
+        });
+      } else {
+        profiles[provider] = { name: null, image: null };
+      }
+    })
+  );
+
+  return NextResponse.json({ connected, profiles });
+}
+
+export async function DELETE(request: Request) {
+  const session = await auth();
+  const email = getSessionEmail(session);
+  if (!email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const payload = (await request.json().catch(() => null)) as
+    | { provider?: string }
+    | null;
+  const provider = payload?.provider?.trim();
+  if (!provider) {
+    return NextResponse.json({ error: "Missing provider" }, { status: 400 });
+  }
+
+  const user = await fetchUserByEmail(email);
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const db = getDrizzleDb();
+  const accounts = isPostgres
+    ? await (db as PostgresDrizzleDb)
+        .select({ provider: schema.accounts.provider })
+        .from(schema.accounts)
+        .where(eq(schema.accounts.userId, user.id))
+    : await (db as SqliteDrizzleDb)
+        .select({ provider: sqliteSchema.accounts.provider })
+        .from(sqliteSchema.accounts)
+        .where(eq(sqliteSchema.accounts.userId, user.id));
+
+  const linkedProviders = accounts
+    .map((account) => account.provider)
+    .filter((value): value is string => Boolean(value));
+
+  if (!linkedProviders.includes(provider)) {
+    return NextResponse.json({ error: "Provider not linked" }, { status: 404 });
+  }
+
+  const emailProviderEnabled = Boolean(
+    process.env.SMTP_HOST &&
+      process.env.SMTP_PORT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASSWORD &&
+      process.env.SMTP_FROM
+  );
+  const emailVerified =
+    user.emailVerified instanceof Date
+      ? user.emailVerified.getTime() > 0
+      : typeof user.emailVerified === "number"
+        ? user.emailVerified > 0
+        : Boolean(user.emailVerified);
+  const hasEmailFallback = emailProviderEnabled && emailVerified;
+
+  if (linkedProviders.length <= 1 && !hasEmailFallback) {
+    return NextResponse.json(
+      { error: "Cannot unlink the last sign-in method." },
+      { status: 400 }
+    );
+  }
+
+  if (isPostgres) {
+    await (db as PostgresDrizzleDb)
+      .delete(schema.accounts)
+      .where(
+        and(
+          eq(schema.accounts.userId, user.id),
+          eq(schema.accounts.provider, provider)
+        )
+      );
+  } else {
+    await (db as SqliteDrizzleDb)
+      .delete(sqliteSchema.accounts)
+      .where(
+        and(
+          eq(sqliteSchema.accounts.userId, user.id),
+          eq(sqliteSchema.accounts.provider, provider)
+        )
+      );
+  }
+
+  const cacheDir = path.join(process.cwd(), "data", "users", user.id, "cache");
+  const cacheFiles = [
+    `${provider}-profile.json`,
+    `${provider}-avatar.json`,
+    `${provider}-avatar`,
+  ];
+  await Promise.all(
+    cacheFiles.map(async (file) => {
+      try {
+        await fs.unlink(path.join(cacheDir, file));
+      } catch {
+        // ignore missing cache files
+      }
+    })
+  );
+
+  return NextResponse.json({ ok: true });
+}
