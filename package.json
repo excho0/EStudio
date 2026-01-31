@@ -22,6 +22,7 @@
     "seed:content": "pnpm dlx tsx -r tsconfig-paths/register scripts/seed-content.ts"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.1",
     "@neondatabase/serverless": "^1.0.2",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -61,9 +62,12 @@
     "framer-motion": "^12.27.1",
     "immer": "^11.1.3",
     "lucide-react": "^0.562.0",
+    "motion": "^12.29.2",
     "next": "16.1.3",
+    "next-auth": "5.0.0-beta.30",
     "next-themes": "^0.4.6",
     "node-vibrant": "^4.0.3",
+    "nodemailer": "^7.0.7",
     "nprogress": "^0.2.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",

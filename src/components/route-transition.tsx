@@ -99,11 +99,7 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
 }
 
 export function useRouteTransition() {
-  const ctx = useContext(RouteTransitionContext);
-  if (!ctx) {
-    throw new Error("useRouteTransition must be used within RouteTransitionProvider");
-  }
-  return ctx;
+  return useContext(RouteTransitionContext);
 }
 
 type TransitionLinkProps = LinkProps & {
@@ -120,8 +116,24 @@ export function Link({
   children,
   ...rest
 }: TransitionLinkProps) {
-  const { startTransition } = useRouteTransition();
+  const ctx = useRouteTransition();
   const resolvedHref = resolveHref(href);
+
+  if (!ctx) {
+    return (
+      <NextLink
+        href={href}
+        replace={replace}
+        scroll={scroll}
+        onClick={onClick}
+        {...rest}
+      >
+        {children}
+      </NextLink>
+    );
+  }
+
+  const { startTransition } = ctx;
 
   return (
     <NextLink
