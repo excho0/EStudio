@@ -1,11 +1,11 @@
 "use client";
 
 import { Activity } from "lucide-react";
-import { useDashboardSocket } from "../_components/dashboard-socket";
+import { useSocketIO } from "../_components/socketIO-provider";
 import { MetricsPanel } from "../_components/metrics-panel";
 
 export default function DashboardStatsPage() {
-  const { metrics } = useDashboardSocket();
+  const { metrics } = useSocketIO();
 
   return (
     <div className="flex flex-col gap-6">

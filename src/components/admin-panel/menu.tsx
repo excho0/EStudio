@@ -3,6 +3,7 @@
 import { Link } from "@/components/route-transition";
 import { Ellipsis } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 import { cn } from "@/lib/utils";
 import { getMenuList } from "@/lib/menu-list";
@@ -30,6 +31,8 @@ export function Menu({
   variant = "sidebar",
 }: MenuProps) {
   const pathname = usePathname();
+  const { status } = useSession();
+  const isAuthenticated = status === "authenticated";
   const menuList = getMenuList();
 
   const listHeightClass =
@@ -62,8 +65,12 @@ export function Menu({
                 <p className="pb-2"></p>
               )}
               {menus.map(
-                ({ href, label, icon: Icon, active, submenus }, index) =>
-                  !submenus || submenus.length === 0 ? (
+                ({ href, label, icon: Icon, active, submenus }, index) => {
+                  const visibleSubmenus = submenus?.filter(
+                    (submenu) => !submenu.requiresAuth || isAuthenticated
+                  );
+
+                  return !visibleSubmenus || visibleSubmenus.length === 0 ? (
                     <div className="w-full" key={index}>
                       <TooltipProvider disableHoverableContent>
                         <Tooltip delayDuration={100}>
@@ -112,12 +119,13 @@ export function Menu({
                       <CollapseMenuButton
                         icon={Icon}
                         label={label}
-                        submenus={submenus}
+                        submenus={visibleSubmenus}
                         isOpen={isOpen}
                         onNavigate={onNavigate}
                       />
                     </div>
-                  )
+                  );
+                }
               )}
             </li>
           ))}

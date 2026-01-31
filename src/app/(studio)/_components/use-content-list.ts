@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDashboardSocket } from "./dashboard-socket";
+import { useSocketIO } from "./socketIO-provider";
 import { z } from "zod";
 import { contentItemSchema } from "@/lib/data/content";
 
@@ -22,7 +22,7 @@ type ContentListResponse = {
 };
 
 export const useContentList = (options: UseContentListOptions = {}) => {
-  const { eventToken } = useDashboardSocket();
+  const { eventToken } = useSocketIO();
   const query = options.query ?? "";
   const page = options.page ?? 1;
   const limit = options.limit ?? 50;

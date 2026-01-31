@@ -32,13 +32,15 @@ function TooltipProvider({
   )
 }
 
-function Tooltip({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+type TooltipProps = React.ComponentProps<typeof TooltipPrimitive.Root> & {
+  disableMobileDrawer?: boolean
+}
+
+function Tooltip({ disableMobileDrawer = false, ...props }: TooltipProps) {
   const isDrawer = useMediaQuery("(max-width: 1024px)")
   const [open, setOpen] = React.useState(false)
 
-  if (isDrawer) {
+  if (isDrawer && !disableMobileDrawer) {
     return (
       <TooltipContext.Provider value={{ isDrawer: true, open, setOpen }}>
         <Drawer open={open} onOpenChange={setOpen}>

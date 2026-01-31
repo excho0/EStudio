@@ -32,6 +32,8 @@ type Submenu = {
   href: string;
   label: string;
   active?: boolean;
+  icon?: LucideIcon;
+  requiresAuth?: boolean;
 };
 
 interface CollapseMenuButtonProps {
@@ -76,7 +78,7 @@ export function CollapseMenuButton({
               </span>
               <p
                 className={cn(
-                  "max-w-[150px] truncate",
+                  "max-w-37.5 truncate",
                   isOpen
                     ? "translate-x-0 opacity-100"
                     : "-translate-x-96 opacity-0"
@@ -102,7 +104,7 @@ export function CollapseMenuButton({
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-        {submenus.map(({ href, label, active }, index) => (
+        {submenus.map(({ href, label, active, icon: SubIcon }, index) => (
           <Button
             key={index}
             variant={
@@ -116,11 +118,11 @@ export function CollapseMenuButton({
           >
             <Link href={href}>
               <span className="mr-4 ml-2">
-                <Dot size={18} />
+                {SubIcon ? <SubIcon size={16} /> : <Dot size={18} />}
               </span>
               <p
                 className={cn(
-                  "max-w-[170px] truncate",
+                  "max-w-42.5 truncate",
                   isOpen
                     ? "translate-x-0 opacity-100"
                     : "-translate-x-96 opacity-0"
@@ -150,7 +152,7 @@ export function CollapseMenuButton({
                     </span>
                     <p
                       className={cn(
-                        "max-w-[200px] truncate",
+                        "max-w-50 truncate",
                         isOpen === false ? "opacity-0" : "opacity-100"
                       )}
                     >
@@ -167,11 +169,11 @@ export function CollapseMenuButton({
         </Tooltip>
       </TooltipProvider>
       <DropdownMenuContent side="right" sideOffset={25} align="start">
-        <DropdownMenuLabel className="max-w-[190px] truncate">
+        <DropdownMenuLabel className="max-w-52 truncate">
           {label}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {submenus.map(({ href, label, active }, index) => (
+        {submenus.map(({ href, label, active, icon: SubIcon }, index) => (
           <DropdownMenuItem key={index} asChild>
             <Link
               className={`cursor-pointer ${
@@ -181,7 +183,10 @@ export function CollapseMenuButton({
               href={href}
               onClick={onNavigate}
             >
-              <p className="max-w-[180px] truncate">{label}</p>
+              <span className="inline-flex h-6 w-6 items-center justify-center">
+                {SubIcon ? <SubIcon size={16} /> : <Dot size={18} />}
+              </span>
+              <p className="max-w-40 truncate">{label}</p>
             </Link>
           </DropdownMenuItem>
         ))}

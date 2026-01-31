@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TopProgressBar } from "@/components/top-progress-bar";
 import { ToasterResponsive } from "@/components/toaster-responsive";
 import { QueryProvider } from "@/components/query-provider";
+import { AppSessionProvider } from "@/components/session-provider";
+import { SocketIOProvider } from "./(studio)/_components/socketIO-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,18 +33,22 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <QueryProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <TopProgressBar />
-            {children}
-            <ToasterResponsive />
-          </ThemeProvider>
-        </QueryProvider>
+        <SocketIOProvider>
+          <QueryProvider>
+            <AppSessionProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <TopProgressBar />
+                {children}
+                <ToasterResponsive />
+              </ThemeProvider>
+            </AppSessionProvider>
+          </QueryProvider>
+        </SocketIOProvider>
       </body>
     </html>
   );

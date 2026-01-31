@@ -4,8 +4,8 @@ import { MenuIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/admin-panel/menu";
-import { useDashboardSocket } from "@/app/(studio)/_components/dashboard-socket";
-import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
+import { useSocketIO } from "@/app/(studio)/_components/socketIO-provider";
+import { Logo } from "@/components/logo";
 import {
   Sheet,
   SheetHeader,
@@ -16,7 +16,8 @@ import {
 
 export function SheetMenu() {
   const [open, setOpen] = useState(false);
-  const { connected } = useDashboardSocket();
+  const { connected, status } = useSocketIO();
+  const indicatorStatus = connected ? "connected" : status;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -33,15 +34,14 @@ export function SheetMenu() {
             asChild
           >
             <Link href="/dashboard" className="flex items-center gap-2">
-              <ImageWithSkeleton
-                src="/favicon.png"
-                alt="logo"
+              <Logo
+                showText
                 width={42}
                 height={42}
                 wrapperClassName="rounded-full"
                 className="rounded-full"
               />
-              <SheetTitle className="font-bold text-lg">EStudio</SheetTitle>
+              <SheetTitle className="font-bold text-lg hidden">EStudio</SheetTitle>
             </Link>
           </Button>
         </SheetHeader>
@@ -55,24 +55,38 @@ export function SheetMenu() {
           <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
             <span
               className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
-                connected ? "border-emerald-300/60" : "border-amber-300/60"
+                indicatorStatus === "connected"
+                  ? "border-emerald-300/60"
+                  : indicatorStatus === "connecting"
+                    ? "border-amber-300/60"
+                    : "border-rose-300/60"
               }`}
             >
               <span
                 className={`absolute inset-0 rounded-full ${
-                  connected
+                  indicatorStatus === "connected"
                     ? "animate-pulse bg-emerald-400/25"
-                    : "animate-pulse bg-amber-400/25"
+                    : indicatorStatus === "connecting"
+                      ? "animate-pulse bg-amber-400/25"
+                      : "bg-rose-400/25"
                 }`}
                 style={{ animationDuration: "2.6s" }}
               />
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  connected ? "bg-emerald-400" : "bg-amber-400"
+                  indicatorStatus === "connected"
+                    ? "bg-emerald-400"
+                    : indicatorStatus === "connecting"
+                      ? "bg-amber-400"
+                      : "bg-rose-400"
                 }`}
               />
             </span>
-            {connected ? "Connected" : "Connecting"}
+            {indicatorStatus === "connected"
+              ? "Connected"
+              : indicatorStatus === "connecting"
+                ? "Connecting"
+                : "Disconnected"}
           </div>
         </div>
       </SheetContent>

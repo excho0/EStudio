@@ -9,7 +9,7 @@ import {
   FolderOpen,
   HardDrive,
   RotateCcw,
-  Settings2,
+  Globe,
 } from "lucide-react";
 import {
   getNotificationEnabled,
@@ -104,11 +104,11 @@ export default function DashboardSettingsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
-              <Settings2 className="h-5 w-5" />
+              <Globe className="h-5 w-5" />
             </span>
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-50">
-                Settings
+                General
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
                 Storage paths, project stats, and recovery tools.

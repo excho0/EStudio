@@ -4,13 +4,13 @@ import { Sidebar } from "@/components/admin-panel/sidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";
-import { ModeToggle } from "../mode-toggle";
 import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { SidebarToggle } from "./sidebar-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { UserNav } from "@/components/admin-panel/user-nav";
 import {
   RouteTransitionProvider,
   useRouteTransition,
@@ -21,7 +21,8 @@ function AdminPanelShell({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const pathname = usePathname();
-  const { isTransitioning } = useRouteTransition();
+  const transition = useRouteTransition();
+  const isTransitioning = transition?.isTransitioning ?? false;
   if (!sidebar) return null;
   const { isOpen, toggleOpen, getOpenState, settings } = sidebar;
 
@@ -47,7 +48,9 @@ function AdminPanelShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <ModeToggle />
+          <div className="flex items-center gap-3">
+            <UserNav />
+          </div>
         </div>
       </header>
       <Sidebar />

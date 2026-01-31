@@ -2,17 +2,18 @@
 import { Menu } from "@/components/admin-panel/menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useDashboardSocket } from "@/app/(studio)/_components/dashboard-socket";
+import { useSocketIO } from "@/app/(studio)/_components/socketIO-provider";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";
 import { Link } from "@/components/route-transition";
-import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
+import { Logo } from "@/components/logo";
 
 export function Sidebar() {
   const sidebar = useStore(useSidebar, (x) => x);
-  const { connected, socket } = useDashboardSocket();
+  const { connected, socket, status } = useSocketIO();
   const isConnected = connected || socket?.connected === true;
+  const indicatorStatus = isConnected ? "connected" : status;
   if (!sidebar) return null;
   const { getOpenState, setIsHover, settings } = sidebar;
   return (
@@ -34,24 +35,13 @@ export function Sidebar() {
           asChild
         >
           <Link href="/dashboard" className="flex items-center gap-2">
-            <ImageWithSkeleton
-              src="/favicon.png"
-              alt="logo"
+            <Logo
+              showText={getOpenState()}
               width={52}
               height={52}
               wrapperClassName="rounded-full"
               className="rounded-full"
             />
-            <h1
-              className={cn(
-                "font-bold text-lg whitespace-nowrap transition-[transform,opacity,display] ease-in-out duration-300",
-                !getOpenState()
-                  ? "-translate-x-96 opacity-0 hidden"
-                  : "translate-x-0 opacity-100"
-              )}
-            >
-              EStudio
-            </h1>
           </Link>
         </Button>
 
@@ -60,26 +50,40 @@ export function Sidebar() {
         <div className="px-2 py-4">
           {getOpenState() ? (
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+            <span
+              className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
+                indicatorStatus === "connected"
+                  ? "border-emerald-300/60"
+                  : indicatorStatus === "connecting"
+                    ? "border-amber-300/60"
+                    : "border-rose-300/60"
+              }`}
+            >
               <span
-                className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
-                  isConnected ? "border-emerald-300/60" : "border-amber-300/60"
+                className={`absolute inset-0 rounded-full ${
+                  indicatorStatus === "connected"
+                    ? "animate-pulse bg-emerald-400/25"
+                    : indicatorStatus === "connecting"
+                      ? "animate-pulse bg-amber-400/25"
+                      : "bg-rose-400/25"
                 }`}
-              >
-                <span
-                  className={`absolute inset-0 rounded-full ${
-                    isConnected
-                      ? "animate-pulse bg-emerald-400/25"
-                      : "animate-pulse bg-amber-400/25"
-                  }`}
-                  style={{ animationDuration: "2.6s" }}
-                />
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isConnected ? "bg-emerald-400" : "bg-amber-400"
-                  }`}
-                />
-              </span>
-              {isConnected ? "Connected" : "Connecting"}
+                style={{ animationDuration: "2.6s" }}
+              />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  indicatorStatus === "connected"
+                    ? "bg-emerald-400"
+                    : indicatorStatus === "connecting"
+                      ? "bg-amber-400"
+                      : "bg-rose-400"
+                }`}
+              />
+            </span>
+            {indicatorStatus === "connected"
+              ? "Connected"
+              : indicatorStatus === "connecting"
+                ? "Connecting"
+                : "Disconnected"}
             </div>
           ) : (
             <Tooltip>
@@ -87,27 +91,41 @@ export function Sidebar() {
                 <div className="flex items-center justify-center">
                   <span
                     className={`relative flex h-3 w-3 items-center justify-center rounded-full border ${
-                      isConnected ? "border-emerald-300/60" : "border-amber-300/60"
+                      indicatorStatus === "connected"
+                        ? "border-emerald-300/60"
+                        : indicatorStatus === "connecting"
+                          ? "border-amber-300/60"
+                          : "border-rose-300/60"
                     }`}
                   >
                     <span
                       className={`absolute inset-0 rounded-full ${
-                        isConnected
+                        indicatorStatus === "connected"
                           ? "animate-pulse bg-emerald-400/25"
-                          : "animate-pulse bg-amber-400/25"
+                          : indicatorStatus === "connecting"
+                            ? "animate-pulse bg-amber-400/25"
+                            : "bg-rose-400/25"
                       }`}
                       style={{ animationDuration: "2.6s" }}
                     />
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        isConnected ? "bg-emerald-400" : "bg-amber-400"
+                        indicatorStatus === "connected"
+                          ? "bg-emerald-400"
+                          : indicatorStatus === "connecting"
+                            ? "bg-amber-400"
+                            : "bg-rose-400"
                       }`}
                     />
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {isConnected ? "Connected" : "Connecting"}
+                {indicatorStatus === "connected"
+                  ? "Connected"
+                  : indicatorStatus === "connecting"
+                    ? "Connecting"
+                    : "Disconnected"}
               </TooltipContent>
             </Tooltip>
           )}

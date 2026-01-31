@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useDashboardSocket } from "./dashboard-socket";
+import { useSocketIO } from "./socketIO-provider";
 
 export type RenderProgress = {
   id: string;
@@ -12,7 +12,7 @@ export type RenderProgress = {
 };
 
 export const useRenderProgress = () => {
-  const { socket } = useDashboardSocket();
+  const { socket } = useSocketIO();
   const [progressMap, setProgressMap] = useState<Record<string, RenderProgress>>({});
 
   useEffect(() => {

@@ -2,13 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { useDashboardSocket } from "./dashboard-socket";
+import { useSocketIO } from "./socketIO-provider";
 import { notifyRenderComplete } from "@/lib/notifications";
 
 const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
 
 export const RenderNotifications = () => {
-  const { socket } = useDashboardSocket();
+  const { socket } = useSocketIO();
   const playedRef = useRef(new Set<string>());
 
   useEffect(() => {

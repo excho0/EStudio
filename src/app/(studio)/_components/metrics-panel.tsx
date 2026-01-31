@@ -19,7 +19,7 @@ import NvidiaIcon from "@/components/icons/nvidia";
 import AmdIcon from "@/components/icons/amd";
 import IntelIcon from "@/components/icons/intel";
 import { cn } from "@/lib/utils";
-import type { MetricsPayload } from "./dashboard-socket";
+import type { MetricsPayload } from "./socketIO-provider";
 
 const TEMP_THRESHOLDS = {
   low: 50,

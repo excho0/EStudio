@@ -3,15 +3,20 @@ import {
   Folder,
   LayoutGrid,
   Settings,
-  Sparkles,
   Upload,
   LucideIcon,
+  Globe,
+  User,
+  Palette,
+  Cable,
 } from "lucide-react";
 
 type Submenu = {
   href: string;
   label: string;
   active?: boolean;
+  icon?: LucideIcon;
+  requiresAuth?: boolean;
 };
 
 type Menu = {
@@ -68,6 +73,29 @@ export function getMenuList(): Group[] {
           href: "/settings",
           label: "Settings",
           icon: Settings,
+          submenus: [
+            {
+              href: "/settings/general",
+              label: "General",
+              icon: Globe,
+            },
+            {
+              href: "/settings/profile",
+              label: "Profile",
+              icon: User,
+              requiresAuth: true,
+            },
+            {
+              href: "/settings/connections",
+              label: "Connections",
+              icon: Cable,
+            },
+            {
+              href: "/settings/appearance",
+              label: "Appearance",
+              icon: Palette,
+            }
+          ],
         },
       ],
     },
