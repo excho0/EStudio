@@ -7,12 +7,12 @@ import {
 	InputGroupAddon,
 	InputGroupInput,
 } from "@/components/ui/input-group";
-import { AtSignIcon, ChevronLeft, Home } from "lucide-react";
+import { AtSignIcon, ChevronLeft } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
 import { FloatingPaths } from "@/components/branding/floating-paths";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link } from "@/components/navigation/route-transition";
+// import { Link } from "@/components/navigation/route-transition";
 import { Particles } from "@/components/ui/particles";
 
 type AuthProvider = {
@@ -137,12 +137,12 @@ export function AuthPage({
 				/>
 				
 				<div className="flex justify-center items-center pt-4">
-					<Button asChild className="w-fit" variant="ghost">
+					{/* <Button asChild className="w-fit" variant="ghost">
 						<Link href="/">
 							<Home />
 							Home
 						</Link>
-					</Button>
+					</Button> */}
 				</div>
 				<div className="mx-auto space-y-4 sm:w-sm">
 					<div className="flex justify-center items-center pb-4 lg:hidden">

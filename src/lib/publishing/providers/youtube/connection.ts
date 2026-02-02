@@ -243,7 +243,7 @@ export const getYoutubeConnection = async (
 export const getYoutubeAvatar = async (userId: string) => {
   const { cacheDir, avatarFile, avatarMetaFile, channelFile } =
     resolveCachePaths(userId);
-  await ensureDir(cacheDir);
+  await storage.ensureDir(cacheDir);
 
   const cache = await readAvatarMeta(avatarMetaFile);
   const channelCache = await readChannelCache(channelFile);
