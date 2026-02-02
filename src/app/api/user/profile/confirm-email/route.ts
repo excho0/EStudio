@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 
 import {
   getDrizzleDb,
+  isPostgres,
   type PostgresDrizzleDb,
   type SqliteDrizzleDb,
 } from "@/lib/drizzle/client";
@@ -11,14 +12,6 @@ import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 export const runtime = "nodejs";
 
 const EMAIL_CHANGE_TOKEN_TYPE = "email_change";
-const resolveIsPostgres = () => {
-  const driver = process.env.DB_DRIVER?.toLowerCase();
-  if (driver === "sqlite") return false;
-  if (driver === "postgres") return true;
-  if (process.env.SQLITE_URL) return false;
-  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
-};
-const isPostgres = resolveIsPostgres();
 
 const getExpiresMs = (value: unknown) => {
   if (typeof value === "number") return value;

@@ -5,25 +5,12 @@ import crypto from "crypto";
 
 import type { Session } from "next-auth";
 import { auth } from "@/auth";
-import {
-  getDrizzleDb,
-  type PostgresDrizzleDb,
-  type SqliteDrizzleDb,
-} from "@/lib/drizzle/client";
+import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { sendEmailChangeVerification } from "@/lib/email";
 
 export const runtime = "nodejs";
 
-const resolveIsPostgres = () => {
-  const driver = process.env.DB_DRIVER?.toLowerCase();
-  if (driver === "sqlite") return false;
-  if (driver === "postgres") return true;
-  if (process.env.SQLITE_URL) return false;
-  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
-};
-
-const isPostgres = resolveIsPostgres();
 
 const profileSchema = z.object({
   name: z.string().trim().min(1).max(80),

@@ -14,6 +14,16 @@ export type DrizzleDb = PostgresDrizzleDb | SqliteDrizzleDb;
 
 let cachedDb: DrizzleDb | null = null;
 
+export const resolveIsPostgres = () => {
+  const driver = process.env.DB_DRIVER?.toLowerCase();
+  if (driver === "sqlite") return false;
+  if (driver === "postgres") return true;
+  if (process.env.SQLITE_URL) return false;
+  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
+};
+
+export const isPostgres = resolveIsPostgres();
+
 function createSqliteDb(): SqliteDrizzleDb {
   const sqliteUrl = process.env.SQLITE_URL ?? "file:./data/app.db";
   const filePath = sqliteUrl.startsWith("file:") ? sqliteUrl.slice("file:".length) : sqliteUrl;

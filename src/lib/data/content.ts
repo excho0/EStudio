@@ -4,12 +4,11 @@ import { z } from "zod";
 
 import {
   getDrizzleDb,
+  isPostgres,
   type PostgresDrizzleDb,
   type SqliteDrizzleDb,
 } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
-
-const isPostgres = Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
 
 const getDb = () => getDrizzleDb();
 

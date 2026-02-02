@@ -6,24 +6,11 @@ import { and, eq } from "drizzle-orm";
 
 import type { Session } from "next-auth";
 import { auth } from "@/auth";
-import {
-  getDrizzleDb,
-  type PostgresDrizzleDb,
-  type SqliteDrizzleDb,
-} from "@/lib/drizzle/client";
+import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 
 export const runtime = "nodejs";
 
-const resolveIsPostgres = () => {
-  const driver = process.env.DB_DRIVER?.toLowerCase();
-  if (driver === "sqlite") return false;
-  if (driver === "postgres") return true;
-  if (process.env.SQLITE_URL) return false;
-  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
-};
-
-const isPostgres = resolveIsPostgres();
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;

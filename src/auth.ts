@@ -6,7 +6,7 @@ import Nodemailer from "next-auth/providers/nodemailer";
 import type { Provider } from "next-auth/providers";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 
-import { getDrizzleDb } from "@/lib/drizzle/client";
+import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import {
   accounts,
   accountsPg,
@@ -20,15 +20,6 @@ import {
   verificationTokensPg,
 } from "@/lib/drizzle/schema";
 
-const resolveIsPostgres = () => {
-  const driver = process.env.DB_DRIVER?.toLowerCase();
-  if (driver === "sqlite") return false;
-  if (driver === "postgres") return true;
-  if (process.env.SQLITE_URL) return false;
-  return Boolean(process.env.POSTGRES_URL ?? process.env.DATABASE_URL);
-};
-
-const isPostgres = resolveIsPostgres();
 
 const providers: Provider[] = [];
 
