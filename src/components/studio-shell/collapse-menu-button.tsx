@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { useState } from "react";
 import { ChevronDown, Dot, LucideIcon } from "lucide-react";
 

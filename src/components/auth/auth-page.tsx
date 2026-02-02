@@ -1,6 +1,6 @@
 "use client";
 
-import { Logo } from "@/components/logo";
+import { Logo } from "@/components/branding/logo";
 import { Button } from "@/components/ui/button";
 import {
 	InputGroup,
@@ -10,10 +10,10 @@ import {
 import { AtSignIcon, ChevronLeft, Home } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
-import { FloatingPaths } from "@/components/floating-paths";
+import { FloatingPaths } from "@/components/branding/floating-paths";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link } from "./route-transition";
-import { Particles } from "./ui/particles";
+import { Link } from "@/components/navigation/route-transition";
+import { Particles } from "@/components/ui/particles";
 
 type AuthProvider = {
 	id: "google" | "github" | "discord";

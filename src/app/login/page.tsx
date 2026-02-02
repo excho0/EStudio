@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AuthPage, authProviderIcons } from "@/components/auth-page";
+import { AuthPage, authProviderIcons } from "@/components/auth/auth-page";
 
 const allProviders = [
   {

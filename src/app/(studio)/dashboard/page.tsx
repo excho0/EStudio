@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
-import { useContentList, type ContentItem } from "../_components/use-content-list";
-import { useRenderProgress } from "../_components/use-render-progress";
+import { useContentList, type ContentItem } from "@/components/studio/use-content-list";
+import { useRenderProgress } from "@/components/studio/use-render-progress";
 import {
   Activity,
   CheckCircle2,

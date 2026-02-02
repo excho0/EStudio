@@ -1,4 +1,4 @@
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 
 export function Footer() {
   return (

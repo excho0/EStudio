@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useRouteTransition } from "@/components/route-transition";
+import { useRouteTransition } from "@/components/navigation/route-transition";
 import {
   DropdownMenu,
   DropdownMenuContent,

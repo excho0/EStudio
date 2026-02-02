@@ -18,12 +18,12 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useContentList, type ContentItem } from "../_components/use-content-list";
-import { useRenderProgress } from "../_components/use-render-progress";
+import { useContentList, type ContentItem } from "@/components/studio/use-content-list";
+import { useRenderProgress } from "@/components/studio/use-render-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
-import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
-import { PublishDrawer } from "@/components/publish-drawer";
+import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
+import { PublishDrawer } from "@/components/publishing/publish-drawer";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   CheckCircle2,

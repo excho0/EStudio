@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import AdminPanelLayout from "@/components/admin-panel/admin-panel-layout";
-import { RenderNotifications } from "@/app/(studio)/_components/render-notifications";
+import StudioShellLayout from "@/components/studio-shell/studio-shell-layout";
+import { RenderNotifications } from "@/components/studio/render-notifications";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <>    
       <RenderNotifications />
-      <AdminPanelLayout>{children}</AdminPanelLayout>
+      <StudioShellLayout>{children}</StudioShellLayout>
     </>
   );
 }

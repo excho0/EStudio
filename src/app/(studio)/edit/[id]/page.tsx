@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -62,7 +62,7 @@ import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
-import { ContentItem } from "../../_components/use-content-list";
+import { ContentItem } from "@/components/studio/use-content-list";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },

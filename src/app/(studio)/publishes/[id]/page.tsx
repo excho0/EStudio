@@ -1,14 +1,14 @@
 "use client";
 
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Film, List, Radio, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table } from "@/components/ui/table";
-import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
+import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
 import {
   ResponsiveDrawer,
   ResponsiveDrawerContent,

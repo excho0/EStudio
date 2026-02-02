@@ -1,13 +1,13 @@
 "use client";
-import { Menu } from "@/components/admin-panel/menu";
+import { Menu } from "@/components/studio-shell/menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useSocketIO } from "@/app/(studio)/_components/socketIO-provider";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";
-import { Link } from "@/components/route-transition";
-import { Logo } from "@/components/logo";
+import { Link } from "@/components/navigation/route-transition";
+import { Logo } from "@/components/branding/logo";
 
 export function Sidebar() {
   const sidebar = useStore(useSidebar, (x) => x);

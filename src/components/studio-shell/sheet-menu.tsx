@@ -1,11 +1,11 @@
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { useState } from "react";
 import { MenuIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Menu } from "@/components/admin-panel/menu";
-import { useSocketIO } from "@/app/(studio)/_components/socketIO-provider";
-import { Logo } from "@/components/logo";
+import { Menu } from "@/components/studio-shell/menu";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { Logo } from "@/components/branding/logo";
 import {
   Sheet,
   SheetHeader,

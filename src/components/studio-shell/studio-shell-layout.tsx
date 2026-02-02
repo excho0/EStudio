@@ -1,22 +1,22 @@
 "use client";
 
-import { Sidebar } from "@/components/admin-panel/sidebar";
+import { Sidebar } from "@/components/studio-shell/sidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";
-import { SheetMenu } from "@/components/admin-panel/sheet-menu";
+import { SheetMenu } from "@/components/studio-shell/sheet-menu";
 import { SidebarToggle } from "./sidebar-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { UserNav } from "@/components/admin-panel/user-nav";
+import { UserNav } from "@/components/studio-shell/user-nav";
 import {
   RouteTransitionProvider,
   useRouteTransition,
-} from "@/components/route-transition";
+} from "@/components/navigation/route-transition";
 
-function AdminPanelShell({ children }: { children: React.ReactNode }) {
+function StudioShell({ children }: { children: React.ReactNode }) {
   const sidebar = useStore(useSidebar, (x) => x);
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(max-width: 1024px)");
@@ -82,10 +82,10 @@ function AdminPanelShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AdminPanelLayout({ children }: { children: React.ReactNode }) {
+export default function StudioShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <RouteTransitionProvider>
-      <AdminPanelShell>{children}</AdminPanelShell>
+      <StudioShell>{children}</StudioShell>
     </RouteTransitionProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { LogOut, UserRoundPen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";

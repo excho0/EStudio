@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import CardUpload, {
   type FileUploadItem,
-} from "@/components/file-upload/card-upload";
+} from "@/components/upload/card-upload";
 import {
   Collapsible,
   CollapsibleContent,
@@ -41,7 +41,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useContentList } from "../_components/use-content-list";
+import { useContentList } from "@/components/studio/use-content-list";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isFieldInvalid } from "@/lib/validation";
@@ -51,7 +51,7 @@ import {
   StepperHeader,
   StepperMotion,
   StepperShell,
-} from "@/components/animated-stepper";
+} from "@/components/controls/animated-stepper";
 import { motion } from "framer-motion";
 
 const initialForm = {

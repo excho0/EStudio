@@ -1,8 +1,8 @@
 "use client";
 
 import { Activity } from "lucide-react";
-import { useSocketIO } from "../_components/socketIO-provider";
-import { MetricsPanel } from "../_components/metrics-panel";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { MetricsPanel } from "@/components/studio/metrics-panel";
 
 export default function DashboardStatsPage() {
   const { metrics } = useSocketIO();

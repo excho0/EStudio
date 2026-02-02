@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectableCard } from "@/components/ui/selectable-card";
-import DatePickerStandard2 from "@/components/date-picker-standard-2";
+import DatePickerStandard2 from "@/components/controls/date-picker-standard-2";
 import {
   Select,
   SelectContent,
@@ -48,11 +48,11 @@ import {
   StepperHeader,
   StepperMotion,
   StepperShell,
-} from "@/components/animated-stepper";
+} from "@/components/controls/animated-stepper";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSocketIO } from "@/app/(studio)/_components/socketIO-provider";
-import { Link } from "./route-transition";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { Link } from "@/components/navigation/route-transition";
 
 type PublishTarget = {
   id: string;

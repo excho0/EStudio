@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "@/components/route-transition";
+import { Link } from "@/components/navigation/route-transition";
 import { Ellipsis } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { getMenuList } from "@/lib/menu-list";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CollapseMenuButton } from "@/components/admin-panel/collapse-menu-button";
+import { CollapseMenuButton } from "@/components/studio-shell/collapse-menu-button";
 import {
   Tooltip,
   TooltipTrigger,
