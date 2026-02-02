@@ -1,1 +1,0 @@
-ALTER TABLE `content_items` ADD `color_palette` text;

@@ -5,71 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1769190589751,
-      "tag": "0000_puzzling_wendigo",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1769269871149,
-      "tag": "0001_typical_edwin_jarvis",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1769274158746,
-      "tag": "0002_thin_madame_web",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1769298966918,
-      "tag": "0003_high_agent_brand",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1769544598606,
-      "tag": "0004_long_firelord",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1769546296996,
-      "tag": "0005_gigantic_the_call",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1769796021918,
-      "tag": "0006_overrated_nebula",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1769883982977,
-      "tag": "0007_sweet_squadron_sinister",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1769963856424,
-      "tag": "0008_fat_stranger",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1769978489963,
-      "tag": "0009_cloudy_korath",
+      "when": 1770058045715,
+      "tag": "0000_curvy_groot",
       "breakpoints": true
     }
   ]

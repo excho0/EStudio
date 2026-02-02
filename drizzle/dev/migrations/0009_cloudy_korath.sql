@@ -1,1 +1,0 @@
-ALTER TABLE `publishes` ADD `publishAttempts` integer DEFAULT 0 NOT NULL;

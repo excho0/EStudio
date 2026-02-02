@@ -1,1 +1,0 @@
-ALTER TABLE `content_items` ADD `scale_percent` real DEFAULT 100 NOT NULL;

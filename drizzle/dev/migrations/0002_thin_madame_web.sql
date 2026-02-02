@@ -1,1 +1,0 @@
-ALTER TABLE `content_items` ADD `palette_mode` text DEFAULT 'auto' NOT NULL;
