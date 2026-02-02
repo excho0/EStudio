@@ -1,36 +1,35 @@
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { contentPaths, resolveContentPath } from "@/lib/content-store";
+import { contentKeys } from "@/lib/content-store";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 const DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
-const draftBaseDir = path.join(contentPaths.uploadsDir, "drafts");
+const storage = getStorage();
+const draftBaseDir = storageKey(contentKeys.uploadsDir, "drafts");
 
 const ensureDraftDirs = async () => {
-  await fs.mkdir(path.join(draftBaseDir, "thumbnails"), { recursive: true });
-  await fs.mkdir(path.join(draftBaseDir, "videos"), { recursive: true });
-  await fs.mkdir(path.join(draftBaseDir, "songs"), { recursive: true });
+  await storage.ensureDir(storageKey(draftBaseDir, "thumbnails"));
+  await storage.ensureDir(storageKey(draftBaseDir, "videos"));
+  await storage.ensureDir(storageKey(draftBaseDir, "songs"));
 };
 
 const cleanupDrafts = async () => {
   const now = Date.now();
-  const entries = await fs.readdir(draftBaseDir, { withFileTypes: true }).catch(() => []);
+  const entries = await storage.list(draftBaseDir);
   await Promise.all(
     entries.map(async (entry) => {
-      if (!entry.isDirectory()) return;
-      const dir = path.join(draftBaseDir, entry.name);
-      const files = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      const dirKey = storageKey(draftBaseDir, entry);
+      const files = await storage.list(dirKey);
       await Promise.all(
         files.map(async (file) => {
-          if (!file.isFile()) return;
-          const filePath = path.join(dir, file.name);
-          const stats = await fs.stat(filePath).catch(() => null);
+          const fileKey = storageKey(dirKey, file);
+          const stats = await storage.stat(fileKey);
           if (!stats) return;
           if (now - stats.mtimeMs > DRAFT_TTL_MS) {
-            await fs.rm(filePath, { force: true });
+            await storage.deleteFile(fileKey);
           }
         })
       );
@@ -42,14 +41,14 @@ const writeDraft = async (file: File, kind: "thumbnail" | "video" | "song") => {
   const extension = path.extname(file.name || "");
   const id = randomUUID();
   const fileName = `${id}${extension || ""}`;
-  const targetDir = path.join(draftBaseDir, `${kind}s`);
-  const targetPath = path.join(targetDir, fileName);
+  const targetDir = storageKey(draftBaseDir, `${kind}s`);
+  const targetPath = storageKey(targetDir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await fs.mkdir(targetDir, { recursive: true });
-  await fs.writeFile(targetPath, buffer);
+  await storage.ensureDir(targetDir);
+  await storage.writeFile(targetPath, buffer);
 
-  return path.relative(contentPaths.baseDir, targetPath);
+  return targetPath;
 };
 
 export async function POST(request: Request) {
@@ -82,7 +81,9 @@ export async function DELETE(request: Request) {
   if (!body?.path) {
     return NextResponse.json({ error: "Missing path." }, { status: 400 });
   }
-  const absolutePath = resolveContentPath(body.path);
-  await fs.rm(absolutePath, { force: true });
+  if (!body.path.startsWith(draftBaseDir)) {
+    return NextResponse.json({ error: "Invalid path." }, { status: 400 });
+  }
+  await storage.deleteFile(body.path);
   return NextResponse.json({ ok: true });
 }

@@ -16,7 +16,9 @@ export type PublishPayload = {
   userId?: string;
   contentId?: string;
   renderId: string;
+  renderKey?: string;
   renderPath?: string;
+  thumbnailKey?: string | null;
   thumbnailPath?: string | null;
   metadata: PublishMetadata;
   options?: PublishOptions;

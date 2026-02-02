@@ -1,4 +1,3 @@
-import fs from "fs";
 import path from "path";
 
 import Database from "better-sqlite3";
@@ -7,6 +6,7 @@ import { drizzle as drizzleNeon, type NeonHttpDatabase } from "drizzle-orm/neon-
 import { drizzle as drizzleSqlite, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { ensureDirPathSync } from "@/lib/storage";
 
 export type PostgresDrizzleDb = NeonHttpDatabase<typeof schema>;
 export type SqliteDrizzleDb = BetterSQLite3Database<typeof sqliteSchema>;
@@ -29,7 +29,7 @@ function createSqliteDb(): SqliteDrizzleDb {
   const filePath = sqliteUrl.startsWith("file:") ? sqliteUrl.slice("file:".length) : sqliteUrl;
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
 
-  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  ensureDirPathSync(path.dirname(absolutePath));
 
   console.info(`[db] Using SQLite database at ${absolutePath}`);
   const database = new Database(absolutePath);

@@ -1,6 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
-
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
@@ -8,9 +5,11 @@ import type { Session } from "next-auth";
 import { auth } from "@/auth";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
+const storage = getStorage();
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;
@@ -107,14 +106,10 @@ const getDiscordProfileImage = async (accessToken: string) => {
   return `https://cdn.discordapp.com/avatars/${payload.id}/${payload.avatar}.png`;
 };
 
-const ensureDir = async (dir: string) => {
-  await fs.mkdir(dir, { recursive: true });
-};
-
 const readCacheMeta = async (filePath: string) => {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as {
+    const raw = await storage.readFile(filePath);
+    return JSON.parse(raw.toString("utf8")) as {
       fetchedAt: number;
       contentType?: string;
       sourceUrl?: string;
@@ -126,8 +121,8 @@ const readCacheMeta = async (filePath: string) => {
 
 const readProfileCache = async (filePath: string) => {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as {
+    const raw = await storage.readFile(filePath);
+    return JSON.parse(raw.toString("utf8")) as {
       fetchedAt: number;
       name?: string | null;
       image?: string | null;
@@ -141,7 +136,7 @@ const writeCacheMeta = async (
   filePath: string,
   meta: { fetchedAt: number; contentType?: string; sourceUrl?: string }
 ) => {
-  await fs.writeFile(filePath, JSON.stringify(meta), "utf8");
+  await storage.writeFile(filePath, JSON.stringify(meta));
 };
 
 export async function GET(request: Request) {
@@ -162,11 +157,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const cacheDir = path.join(process.cwd(), "data", "users", user.id, "cache");
-  await ensureDir(cacheDir);
-  const imageFile = path.join(cacheDir, `${provider}-avatar`);
-  const metaFile = path.join(cacheDir, `${provider}-avatar.json`);
-  const profileFile = path.join(cacheDir, `${provider}-profile.json`);
+  const cacheDir = storageKey("users", user.id, "cache");
+  await storage.ensureDir(cacheDir);
+  const imageFile = storageKey(cacheDir, `${provider}-avatar`);
+  const metaFile = storageKey(cacheDir, `${provider}-avatar.json`);
+  const profileFile = storageKey(cacheDir, `${provider}-profile.json`);
 
   const cache = await readCacheMeta(metaFile);
   const cacheTtlMs: number | null = null;
@@ -181,7 +176,7 @@ export async function GET(request: Request) {
 
   if (isCacheFresh && cacheMatchesProfile) {
     try {
-      const file = await fs.readFile(imageFile);
+      const file = await storage.readFile(imageFile);
       return new NextResponse(file, {
         headers: {
           "Content-Type": cache?.contentType ?? "image/png",
@@ -218,7 +213,7 @@ export async function GET(request: Request) {
 
   const contentType = imageResponse.headers.get("content-type") ?? "image/png";
   const buffer = Buffer.from(await imageResponse.arrayBuffer());
-  await fs.writeFile(imageFile, buffer);
+  await storage.writeFile(imageFile, buffer);
   await writeCacheMeta(metaFile, {
     fetchedAt: Date.now(),
     contentType,

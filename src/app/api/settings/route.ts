@@ -1,25 +1,28 @@
-import { promises as fs } from "fs";
 import { NextResponse } from "next/server";
-import { contentPaths } from "@/lib/content-store";
+import {
+  contentKeys,
+  contentPaths,
+  getContentManifestsDir,
+  getContentRendersRootDir,
+} from "@/lib/content-store";
 import { getContentStats } from "@/lib/data/content";
+import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
-const countFiles = async (path: string) => {
-  try {
-    const entries = await fs.readdir(path);
-    return entries.length;
-  } catch {
-    return 0;
-  }
+const storage = getStorage();
+
+const countFiles = async (key: string) => {
+  const entries = await storage.list(key);
+  return entries.length;
 };
 
 export async function GET() {
   const stats = await getContentStats();
   const [uploadsCount, rendersCount, manifestsCount] = await Promise.all([
-    countFiles(contentPaths.videosDir),
-    countFiles(contentPaths.rendersDir),
-    countFiles(contentPaths.manifestsDir),
+    countFiles(contentKeys.videosDir),
+    countFiles(getContentRendersRootDir()),
+    countFiles(getContentManifestsDir()),
   ]);
 
   return NextResponse.json({

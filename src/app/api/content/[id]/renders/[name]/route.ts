@@ -1,10 +1,12 @@
-import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { getContentRenderDir, resolveContentPath } from "@/lib/content-store";
+import { getContentRenderDir } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
+
+const storage = getStorage();
 
 export async function DELETE(
   _request: Request,
@@ -21,9 +23,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid render name." }, { status: 400 });
   }
 
-  const renderDir = resolveContentPath(getContentRenderDir(id));
-  const targetPath = path.join(renderDir, safeName);
-  await fs.rm(targetPath, { force: true });
+  const renderDir = getContentRenderDir(id);
+  const targetPath = storageKey(renderDir, safeName);
+  await storage.deleteFile(targetPath);
 
   return NextResponse.json({ ok: true });
 }

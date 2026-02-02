@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
@@ -7,9 +5,11 @@ import type { Session } from "next-auth";
 import { auth } from "@/auth";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
+const storage = getStorage();
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;
@@ -70,14 +70,14 @@ export async function GET() {
     .filter((provider): provider is string => Boolean(provider));
 
   const profiles: Record<string, { image?: string | null; name?: string | null }> = {};
-  const cacheDir = path.join(process.cwd(), "data", "users", user.id, "cache");
-  await fs.mkdir(cacheDir, { recursive: true });
+  const cacheDir = storageKey("users", user.id, "cache");
+  await storage.ensureDir(cacheDir);
   const cacheTtlMs: number | null = null;
 
   const readProfileCache = async (filePath: string) => {
     try {
-      const raw = await fs.readFile(filePath, "utf8");
-      return JSON.parse(raw) as {
+      const raw = await storage.readFile(filePath);
+      return JSON.parse(raw.toString("utf8")) as {
         fetchedAt: number;
         name?: string | null;
         image?: string | null;
@@ -91,7 +91,7 @@ export async function GET() {
     filePath: string,
     data: { fetchedAt: number; name?: string | null; image?: string | null }
   ) => {
-    await fs.writeFile(filePath, JSON.stringify(data), "utf8");
+    await storage.writeFile(filePath, JSON.stringify(data));
   };
 
   const fetchGoogleProfile = async (token: string) => {
@@ -157,7 +157,7 @@ export async function GET() {
 
   await Promise.all(
     connected.map(async (provider) => {
-      const cacheFile = path.join(cacheDir, `${provider}-profile.json`);
+      const cacheFile = storageKey(cacheDir, `${provider}-profile.json`);
       const cached = await readProfileCache(cacheFile);
       if (cached?.fetchedAt && (cacheTtlMs === null || Date.now() - cached.fetchedAt < cacheTtlMs)) {
         profiles[provider] = {
@@ -270,7 +270,7 @@ export async function DELETE(request: Request) {
       );
   }
 
-  const cacheDir = path.join(process.cwd(), "data", "users", user.id, "cache");
+  const cacheDir = storageKey("users", user.id, "cache");
   const cacheFiles = [
     `${provider}-profile.json`,
     `${provider}-avatar.json`,
@@ -279,7 +279,7 @@ export async function DELETE(request: Request) {
   await Promise.all(
     cacheFiles.map(async (file) => {
       try {
-        await fs.unlink(path.join(cacheDir, file));
+        await storage.deleteFile(storageKey(cacheDir, file));
       } catch {
         // ignore missing cache files
       }

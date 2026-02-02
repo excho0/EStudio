@@ -1,10 +1,11 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
-import { getContentRenderDir, resolveContentPath } from "@/lib/content-store";
+import { getContentRenderDir } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
+
+const storage = getStorage();
 
 const parsePositiveInt = (value: string | null, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -27,11 +28,9 @@ export async function GET(
   const limitRaw = parsePositiveInt(searchParams.get("limit"), 20);
   const limit = Math.min(100, Math.max(1, limitRaw));
 
-  const renderDir = resolveContentPath(getContentRenderDir(id));
-  let entries: string[] = [];
-  try {
-    entries = await fs.readdir(renderDir);
-  } catch {
+  const renderDir = getContentRenderDir(id);
+  const entries = await storage.list(renderDir);
+  if (entries.length === 0) {
     return NextResponse.json({
       page,
       limit,
@@ -44,17 +43,13 @@ export async function GET(
   const stats = (
     await Promise.all(
       candidates.map(async (name) => {
-        const absolutePath = path.join(renderDir, name);
-        try {
-          const stat = await fs.stat(absolutePath);
-          return {
-            name,
-            size: stat.size,
-            mtimeMs: stat.mtimeMs,
-          };
-        } catch {
-          return null;
-        }
+        const stat = await storage.stat(storageKey(renderDir, name));
+        if (!stat) return null;
+        return {
+          name,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+        };
       })
     )
   ).filter((entry): entry is { name: string; size: number; mtimeMs: number } =>

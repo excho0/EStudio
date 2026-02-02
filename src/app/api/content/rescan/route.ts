@@ -1,26 +1,24 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
 import {
-  contentPaths,
   ensureContentStore,
   findContentAssetPath,
+  getContentManifestsDir,
 } from "@/lib/content-store";
 import {
   contentCreateSchema,
   createContentItem,
   getContentItem,
 } from "@/lib/data/content";
+import { getStorage, storageKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 export async function POST() {
   await ensureContentStore();
-  const manifestsDir = contentPaths.manifestsDir;
-  let files: string[] = [];
-  try {
-    files = await fs.readdir(manifestsDir);
-  } catch {
+  const storage = getStorage();
+  const manifestsDir = getContentManifestsDir();
+  const files = await storage.list(manifestsDir);
+  if (files.length === 0) {
     return NextResponse.json(
       { created: 0, skipped: 0, errors: ["Manifest directory not found."] },
       { status: 404 }
@@ -40,12 +38,16 @@ export async function POST() {
 
   for (const file of manifestFiles) {
     try {
-      const fullPath = path.join(manifestsDir, file);
+      const manifestPath = storageKey(manifestsDir, file);
       const [raw, stat] = await Promise.all([
-        fs.readFile(fullPath, "utf-8"),
-        fs.stat(fullPath),
+        storage.readFile(manifestPath),
+        storage.stat(manifestPath),
       ]);
-      const data = JSON.parse(raw) as Record<string, unknown>;
+      if (!stat) {
+        throw new Error("Missing manifest stat.");
+      }
+      const text = raw.toString("utf-8");
+      const data = JSON.parse(text) as Record<string, unknown>;
       const createdAt =
         typeof data.createdAt === "string" ? Date.parse(data.createdAt) : NaN;
       const sortTime = Number.isFinite(createdAt) ? createdAt : stat.mtimeMs;

@@ -1,14 +1,13 @@
-import { createReadStream, promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
   findContentAssetPath,
   findLatestRenderPath,
   getContentRenderDir,
-  resolveContentPath,
 } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
 import { Readable } from "stream";
+import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -26,6 +25,7 @@ const maxCacheMb = Number(process.env.ASSET_MEMORY_CACHE_MAX_MB ?? "128");
 const maxCacheBytes = Number.isFinite(maxCacheMb)
   ? Math.max(0, maxCacheMb) * 1024 * 1024
   : 0;
+const storage = getStorage();
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,9 +117,11 @@ export async function GET(
     return NextResponse.json({ error: "Asset not available" }, { status: 404 });
   }
 
-  const absolutePath = resolveContentPath(relativePath);
-  const stat = await fs.stat(absolutePath);
-  const extension = path.extname(absolutePath).toLowerCase();
+  const stat = await storage.stat(relativePath);
+  if (!stat) {
+    return NextResponse.json({ error: "Asset not available" }, { status: 404 });
+  }
+  const extension = path.extname(relativePath).toLowerCase();
   const contentType = mimeByExtension[extension] ?? "application/octet-stream";
   const range = request.headers.get("range");
   const canRange = contentType.startsWith("video/") || contentType.startsWith("audio/");
@@ -149,7 +151,10 @@ export async function GET(
 
     const safeEnd = Math.min(end, stat.size - 1);
     const chunkSize = safeEnd - start + 1;
-    const stream = createReadStream(absolutePath, { start, end: safeEnd });
+    const stream = storage.createReadStream(relativePath, {
+      start,
+      end: safeEnd,
+    });
 
     return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
       status: 206,
@@ -165,7 +170,7 @@ export async function GET(
   }
 
   if (shouldCacheAsset(contentType, stat.size)) {
-    const cacheKey = absolutePath;
+  const cacheKey = relativePath;
     const cached = assetCache.get(cacheKey);
     if (cached && cached.mtimeMs === stat.mtimeMs) {
       cached.accessedAt = Date.now();
@@ -180,7 +185,7 @@ export async function GET(
       });
     }
 
-    const buffer = await fs.readFile(absolutePath);
+    const buffer = await storage.readFile(relativePath);
     cacheAsset(cacheKey, {
       buffer,
       contentType,
@@ -198,7 +203,7 @@ export async function GET(
     });
   }
 
-  const stream = createReadStream(absolutePath);
+  const stream = storage.createReadStream(relativePath);
   return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
     headers: {
       ...corsHeaders,

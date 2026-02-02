@@ -1,4 +1,3 @@
-import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { spawn } from "child_process";
@@ -9,6 +8,7 @@ import {
   getContentRenderPath,
   resolveContentPath,
 } from "@/lib/content-store";
+import { createTempDir, getStorage, removePath, writeFilePath } from "@/lib/storage";
 import {
   emitContentUpdate,
   emitRenderComplete,
@@ -18,6 +18,8 @@ import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/helpers";
 
 export const runtime = "nodejs";
+
+const storage = getStorage();
 
 type RenderJob = {
   id: string;
@@ -370,9 +372,7 @@ const startRenderJob = async ({
         `[render] multi instances=${instanceCount} chunkSize=${chunkSize} perInstanceConcurrency=${String(perInstanceConcurrency)}`
       );
 
-      const tempDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), "remotion-multi-")
-      );
+      const tempDir = await createTempDir("remotion-multi");
       const listPath = path.join(tempDir, "concat.txt");
       const chunkPaths = ranges.map((range, index) =>
         path.join(tempDir, `chunk-${index}.mp4`)
@@ -518,7 +518,7 @@ const startRenderJob = async ({
       const listContent = chunkPaths
         .map((chunkPath) => `file '${chunkPath.replace(/'/g, "'\\''")}'`)
         .join("\n");
-      await fs.writeFile(listPath, listContent, "utf8");
+      await writeFilePath(listPath, listContent);
 
       console.log(
         `[render] concat start chunks=${chunkPaths.length} -> ${concatPath}`
@@ -564,7 +564,7 @@ const startRenderJob = async ({
       ]);
       console.log("[render] mux done");
 
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await removePath(tempDir, { recursive: true, force: true });
     }
     const elapsedSeconds = Math.max(0.001, (Date.now() - startedAt) / 1000);
     const avgFps = Math.round(totalFrames / elapsedSeconds);
@@ -612,11 +612,12 @@ export async function POST(
   await updateContentItem(id, { status: "rendering" });
   emitContentUpdate({ type: "content:status", id, status: "rendering" });
 
-  const renderDir = resolveContentPath(getContentRenderDir(id));
-  await fs.mkdir(renderDir, { recursive: true });
+  const renderDirKey = getContentRenderDir(id);
+  await storage.ensureDir(renderDirKey);
+  const renderDir = resolveContentPath(renderDirKey);
   let nextIndex = 1;
   try {
-    const entries = await fs.readdir(renderDir);
+    const entries = await storage.list(renderDirKey);
     const mp4Count = entries.filter((entry) => entry.toLowerCase().endsWith(".mp4"))
       .length;
     nextIndex = mp4Count + 1;

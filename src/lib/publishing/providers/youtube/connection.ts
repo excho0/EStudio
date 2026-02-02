@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { and, eq } from "drizzle-orm";
 
 import {
@@ -13,6 +11,7 @@ import {
   YOUTUBE_AVATAR_ENDPOINT,
   YOUTUBE_OAUTH_PROVIDER_ID,
 } from "@/lib/publishing/providers/youtube/constants";
+import { getStorage, storageKey } from "@/lib/storage";
 
 type YoutubeChannel = {
   id?: string | null;
@@ -37,14 +36,12 @@ export type YoutubeConnection = {
   channel?: YoutubeChannel;
 };
 
-const ensureDir = async (dir: string) => {
-  await fs.mkdir(dir, { recursive: true });
-};
+const storage = getStorage();
 
 const readChannelCache = async (filePath: string): Promise<YoutubeChannelCache> => {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as YoutubeChannelCache;
+    const raw = await storage.readFile(filePath);
+    return JSON.parse(raw.toString("utf8")) as YoutubeChannelCache;
   } catch {
     return null;
   }
@@ -54,13 +51,13 @@ const writeChannelCache = async (
   filePath: string,
   data: { fetchedAt: number; channel?: YoutubeChannel }
 ) => {
-  await fs.writeFile(filePath, JSON.stringify(data), "utf8");
+  await storage.writeFile(filePath, JSON.stringify(data));
 };
 
 const readAvatarMeta = async (filePath: string): Promise<AvatarCacheMeta> => {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as AvatarCacheMeta;
+    const raw = await storage.readFile(filePath);
+    return JSON.parse(raw.toString("utf8")) as AvatarCacheMeta;
   } catch {
     return null;
   }
@@ -70,7 +67,7 @@ const writeAvatarMeta = async (
   filePath: string,
   meta: { fetchedAt: number; contentType?: string; sourceUrl?: string }
 ) => {
-  await fs.writeFile(filePath, JSON.stringify(meta), "utf8");
+  await storage.writeFile(filePath, JSON.stringify(meta));
 };
 
 const fetchAccessToken = async (userId: string) => {
@@ -130,29 +127,29 @@ const fetchConnectedAccount = async (userId: string) => {
 };
 
 const resolveCachePaths = (userId: string) => {
-  const cacheDir = path.join(process.cwd(), "data", "users", userId, "cache");
+  const cacheDir = storageKey("users", userId, "cache");
   return {
     cacheDir,
-    channelFile: path.join(cacheDir, "youtube-channel.json"),
-    avatarMetaFile: path.join(cacheDir, "youtube-channel-avatar.json"),
-    avatarFile: path.join(cacheDir, "youtube-channel-avatar"),
+    channelFile: storageKey(cacheDir, "youtube-channel.json"),
+    avatarMetaFile: storageKey(cacheDir, "youtube-channel-avatar.json"),
+    avatarFile: storageKey(cacheDir, "youtube-channel-avatar"),
   };
 };
 
 export const clearYoutubeCache = async (userId: string) => {
   const { channelFile, avatarMetaFile, avatarFile } = resolveCachePaths(userId);
   try {
-    await fs.unlink(channelFile);
+    await storage.deleteFile(channelFile);
   } catch {
     // ignore missing cache
   }
   try {
-    await fs.unlink(avatarMetaFile);
+    await storage.deleteFile(avatarMetaFile);
   } catch {
     // ignore missing cache
   }
   try {
-    await fs.unlink(avatarFile);
+    await storage.deleteFile(avatarFile);
   } catch {
     // ignore missing cache
   }
@@ -170,7 +167,7 @@ export const getYoutubeConnection = async (
   }
 
   const { cacheDir, channelFile } = resolveCachePaths(userId);
-  await ensureDir(cacheDir);
+  await storage.ensureDir(cacheDir);
   const cacheTtlMs: number | null = null;
   const cached = await readChannelCache(channelFile);
   if (
@@ -259,7 +256,7 @@ export const getYoutubeAvatar = async (userId: string) => {
 
   if (isCacheFresh && cacheMatchesChannel) {
     try {
-      const file = await fs.readFile(avatarFile);
+      const file = await storage.readFile(avatarFile);
       return {
         buffer: file,
         contentType: cache?.contentType ?? "image/png",
@@ -318,7 +315,7 @@ export const getYoutubeAvatar = async (userId: string) => {
 
   const contentType = imageResponse.headers.get("content-type") ?? "image/png";
   const buffer = Buffer.from(await imageResponse.arrayBuffer());
-  await fs.writeFile(avatarFile, buffer);
+  await storage.writeFile(avatarFile, buffer);
   await writeAvatarMeta(avatarMetaFile, {
     fetchedAt: Date.now(),
     contentType,

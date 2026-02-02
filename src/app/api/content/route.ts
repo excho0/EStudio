@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
@@ -8,6 +7,7 @@ import {
   resolveContentPath,
   writeContentManifest,
 } from "@/lib/content-store";
+import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
@@ -19,14 +19,14 @@ import {
 
 export const runtime = "nodejs";
 
+const storage = getStorage();
+
 const writeUpload = async (file: File, id: string, kind: "thumbnail" | "video" | "song") => {
   const extension = path.extname(file.name || "");
   const relativePath = getContentAssetPath(id, kind, extension || ".bin");
-  const targetPath = resolveContentPath(relativePath);
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.writeFile(targetPath, buffer);
+  await storage.writeFile(relativePath, buffer);
 
   return relativePath;
 };
@@ -36,17 +36,12 @@ const finalizeDraft = async (
   id: string,
   kind: "thumbnail" | "video" | "song"
 ) => {
-  const absoluteDraft = resolveContentPath(draftPath);
-  try {
-    await fs.access(absoluteDraft);
-  } catch {
+  if (!(await storage.exists(draftPath))) {
     throw new Error(`Draft file missing for ${kind}.`);
   }
   const extension = path.extname(draftPath);
   const relativePath = getContentAssetPath(id, kind, extension || ".bin");
-  const targetPath = resolveContentPath(relativePath);
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.rename(absoluteDraft, targetPath);
+  await storage.move(draftPath, relativePath);
   return relativePath;
 };
 

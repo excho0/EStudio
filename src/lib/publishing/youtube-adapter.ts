@@ -1,11 +1,9 @@
-import fs from "fs";
-import { promises as fsp } from "fs";
-import os from "os";
-import path from "path";
+import { Readable } from "stream";
 import sharp from "sharp";
 
 import type { PublishPayload, PublishResult, ProviderAdapter } from "@/lib/publishing/adapter";
 import { getGoogleYoutubeClient } from "@/lib/publishing/google-youtube";
+import { getStorage } from "@/lib/storage";
 
 export const youtubeAdapter: ProviderAdapter = {
   id: "youtube",
@@ -13,11 +11,12 @@ export const youtubeAdapter: ProviderAdapter = {
     if (!payload.userId) {
       throw new Error("Missing user id for YouTube upload.");
     }
-    if (!payload.renderPath) {
+    if (!payload.renderKey) {
       throw new Error("Missing render path for YouTube upload.");
     }
 
     const { youtube } = await getGoogleYoutubeClient(payload.userId);
+    const storage = getStorage();
     const title = payload.metadata.title?.trim() || "Untitled upload";
     const description = payload.metadata.description?.trim() || undefined;
     const requestedPrivacy = payload.options?.privacy ?? "private";
@@ -44,7 +43,7 @@ export const youtubeAdapter: ProviderAdapter = {
           },
         },
         media: {
-          body: fs.createReadStream(payload.renderPath),
+          body: storage.createReadStream(payload.renderKey),
         },
       },
       {
@@ -68,40 +67,26 @@ export const youtubeAdapter: ProviderAdapter = {
     }
 
     let thumbnailWarning: string | null = null;
-    let tempThumbnailPath: string | null = null;
-    if (payload.thumbnailPath) {
+    if (payload.thumbnailKey) {
       payload.onProgress?.({ stage: "thumbnail", progress: 0 });
       try {
-        const { size } = await fsp.stat(payload.thumbnailPath);
         const maxBytes = 2 * 1024 * 1024;
-        let thumbnailPath = payload.thumbnailPath;
-        if (size > maxBytes) {
-          const tmpPath = path.join(
-            os.tmpdir(),
-            `excho-thumb-${videoId}-${Date.now()}.jpg`
-          );
-          await sharp(payload.thumbnailPath)
-            .jpeg({ quality: 80 })
-            .toFile(tmpPath);
-          tempThumbnailPath = tmpPath;
-          thumbnailPath = tmpPath;
+        const raw = await storage.readFile(payload.thumbnailKey);
+        let buffer = raw;
+        if (raw.length > maxBytes) {
+          buffer = await sharp(raw).jpeg({ quality: 80 }).toBuffer();
         }
-        const { size: compressedSize } = await fsp.stat(thumbnailPath);
-        if (compressedSize > maxBytes) {
+        if (buffer.length > maxBytes) {
           thumbnailWarning = "Thumbnail file is larger than 2MB.";
         } else {
           await youtube.thumbnails.set({
             videoId,
-            media: { body: fs.createReadStream(thumbnailPath) },
+            media: { body: Readable.from(buffer) },
           });
         }
       } catch (error) {
         thumbnailWarning =
           error instanceof Error ? error.message : "Thumbnail upload failed.";
-      } finally {
-        if (tempThumbnailPath) {
-          await fsp.rm(tempThumbnailPath, { force: true });
-        }
       }
     }
 

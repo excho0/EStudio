@@ -1,4 +1,3 @@
-import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import {
@@ -11,6 +10,7 @@ import {
   writeContentManifest,
   getContentRenderDir,
 } from "@/lib/content-store";
+import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
@@ -21,15 +21,15 @@ import {
 
 export const runtime = "nodejs";
 
+const storage = getStorage();
+
 const writeUpload = async (file: File, id: string, kind: "thumbnail") => {
   const extension = path.extname(file.name || "");
   const relativePath = getContentAssetPath(id, kind, extension || ".bin");
-  const targetPath = resolveContentPath(relativePath);
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await removeContentAssetFiles(id, kind);
-  await fs.writeFile(targetPath, buffer);
+  await storage.writeFile(relativePath, buffer);
 
   return relativePath;
 };
@@ -217,12 +217,7 @@ export async function DELETE(
 
   const removals = [removeContentAssets(item.id)];
   if (!keepRenders) {
-    removals.push(
-      fs.rm(resolveContentPath(getContentRenderDir(item.id)), {
-        force: true,
-        recursive: true,
-      })
-    );
+    removals.push(storage.deleteDir(getContentRenderDir(item.id)));
   }
   await Promise.all(removals);
 

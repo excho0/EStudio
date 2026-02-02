@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { eq, sql } from "drizzle-orm";
 
 import { getProviderAdapter } from "@/lib/publishing";
@@ -11,6 +9,7 @@ import {
 import { emitPublishProgress, emitPublishUpdate } from "@/lib/socket";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { getStorage, storageKey } from "@/lib/storage";
 
 
 type PublishJob = {
@@ -94,6 +93,8 @@ const runPublishJob = async (job: PublishJob) => {
   const publish = await readPublishRow(job.publishId);
   if (!publish) return;
 
+  const storage = getStorage();
+
   const nextAttempt = (publish.publishAttempts ?? 0) + 1;
   await updatePublish(job.publishId, {
     status: "publishing",
@@ -124,12 +125,9 @@ const runPublishJob = async (job: PublishJob) => {
       ? (metadata.options as Record<string, unknown>)
       : {};
 
-  const renderPath = resolveContentPath(
-    getContentRenderPath(publish.contentId, publish.renderId)
-  );
-  try {
-    await fs.access(renderPath);
-  } catch {
+  const renderKey = getContentRenderPath(publish.contentId, publish.renderId);
+  const renderPath = resolveContentPath(renderKey);
+  if (!(await storage.exists(renderKey))) {
     await updatePublish(job.publishId, {
       status: "failed",
       error: "Render file not found.",
@@ -142,7 +140,7 @@ const runPublishJob = async (job: PublishJob) => {
     "thumbnail"
   );
   const thumbnailPath = thumbnailRelative
-    ? resolveContentPath(path.normalize(thumbnailRelative))
+    ? resolveContentPath(storageKey(thumbnailRelative))
     : null;
 
   try {
@@ -152,7 +150,9 @@ const runPublishJob = async (job: PublishJob) => {
       userId: publish.userId,
       contentId: publish.contentId,
       renderId: publish.renderId,
+      renderKey,
       renderPath,
+      thumbnailKey: thumbnailRelative,
       thumbnailPath,
       metadata: {
         title,
