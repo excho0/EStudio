@@ -189,6 +189,7 @@ export function PublishDrawer({
     uploaded?: number;
     total?: number;
   } | null>(null);
+  const providerDetailsLoaded = useRef<Set<string>>(new Set());
   const renderScrollRef = useRef<HTMLDivElement | null>(null);
   const { socket } = useSocketIO();
 
@@ -266,9 +267,12 @@ export function PublishDrawer({
     }
   }, []);
 
-  const loadYoutubeStatus = useCallback(async () => {
+  const loadProviderDetails = useCallback(async (providerId: string) => {
+    const definition = getProviderDefinition(providerId);
+    const endpoint = definition?.connectionEndpoint;
+    if (!endpoint) return;
     try {
-      const response = await fetch("/api/publish/providers/youtube");
+      const response = await fetch(endpoint);
       if (!response.ok) return;
       const payload = (await response.json()) as {
         connected: boolean;
@@ -276,7 +280,7 @@ export function PublishDrawer({
       };
       setTargets((current) =>
         current.map((target) =>
-          target.id === "youtube"
+          target.id === providerId
             ? {
                 ...target,
                 connected: payload.connected,
@@ -387,9 +391,22 @@ export function PublishDrawer({
     if (status !== "authenticated") return;
     void loadPublishTargets();
     void loadRenders();
-    void loadYoutubeStatus();
     void loadContentSummary();
-  }, [contentId, loadContentSummary, loadPublishTargets, loadRenders, loadYoutubeStatus, open, status]);
+  }, [contentId, loadContentSummary, loadPublishTargets, loadRenders, open, status]);
+
+  useEffect(() => {
+    if (!open || targets.length === 0) return;
+    targets.forEach((target) => {
+      if (providerDetailsLoaded.current.has(target.id)) return;
+      providerDetailsLoaded.current.add(target.id);
+      void loadProviderDetails(target.id);
+    });
+  }, [loadProviderDetails, open, targets]);
+
+  useEffect(() => {
+    if (open) return;
+    providerDetailsLoaded.current.clear();
+  }, [open]);
 
   const handleNext = () => {
     if (stepId === "provider" && !canContinueProvider) return;
@@ -558,6 +575,20 @@ export function PublishDrawer({
                                     target.id
                                   );
                                   const ProviderIcon = providerDefinition?.icon;
+                                  const providerLabel =
+                                    providerDefinition?.label ?? target.label;
+                                  const channelTitle =
+                                    target.channel?.title ?? providerLabel;
+                                  const showChannelAvatar =
+                                    isConnected && Boolean(target.channel?.thumbnail);
+                                  const statusLabel = isComingSoon
+                                    ? "Coming soon"
+                                    : isConnected
+                                      ? "Connected"
+                                      : "Not linked";
+                                  const statusClasses = isConnected
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200"
+                                    : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-zinc-300";
                                   return (
                                     <SelectableCard
                                       key={target.id}
@@ -569,64 +600,46 @@ export function PublishDrawer({
                                       }}
                                     >
                                       <div className="flex items-center gap-3">
-                                        <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
-                                          {ProviderIcon ? (
+                                        <span className="mt-0.5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
+                                          {showChannelAvatar ? (
+                                            <ImageWithSkeleton
+                                              src={target.channel?.thumbnail ?? ""}
+                                              alt={channelTitle}
+                                              className="h-10 w-10 rounded-full object-cover"
+                                              wrapperClassName="h-10 w-10 rounded-full"
+                                            />
+                                          ) : ProviderIcon ? (
                                             <ProviderIcon className="h-5 w-5" />
                                           ) : (
                                             <span className="text-xs font-semibold">
-                                              {target.label
-                                                .slice(0, 2)
-                                                .toUpperCase()}
+                                              {providerLabel.slice(0, 2).toUpperCase()}
                                             </span>
                                           )}
                                         </span>
-                                        <div>
-                                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                            {providerDefinition?.label ?? target.label}
-                                          </p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {target.channel?.title
-                                              ? target.channel.title
-                                              : isConnected
-                                                ? "Connected destination"
-                                                : "Not connected"}
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <div className="mt-4 flex items-center justify-between gap-3">
-                                        {target.channel?.thumbnail ? (
-                                          <div className="flex items-center gap-2">
-                                            <ImageWithSkeleton
-                                              src={target.channel.thumbnail}
-                                              alt={target.channel.title ?? target.label}
-                                              className="h-8 w-8 rounded-full object-cover"
-                                              wrapperClassName="h-8 w-8 rounded-full"
-                                            />
-                                            <span className="text-xs text-muted-foreground">
-                                              {target.channel.title ?? "Connected"}
+                                        <div className="flex-1 space-y-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                              {channelTitle}
+                                            </p>
+                                            <Badge
+                                              variant={
+                                                providerDefinition?.badgeVariant ?? "outline"
+                                              }
+                                            >
+                                              {ProviderIcon ? (
+                                                <ProviderIcon className="h-3 w-3 shrink-0" />
+                                              ) : null}
+                                              {providerLabel}
+                                            </Badge>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span
+                                              className={` text-xs font-[15px]  `}
+                                            >
+                                              {statusLabel}
                                             </span>
                                           </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">
-                                            {isConnected ? "Connected" : "Not linked"}
-                                          </span>
-                                        )}
-                                        <Badge
-                                          variant={
-                                            isComingSoon
-                                              ? "outline"
-                                              : isConnected
-                                                ? "default"
-                                                : "secondary"
-                                          }
-                                        >
-                                          {isComingSoon
-                                            ? "Coming soon"
-                                            : isConnected
-                                              ? "Connected"
-                                              : "Not linked"}
-                                        </Badge>
+                                        </div>
                                       </div>
                                     </SelectableCard>
                                   );

@@ -31,7 +31,11 @@ const fetchUserByEmail = async (email: string) => {
   return user ?? null;
 };
 
-const fetchYoutubeConnected = async (userId: string) => {
+const fetchProviderConnected = async (
+  userId: string,
+  providerId: string | undefined
+) => {
+  if (!providerId) return false;
   const db = getDrizzleDb();
   if (isPostgres) {
     const [account] = await (db as PostgresDrizzleDb)
@@ -40,7 +44,7 @@ const fetchYoutubeConnected = async (userId: string) => {
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, "google-youtube")
+          eq(schema.accounts.provider, providerId)
         )
       )
       .limit(1);
@@ -52,7 +56,7 @@ const fetchYoutubeConnected = async (userId: string) => {
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, "google-youtube")
+        eq(sqliteSchema.accounts.provider, providerId)
       )
     )
     .limit(1);
@@ -63,19 +67,21 @@ export async function GET() {
   const session = await auth();
   const email = getSessionEmail(session);
   const user = email ? await fetchUserByEmail(email) : null;
-  const youtubeConnected = user ? await fetchYoutubeConnected(user.id) : false;
-
-  const publishTargets = Object.values(PROVIDER_REGISTRY).map((provider) => {
-    const isYoutube = provider.id === "youtube";
-    const connected = isYoutube ? youtubeConnected : false;
-    return {
-      id: provider.id,
-      label: provider.label,
-      status: connected ? "active" : "idle",
-      connected,
-      capabilities: provider.capabilities,
-    };
-  });
+  const providers = Object.values(PROVIDER_REGISTRY);
+  const publishTargets = await Promise.all(
+    providers.map(async (provider) => {
+      const connected = user
+        ? await fetchProviderConnected(user.id, provider.oauthProviderId)
+        : false;
+      return {
+        id: provider.id,
+        label: provider.label,
+        status: connected ? "active" : "idle",
+        connected,
+        capabilities: provider.capabilities,
+      };
+    })
+  );
 
   return NextResponse.json({ publishTargets });
 }

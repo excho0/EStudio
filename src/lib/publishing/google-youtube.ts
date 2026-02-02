@@ -3,7 +3,10 @@ import { and, eq } from "drizzle-orm";
 
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { getProviderDefinition } from "@/lib/publishing/providers";
 
+const youtubeProviderId =
+  getProviderDefinition("youtube")?.oauthProviderId ?? "google-youtube";
 
 type GoogleYoutubeAccount = {
   accessToken: string | null;
@@ -30,7 +33,7 @@ const fetchGoogleYoutubeAccount = async (
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, "google-youtube")
+          eq(schema.accounts.provider, youtubeProviderId)
         )
       )
       .limit(1);
@@ -48,7 +51,7 @@ const fetchGoogleYoutubeAccount = async (
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, "google-youtube")
+        eq(sqliteSchema.accounts.provider, youtubeProviderId)
       )
     )
     .limit(1);
@@ -76,7 +79,7 @@ const updateAccountTokens = async (
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, "google-youtube")
+          eq(schema.accounts.provider, youtubeProviderId)
         )
       );
     return;
@@ -87,7 +90,7 @@ const updateAccountTokens = async (
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, "google-youtube")
+        eq(sqliteSchema.accounts.provider, youtubeProviderId)
       )
     );
 };

@@ -6,9 +6,12 @@ import { auth } from "@/auth";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getGoogleYoutubeClient } from "@/lib/publishing/google-youtube";
+import { getProviderDefinition } from "@/lib/publishing/providers";
 
 export const runtime = "nodejs";
 
+const youtubeProviderId =
+  getProviderDefinition("youtube")?.oauthProviderId ?? "google-youtube";
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;
@@ -44,7 +47,7 @@ const fetchYoutubeAccount = async (userId: string) => {
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, "google-youtube")
+          eq(schema.accounts.provider, youtubeProviderId)
         )
       )
       .limit(1);
@@ -60,7 +63,7 @@ const fetchYoutubeAccount = async (userId: string) => {
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, "google-youtube")
+        eq(sqliteSchema.accounts.provider, youtubeProviderId)
       )
     )
     .limit(1);

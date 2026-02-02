@@ -7,6 +7,7 @@ import type { Provider } from "next-auth/providers";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 
 import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
+import { getProviderDefinition } from "@/lib/publishing/providers";
 import {
   accounts,
   accountsPg,
@@ -24,6 +25,7 @@ import {
 const providers: Provider[] = [];
 
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
+  const youtubeProvider = getProviderDefinition("youtube");
   providers.push(
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
@@ -32,24 +34,20 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
     })
   );
 
-  providers.push(
-    Google({
-      id: "google-youtube",
-      name: "YouTube",
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
-      allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          scope:
-            "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
-          access_type: "offline",
-          prompt: "consent",
-          include_granted_scopes: "true",
-        },
-      },
-    })
-  );
+  if (youtubeProvider?.oauthProviderId) {
+    providers.push(
+      Google({
+        id: youtubeProvider.oauthProviderId,
+        name: youtubeProvider.label,
+        clientId: process.env.AUTH_GOOGLE_ID,
+        clientSecret: process.env.AUTH_GOOGLE_SECRET,
+        allowDangerousEmailAccountLinking: true,
+        authorization: youtubeProvider.oauthAuthorizationParams
+          ? { params: youtubeProvider.oauthAuthorizationParams }
+          : undefined,
+      })
+    );
+  }
 }
 
 if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
