@@ -89,6 +89,7 @@ export function getMenuList(): Group[] {
               href: "/settings/connections",
               label: "Connections",
               icon: Cable,
+              requiresAuth: true,
             },
             {
               href: "/settings/appearance",

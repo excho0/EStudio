@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
-import { Link2, ShieldCheck, Sparkles, Youtube } from "lucide-react";
+import { Link2, Youtube } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card } from "@/components/ui/card";
@@ -32,14 +32,14 @@ export default function ConnectionsSettingsPage() {
   const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [youtubeEnabled, setYoutubeEnabled] = useState(false);
   const thumbnailCacheBust = useMemo(
-    () => Date.now(),
+    () => (youtubeChannel?.thumbnail ? Date.now() : 0),
     [youtubeChannel?.thumbnail]
   );
 
   const loadConnections = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/connections/youtube");
+      const response = await fetch("/api/publish/providers/youtube");
       if (!response.ok) {
         throw new Error("Unable to load YouTube connection.");
       }
@@ -212,7 +212,7 @@ export default function ConnectionsSettingsPage() {
               variant="destructive"
               onClick={async () => {
                 try {
-                  const response = await fetch("/api/connections/youtube", {
+                  const response = await fetch("/api/publish/providers/youtube", {
                     method: "DELETE",
                   });
                   if (!response.ok) {

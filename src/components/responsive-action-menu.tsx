@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { MoreHorizontal } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,10 @@ type ActionItem =
         defaultChecked?: boolean;
         valueKey?: "keepRenders";
       };
+    }
+  | {
+      type: "custom";
+      render: (options: { close: () => void; isMobile: boolean }) => React.ReactNode;
     };
 
 export function ResponsiveActionMenu({
@@ -74,7 +79,10 @@ export function ResponsiveActionMenu({
   const [confirmValues, setConfirmValues] = React.useState<Record<string, boolean>>(
     {}
   );
-  const { startTransition } = useRouteTransition();
+  const router = useRouter();
+  const transition = useRouteTransition();
+  const startTransition =
+    transition?.startTransition ?? ((href: string) => router.push(href));
 
   const trigger = (
     <Button
@@ -102,6 +110,14 @@ export function ResponsiveActionMenu({
               if (item.type === "separator") {
                 return (
                   <div key={`separator-${index}`} className="my-1 h-px bg-border" />
+                );
+              }
+
+              if (item.type === "custom") {
+                return (
+                  <React.Fragment key={`custom-${index}`}>
+                    {item.render({ close: () => setOpen(false), isMobile: true })}
+                  </React.Fragment>
                 );
               }
 
@@ -229,6 +245,14 @@ export function ResponsiveActionMenu({
             return <DropdownMenuSeparator key={`separator-${index}`} />;
           }
 
+          if (item.type === "custom") {
+            return (
+              <React.Fragment key={`custom-${index}`}>
+                {item.render({ close: () => setOpen(false), isMobile: false })}
+              </React.Fragment>
+            );
+          }
+
           if (item.type === "confirm") {
             const checkboxKey = item.confirmCheckbox?.valueKey ?? "keepRenders";
             const stateKey = `${item.label}:${checkboxKey}`;
@@ -302,6 +326,7 @@ export function ResponsiveActionMenu({
                 )}
                 onSelect={(event) => {
                   event.preventDefault();
+                  setOpen(false);
                   startTransition(href);
                 }}
               >
@@ -323,7 +348,10 @@ export function ResponsiveActionMenu({
           return (
             <DropdownMenuItem
               key={`action-${item.label}`}
-              onSelect={() => item.onSelect?.()}
+              onSelect={() => {
+                item.onSelect?.();
+                setOpen(false);
+              }}
               disabled={item.disabled}
               className={cn(
                 "flex items-center gap-2",

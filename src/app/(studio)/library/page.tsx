@@ -23,6 +23,7 @@ import { useRenderProgress } from "../_components/use-render-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import { ResponsiveActionMenu } from "@/components/responsive-action-menu";
+import { PublishDrawer } from "@/components/publish-drawer";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   CheckCircle2,
@@ -30,6 +31,7 @@ import {
   Film,
   Loader2,
   Play,
+  Radio,
   Trash2,
   Upload,
   XCircle,
@@ -49,6 +51,11 @@ export default function LibraryPage() {
     limit,
   });
   const [renderingId, setRenderingId] = useState<string | null>(null);
+  const [publishContentId, setPublishContentId] = useState<string | null>(null);
+  const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
+  const publishCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const renderProgress = useRenderProgress();
 
@@ -101,6 +108,25 @@ export default function LibraryPage() {
       icon: Eye,
       href: `/edit/${item.id}`,
     },
+        ...(item.status === "rendered"
+      ? [
+          {
+            label: "Publish",
+            icon: Upload,
+            onSelect: () => {
+              setPublishContentId(item.id);
+              setPublishDrawerOpen(true);
+            },
+          },
+          {
+            label: "View Publishes",
+            icon: Radio,
+            href: `/publishes/${item.id}`,
+          },
+          { type: "separator" as const },
+
+        ]
+      : []),
     {
       label: renderingId === item.id ? "Rendering..." : "Render now",
       icon: Play,
@@ -335,6 +361,23 @@ export default function LibraryPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {publishContentId ? (
+        <PublishDrawer
+          contentId={publishContentId}
+          open={publishDrawerOpen}
+          onOpenChange={(nextOpen) => {
+            setPublishDrawerOpen(nextOpen);
+            if (publishCloseTimeoutRef.current) {
+              clearTimeout(publishCloseTimeoutRef.current);
+            }
+            if (!nextOpen) {
+              publishCloseTimeoutRef.current = setTimeout(() => {
+                setPublishContentId(null);
+              }, 260);
+            }
+          }}
+        />
+      ) : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold">Library</h2>
