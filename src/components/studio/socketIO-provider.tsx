@@ -60,6 +60,8 @@ export function SocketIOProvider({
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
   const [socket] = useState<Socket>(() => io({ path: "/api/socket" }));
   const registeredUserRef = useRef<string | null>(null);
+  const registeredForSocketRef = useRef<string | null>(null);
+  const socketIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -67,15 +69,25 @@ export function SocketIOProvider({
     };
 
     const registerUser = async () => {
-      if (registeredUserRef.current) return;
       try {
         const response = await fetch("/api/user/profile");
         if (!response.ok) return;
-        const payload = (await response.json()) as { user?: { id?: string } };
-        const userId = payload.user?.id;
+        const payload = (await response.json()) as {
+          id?: string;
+          user?: { id?: string };
+        };
+        const userId = payload.user?.id ?? payload.id;
         if (!userId) return;
         registeredUserRef.current = userId;
+        if (
+          registeredForSocketRef.current === userId &&
+          socketIdRef.current === socket.id
+        ) {
+          return;
+        }
         socket.emit("user:register", { userId });
+        registeredForSocketRef.current = userId;
+        socketIdRef.current = socket.id ?? null;
       } catch {
         // Ignore registration failures; socket will still connect.
       }

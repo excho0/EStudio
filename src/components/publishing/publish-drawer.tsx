@@ -586,9 +586,6 @@ export function PublishDrawer({
                                     : isConnected
                                       ? "Connected"
                                       : "Not linked";
-                                  const statusClasses = isConnected
-                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200"
-                                    : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-zinc-300";
                                   return (
                                     <SelectableCard
                                       key={target.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -78,7 +78,7 @@ export default function ConnectionsSettingsPage() {
     return bust;
   }, [connections, providers]);
 
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     setConnections((current) => {
       const next = { ...current };
       for (const provider of providers) {
@@ -138,9 +138,9 @@ export default function ConnectionsSettingsPage() {
       }
       return next;
     });
-  };
+  }, [providers]);
 
-  const loadProviderConfig = async () => {
+  const loadProviderConfig = useCallback(async () => {
     try {
       const response = await fetch("/api/meta/providers");
       if (!response.ok) return;
@@ -166,7 +166,7 @@ export default function ConnectionsSettingsPage() {
         return next;
       });
     }
-  };
+  }, [providers]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -181,7 +181,7 @@ export default function ConnectionsSettingsPage() {
         return next;
       });
     }
-  }, [providers, status]);
+  }, [loadConnections, loadProviderConfig, providers, status]);
 
   return (
     <div className="flex flex-col gap-6">

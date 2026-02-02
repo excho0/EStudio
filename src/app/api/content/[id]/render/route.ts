@@ -648,7 +648,7 @@ export async function POST(
   const assetToken = createContentAssetToken(user.id, id);
   const withAssetToken = (url: string) =>
     assetToken
-      ? `${url}${url.includes(\"?\") ? \"&\" : \"?\"}token=${encodeURIComponent(assetToken)}`
+      ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
   const props = {
     title: item.title,
