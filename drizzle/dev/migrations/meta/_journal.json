@@ -57,6 +57,20 @@
       "when": 1769883982977,
       "tag": "0007_sweet_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1769963856424,
+      "tag": "0008_fat_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1769978489963,
+      "tag": "0009_cloudy_korath",
+      "breakpoints": true
     }
   ]
 }

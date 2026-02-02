@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -160,6 +160,40 @@ export const contentItems = sqliteTable(
   ]
 );
 
+export const publishes = sqliteTable(
+  "publishes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contentId: text("contentId")
+      .notNull()
+      .references(() => contentItems.id, { onDelete: "cascade" }),
+    renderId: text("renderId").notNull(),
+    provider: text("provider").notNull(),
+    connectionId: text("connectionId").notNull(),
+    providerAssetId: text("providerAssetId").notNull(),
+    status: text("status").notNull().default("draft"),
+    metadata: text("metadata"),
+    error: text("error"),
+    publishAttempts: integer("publishAttempts", { mode: "number" })
+      .notNull()
+      .default(0),
+    publishedAt: integer("publishedAt", { mode: "timestamp_ms" }),
+    lastSyncedAt: integer("lastSyncedAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("publishes_user_id_idx").on(table.userId),
+    index("publishes_content_id_idx").on(table.contentId),
+    index("publishes_connection_id_idx").on(table.connectionId),
+    index("publishes_provider_asset_idx").on(table.provider, table.providerAssetId),
+    index("publishes_status_idx").on(table.status),
+  ]
+);
+
 export const contentItemsPg = pgTable(
   "content_items",
   {
@@ -204,6 +238,38 @@ export const contentItemsPg = pgTable(
   (table) => [
     pgIndex("idx_content_items_status").on(table.status),
     pgIndex("idx_content_items_created_at").on(table.createdAt),
+  ]
+);
+
+export const publishesPg = pgTable(
+  "publishes",
+  {
+    id: pgText("id").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    contentId: pgText("contentId")
+      .notNull()
+      .references(() => contentItemsPg.id, { onDelete: "cascade" }),
+    renderId: pgText("renderId").notNull(),
+    provider: pgText("provider").notNull(),
+    connectionId: pgText("connectionId").notNull(),
+    providerAssetId: pgText("providerAssetId").notNull(),
+    status: pgText("status").notNull().default("draft"),
+    metadata: pgText("metadata"),
+    error: pgText("error"),
+    publishAttempts: pgInteger("publishAttempts").notNull().default(0),
+    publishedAt: pgTimestamp("publishedAt", { mode: "date" }),
+    lastSyncedAt: pgTimestamp("lastSyncedAt", { mode: "date" }),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("publishes_user_id_idx").on(table.userId),
+    pgIndex("publishes_content_id_idx").on(table.contentId),
+    pgIndex("publishes_connection_id_idx").on(table.connectionId),
+    pgIndex("publishes_provider_asset_idx").on(table.provider, table.providerAssetId),
+    pgIndex("publishes_status_idx").on(table.status),
   ]
 );
 
@@ -310,6 +376,7 @@ export const sqliteSchema = {
   authenticators,
   appTokens,
   contentItems,
+  publishes,
 };
 
 export const schema = {
@@ -320,4 +387,80 @@ export const schema = {
   authenticators: authenticatorsPg,
   appTokens: appTokensPg,
   contentItems: contentItemsPg,
+  publishes: publishesPg,
 };
+
+export const usersRelations = relations(users, ({ many }) => ({
+  accounts: many(accounts),
+  sessions: many(sessions),
+  authenticators: many(authenticators),
+  appTokens: many(appTokens),
+  publishes: many(publishes),
+}));
+
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, { fields: [accounts.userId], references: [users.id] }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const authenticatorsRelations = relations(authenticators, ({ one }) => ({
+  user: one(users, { fields: [authenticators.userId], references: [users.id] }),
+}));
+
+export const appTokensRelations = relations(appTokens, ({ one }) => ({
+  user: one(users, { fields: [appTokens.userId], references: [users.id] }),
+}));
+
+export const contentItemsRelations = relations(contentItems, ({ many }) => ({
+  publishes: many(publishes),
+}));
+
+export const publishesRelations = relations(publishes, ({ one }) => ({
+  user: one(users, { fields: [publishes.userId], references: [users.id] }),
+  contentItem: one(contentItems, {
+    fields: [publishes.contentId],
+    references: [contentItems.id],
+  }),
+}));
+
+export const usersPgRelations = relations(usersPg, ({ many }) => ({
+  accounts: many(accountsPg),
+  sessions: many(sessionsPg),
+  authenticators: many(authenticatorsPg),
+  appTokens: many(appTokensPg),
+  publishes: many(publishesPg),
+}));
+
+export const accountsPgRelations = relations(accountsPg, ({ one }) => ({
+  user: one(usersPg, { fields: [accountsPg.userId], references: [usersPg.id] }),
+}));
+
+export const sessionsPgRelations = relations(sessionsPg, ({ one }) => ({
+  user: one(usersPg, { fields: [sessionsPg.userId], references: [usersPg.id] }),
+}));
+
+export const authenticatorsPgRelations = relations(authenticatorsPg, ({ one }) => ({
+  user: one(usersPg, {
+    fields: [authenticatorsPg.userId],
+    references: [usersPg.id],
+  }),
+}));
+
+export const appTokensPgRelations = relations(appTokensPg, ({ one }) => ({
+  user: one(usersPg, { fields: [appTokensPg.userId], references: [usersPg.id] }),
+}));
+
+export const contentItemsPgRelations = relations(contentItemsPg, ({ many }) => ({
+  publishes: many(publishesPg),
+}));
+
+export const publishesPgRelations = relations(publishesPg, ({ one }) => ({
+  user: one(usersPg, { fields: [publishesPg.userId], references: [usersPg.id] }),
+  contentItem: one(contentItemsPg, {
+    fields: [publishesPg.contentId],
+    references: [contentItemsPg.id],
+  }),
+}));

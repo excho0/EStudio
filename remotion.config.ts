@@ -1,3 +1,3 @@
-import { Config } from '@remotion/cli/config';
+import { Config } from "@remotion/cli/config";
 
 Config.setEntryPoint("src/remotion/index.tsx");

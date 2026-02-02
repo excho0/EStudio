@@ -136,7 +136,7 @@ export async function GET() {
     return NextResponse.json({
       connected,
       channel: cached.channel
-        ? { ...cached.channel, thumbnail: "/api/connections/youtube/avatar" }
+        ? { ...cached.channel, thumbnail: "/api/publish/providers/youtube/avatar" }
         : null,
     });
   }
@@ -193,7 +193,7 @@ export async function GET() {
       connected,
       channel: {
         ...channelPayload,
-        thumbnail: "/api/connections/youtube/avatar",
+        thumbnail: "/api/publish/providers/youtube/avatar",
       },
     });
   } catch {
