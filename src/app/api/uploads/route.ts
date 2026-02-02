@@ -1,22 +1,26 @@
 import { randomUUID } from "crypto";
 import path from "path";
 import { NextResponse } from "next/server";
-import { contentKeys } from "@/lib/content-store";
+import { getUserUploadsDir } from "@/lib/content-store";
 import { getStorage, storageKey } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
 const DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
 const storage = getStorage();
-const draftBaseDir = storageKey(contentKeys.uploadsDir, "drafts");
+const getDraftBaseDir = (userId: string) =>
+  storageKey(getUserUploadsDir(userId), "drafts");
 
-const ensureDraftDirs = async () => {
+const ensureDraftDirs = async (userId: string) => {
+  const draftBaseDir = getDraftBaseDir(userId);
   await storage.ensureDir(storageKey(draftBaseDir, "thumbnails"));
   await storage.ensureDir(storageKey(draftBaseDir, "videos"));
   await storage.ensureDir(storageKey(draftBaseDir, "songs"));
 };
 
-const cleanupDrafts = async () => {
+const cleanupDrafts = async (userId: string) => {
+  const draftBaseDir = getDraftBaseDir(userId);
   const now = Date.now();
   const entries = await storage.list(draftBaseDir);
   await Promise.all(
@@ -37,10 +41,15 @@ const cleanupDrafts = async () => {
   );
 };
 
-const writeDraft = async (file: File, kind: "thumbnail" | "video" | "song") => {
+const writeDraft = async (
+  userId: string,
+  file: File,
+  kind: "thumbnail" | "video" | "song"
+) => {
   const extension = path.extname(file.name || "");
   const id = randomUUID();
   const fileName = `${id}${extension || ""}`;
+  const draftBaseDir = getDraftBaseDir(userId);
   const targetDir = storageKey(draftBaseDir, `${kind}s`);
   const targetPath = storageKey(targetDir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -52,8 +61,12 @@ const writeDraft = async (file: File, kind: "thumbnail" | "video" | "song") => {
 };
 
 export async function POST(request: Request) {
-  await ensureDraftDirs();
-  await cleanupDrafts();
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  await ensureDraftDirs(user.id);
+  await cleanupDrafts(user.id);
 
   const formData = await request.formData();
   const file = formData.get("file");
@@ -66,7 +79,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid kind." }, { status: 400 });
   }
 
-  const path = await writeDraft(file, kind);
+  const path = await writeDraft(user.id, file, kind);
   return NextResponse.json({
     path,
     kind,
@@ -75,12 +88,17 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = (await request.json().catch(() => null)) as
     | { path?: string }
     | null;
   if (!body?.path) {
     return NextResponse.json({ error: "Missing path." }, { status: 400 });
   }
+  const draftBaseDir = getDraftBaseDir(user.id);
   if (!body.path.startsWith(draftBaseDir)) {
     return NextResponse.json({ error: "Invalid path." }, { status: 400 });
   }

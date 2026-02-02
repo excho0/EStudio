@@ -48,20 +48,20 @@ const fetchUserByEmail = async (email: string) => {
   return user ?? null;
 };
 
-const fetchContentItem = async (id: string) => {
+const fetchContentItem = async (userId: string, id: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
     const [item] = await (db as PostgresDrizzleDb)
       .select({ id: schema.contentItems.id })
       .from(schema.contentItems)
-      .where(eq(schema.contentItems.id, id))
+      .where(and(eq(schema.contentItems.id, id), eq(schema.contentItems.userId, userId)))
       .limit(1);
     return item ?? null;
   }
   const [item] = await (db as SqliteDrizzleDb)
     .select({ id: sqliteSchema.contentItems.id })
     .from(sqliteSchema.contentItems)
-    .where(eq(sqliteSchema.contentItems.id, id))
+    .where(and(eq(sqliteSchema.contentItems.id, id), eq(sqliteSchema.contentItems.userId, userId)))
     .limit(1);
   return item ?? null;
 };
@@ -108,7 +108,7 @@ export async function GET(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const contentItem = await fetchContentItem(contentId);
+  const contentItem = await fetchContentItem(user.id, contentId);
   if (!contentItem) {
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
@@ -159,7 +159,7 @@ export async function POST(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const contentItem = await fetchContentItem(contentId);
+  const contentItem = await fetchContentItem(user.id, contentId);
   if (!contentItem) {
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }

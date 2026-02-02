@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   ensureContentStore,
   findContentAssetPath,
-  getContentManifestsDir,
+  getUserManifestsDir,
 } from "@/lib/content-store";
 import {
   contentCreateSchema,
@@ -10,13 +10,18 @@ import {
   getContentItem,
 } from "@/lib/data/content";
 import { getStorage, storageKey } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
 export async function POST() {
-  await ensureContentStore();
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  await ensureContentStore(user.id);
   const storage = getStorage();
-  const manifestsDir = getContentManifestsDir();
+  const manifestsDir = getUserManifestsDir(user.id);
   const files = await storage.list(manifestsDir);
   if (files.length === 0) {
     return NextResponse.json(
@@ -91,17 +96,18 @@ export async function POST() {
         fps: data.fps ?? 30,
         width: data.width ?? 1280,
         height: data.height ?? 720,
+        userId: user.id,
       };
       const parsed = contentCreateSchema.parse(candidate);
-      const existing = await getContentItem(parsed.id);
+      const existing = await getContentItem(user.id, parsed.id);
       if (existing) {
         skipped += 1;
         continue;
       }
       const [thumbOk, videoOk, songOk] = await Promise.all([
-        findContentAssetPath(parsed.id, "thumbnail"),
-        findContentAssetPath(parsed.id, "video"),
-        findContentAssetPath(parsed.id, "song"),
+        findContentAssetPath(user.id, parsed.id, "thumbnail"),
+        findContentAssetPath(user.id, parsed.id, "video"),
+        findContentAssetPath(user.id, parsed.id, "song"),
       ]);
       if (!thumbOk || !videoOk || !songOk) {
         skipped += 1;

@@ -117,6 +117,9 @@ export const contentItems = sqliteTable(
   "content_items",
   {
     id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     status: text("status").notNull().default("uploaded"),
     // asset paths derived from content id
@@ -155,6 +158,9 @@ export const contentItems = sqliteTable(
       .default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
+    index("idx_content_items_user_id").on(table.userId),
+    index("idx_content_items_user_status").on(table.userId, table.status),
+    index("idx_content_items_user_created_at").on(table.userId, table.createdAt),
     index("idx_content_items_status").on(table.status),
     index("idx_content_items_created_at").on(table.createdAt),
   ]
@@ -198,6 +204,9 @@ export const contentItemsPg = pgTable(
   "content_items",
   {
     id: pgText("id").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
     title: pgText("title").notNull(),
     status: pgText("status").notNull().default("uploaded"),
     // asset paths derived from content id
@@ -236,6 +245,9 @@ export const contentItemsPg = pgTable(
       .defaultNow(),
   },
   (table) => [
+    pgIndex("idx_content_items_user_id").on(table.userId),
+    pgIndex("idx_content_items_user_status").on(table.userId, table.status),
+    pgIndex("idx_content_items_user_created_at").on(table.userId, table.createdAt),
     pgIndex("idx_content_items_status").on(table.status),
     pgIndex("idx_content_items_created_at").on(table.createdAt),
   ]
@@ -414,7 +426,8 @@ export const appTokensRelations = relations(appTokens, ({ one }) => ({
   user: one(users, { fields: [appTokens.userId], references: [users.id] }),
 }));
 
-export const contentItemsRelations = relations(contentItems, ({ many }) => ({
+export const contentItemsRelations = relations(contentItems, ({ one, many }) => ({
+  user: one(users, { fields: [contentItems.userId], references: [users.id] }),
   publishes: many(publishes),
 }));
 
@@ -431,6 +444,7 @@ export const usersPgRelations = relations(usersPg, ({ many }) => ({
   sessions: many(sessionsPg),
   authenticators: many(authenticatorsPg),
   appTokens: many(appTokensPg),
+  contentItems: many(contentItemsPg),
   publishes: many(publishesPg),
 }));
 
@@ -453,7 +467,8 @@ export const appTokensPgRelations = relations(appTokensPg, ({ one }) => ({
   user: one(usersPg, { fields: [appTokensPg.userId], references: [usersPg.id] }),
 }));
 
-export const contentItemsPgRelations = relations(contentItemsPg, ({ many }) => ({
+export const contentItemsPgRelations = relations(contentItemsPg, ({ one, many }) => ({
+  user: one(usersPg, { fields: [contentItemsPg.userId], references: [usersPg.id] }),
   publishes: many(publishesPg),
 }));
 

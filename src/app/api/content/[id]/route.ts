@@ -2,7 +2,6 @@ import path from "path";
 import { NextResponse } from "next/server";
 import {
   getContentAssetPath,
-  resolveContentPath,
   removeContentAssetFiles,
   removeContentAssets,
   findContentAssetPath,
@@ -18,17 +17,23 @@ import {
   getContentItem,
   updateContentItem,
 } from "@/lib/data/content";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
 const storage = getStorage();
 
-const writeUpload = async (file: File, id: string, kind: "thumbnail") => {
+const writeUpload = async (
+  userId: string,
+  file: File,
+  id: string,
+  kind: "thumbnail"
+) => {
   const extension = path.extname(file.name || "");
-  const relativePath = getContentAssetPath(id, kind, extension || ".bin");
+  const relativePath = getContentAssetPath(userId, id, kind, extension || ".bin");
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await removeContentAssetFiles(id, kind);
+  await removeContentAssetFiles(userId, id, kind);
   await storage.writeFile(relativePath, buffer);
 
   return relativePath;
@@ -39,7 +44,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const item = await getContentItem(id);
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const item = await getContentItem(user.id, id);
 
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -53,9 +62,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const contentType = request.headers.get("content-type") ?? "";
   const isMultipart = contentType.includes("multipart/form-data");
-  const item = await getContentItem(id);
+  const item = await getContentItem(user.id, id);
 
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -162,10 +175,15 @@ export async function PATCH(
     }
 
     if (thumbnail instanceof File) {
-      const thumbnailPath = await writeUpload(thumbnail, item.id, "thumbnail");
+      const thumbnailPath = await writeUpload(
+        user.id,
+        thumbnail,
+        item.id,
+        "thumbnail"
+      );
       if (payload.paletteMode !== "manual") {
         payload.colorPalette = await getPaletteFromPath(
-          resolveContentPath(thumbnailPath)
+          storage.resolvePath(thumbnailPath)
         );
       }
       payload.status = item.status;
@@ -182,22 +200,26 @@ export async function PATCH(
         : item.paletteMode ?? "auto";
 
   if (resolvedPaletteMode === "auto" && !("colorPalette" in payload)) {
-    const thumbnailPath = await findContentAssetPath(item.id, "thumbnail");
+    const thumbnailPath = await findContentAssetPath(
+      user.id,
+      item.id,
+      "thumbnail"
+    );
     if (thumbnailPath) {
       payload.colorPalette = await getPaletteFromPath(
-        resolveContentPath(thumbnailPath)
+        storage.resolvePath(thumbnailPath)
       );
     }
   }
 
-  const updated = await updateContentItem(id, payload);
+  const updated = await updateContentItem(user.id, id, payload);
 
   if (!updated) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  emitContentUpdate({ type: "content:updated", id });
-  await writeContentManifest(updated.id, updated);
+  emitContentUpdate({ userId: user.id, type: "content:updated", id });
+  await writeContentManifest(user.id, updated.id, updated);
 
   return NextResponse.json(updated);
 }
@@ -207,24 +229,28 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(request.url);
   const keepRenders = searchParams.get("keepRenders") === "1";
-  const item = await getContentItem(id);
+  const item = await getContentItem(user.id, id);
 
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const removals = [removeContentAssets(item.id)];
+  const removals = [removeContentAssets(user.id, item.id)];
   if (!keepRenders) {
-    removals.push(storage.deleteDir(getContentRenderDir(item.id)));
+    removals.push(storage.deleteDir(getContentRenderDir(user.id, item.id)));
   }
   await Promise.all(removals);
 
-  await deleteContentItem(id);
-  await deleteContentManifest(id);
+  await deleteContentItem(user.id, id);
+  await deleteContentManifest(user.id, id);
 
-  emitContentUpdate({ type: "content:deleted", id });
+  emitContentUpdate({ userId: user.id, type: "content:deleted", id });
 
   return NextResponse.json({ ok: true });
 }

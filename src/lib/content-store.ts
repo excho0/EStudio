@@ -1,27 +1,16 @@
-import path from "path";
-
 import { getStorage, resolveStoragePath, storageKey } from "@/lib/storage";
 
 const storage = getStorage();
 const baseDir = storage.baseDir;
-const uploadsDir = storageKey("uploads");
-const rendersDir = storageKey("renders");
-const manifestsDir = storageKey("manifests");
-const videosDir = storageKey("uploads", "videos");
+const rootUsersDir = storageKey("users");
 
 export const contentPaths = {
   baseDir,
-  uploadsDir: resolveStoragePath(uploadsDir),
-  rendersDir: resolveStoragePath(rendersDir),
-  manifestsDir: resolveStoragePath(manifestsDir),
-  videosDir: resolveStoragePath(videosDir),
+  usersDir: resolveStoragePath(rootUsersDir),
 };
 
 export const contentKeys = {
-  uploadsDir,
-  rendersDir,
-  manifestsDir,
-  videosDir,
+  usersDir: rootUsersDir,
 };
 
 export const resolveContentPath = (relativePath: string) =>
@@ -29,48 +18,55 @@ export const resolveContentPath = (relativePath: string) =>
 
 export type ContentAssetKind = "thumbnail" | "video" | "song";
 
-export async function ensureContentStore() {
-  await storage.ensureDir(videosDir);
-  await storage.ensureDir(rendersDir);
-  await storage.ensureDir(manifestsDir);
+export const getUserRoot = (userId: string) => storageKey("users", userId);
+
+export const getUserUploadsDir = (userId: string) =>
+  storageKey(getUserRoot(userId), "uploads");
+
+export const getUserVideosDir = (userId: string) =>
+  storageKey(getUserUploadsDir(userId), "videos");
+
+export const getUserRendersRootDir = (userId: string) =>
+  storageKey(getUserRoot(userId), "renders");
+
+export const getUserManifestsDir = (userId: string) =>
+  storageKey(getUserRoot(userId), "manifests");
+
+export async function ensureContentStore(userId: string) {
+  await storage.ensureDir(getUserVideosDir(userId));
+  await storage.ensureDir(getUserRendersRootDir(userId));
+  await storage.ensureDir(getUserManifestsDir(userId));
 }
 
 export function getContentAssetPath(
+  userId: string,
   id: string,
   kind: ContentAssetKind,
   extension: string
 ) {
   const safeExtension = extension.startsWith(".") ? extension : `.${extension}`;
   const fileName = `${kind}${safeExtension}`;
-  return storageKey("uploads", "videos", id, fileName);
+  return storageKey(getUserVideosDir(userId), id, fileName);
 }
 
-export function getContentAssetDir(id: string) {
-  return storageKey("uploads", "videos", id);
+export function getContentAssetDir(userId: string, id: string) {
+  return storageKey(getUserVideosDir(userId), id);
 }
 
-export function getContentRenderPath(id: string, fileName: string) {
-  return storageKey("renders", id, fileName);
+export function getContentRenderPath(
+  userId: string,
+  id: string,
+  fileName: string
+) {
+  return storageKey(getUserRendersRootDir(userId), id, fileName);
 }
 
-export function getContentRenderDir(id: string) {
-  return storageKey("renders", id);
+export function getContentRenderDir(userId: string, id: string) {
+  return storageKey(getUserRendersRootDir(userId), id);
 }
 
-export function getContentUploadsDir() {
-  return uploadsDir;
-}
-
-export function getContentRendersRootDir() {
-  return rendersDir;
-}
-
-export function getContentManifestsDir() {
-  return manifestsDir;
-}
-
-export async function findLatestRenderPath(id: string) {
-  const dirKey = getContentRenderDir(id);
+export async function findLatestRenderPath(userId: string, id: string) {
+  const dirKey = getContentRenderDir(userId, id);
   const entries = await storage.list(dirKey);
   const candidates = entries.filter((entry) => entry.toLowerCase().endsWith(".mp4"));
   if (candidates.length === 0) return null;
@@ -84,24 +80,26 @@ export async function findLatestRenderPath(id: string) {
     }
   }
 
-  return latest ? storageKey(getContentRenderDir(id), latest.name) : null;
+  return latest ? storageKey(getContentRenderDir(userId, id), latest.name) : null;
 }
 
 export async function findContentAssetPath(
+  userId: string,
   id: string,
   kind: ContentAssetKind
 ) {
-  const dirKey = getContentAssetDir(id);
+  const dirKey = getContentAssetDir(userId, id);
   const entries = await storage.list(dirKey);
   const match = entries.find((entry) => entry.startsWith(`${kind}.`));
-  return match ? storageKey("uploads", "videos", id, match) : null;
+  return match ? storageKey(getUserVideosDir(userId), id, match) : null;
 }
 
 export async function removeContentAssetFiles(
+  userId: string,
   id: string,
   kind: ContentAssetKind
 ) {
-  const dirKey = getContentAssetDir(id);
+  const dirKey = getContentAssetDir(userId, id);
   const entries = await storage.list(dirKey);
   const targets = entries.filter((entry) => entry.startsWith(`${kind}.`));
   await Promise.all(
@@ -109,15 +107,17 @@ export async function removeContentAssetFiles(
   );
 }
 
-export async function removeContentAssets(id: string) {
-  const dirKey = getContentAssetDir(id);
+export async function removeContentAssets(userId: string, id: string) {
+  const dirKey = getContentAssetDir(userId, id);
   await storage.deleteDir(dirKey);
 }
 
 export async function writeContentManifest(
+  userId: string,
   id: string,
   data: Record<string, unknown>
 ) {
+  const manifestsDir = getUserManifestsDir(userId);
   await storage.ensureDir(manifestsDir);
   const manifestPath = storageKey(manifestsDir, `${id}.json`);
   const payload = {
@@ -127,9 +127,17 @@ export async function writeContentManifest(
   await storage.writeFile(manifestPath, JSON.stringify(payload, null, 2));
 }
 
-export async function deleteContentManifest(id: string) {
-  const manifestPath = storageKey(manifestsDir, `${id}.json`);
+export async function deleteContentManifest(userId: string, id: string) {
+  const manifestPath = storageKey(getUserManifestsDir(userId), `${id}.json`);
   await storage.deleteFile(manifestPath);
 }
 
 export const getStorageBaseDir = () => baseDir;
+
+export const getUserContentPaths = (userId: string) => ({
+  rootDir: resolveStoragePath(getUserRoot(userId)),
+  uploadsDir: resolveStoragePath(getUserUploadsDir(userId)),
+  videosDir: resolveStoragePath(getUserVideosDir(userId)),
+  rendersDir: resolveStoragePath(getUserRendersRootDir(userId)),
+  manifestsDir: resolveStoragePath(getUserManifestsDir(userId)),
+});

@@ -16,12 +16,15 @@ import {
 } from "@/lib/socket";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/helpers";
+import { getSessionUser } from "@/lib/auth-session";
+import { createContentAssetToken } from "@/lib/content-asset-token";
 
 export const runtime = "nodejs";
 
 const storage = getStorage();
 
 type RenderJob = {
+  userId: string;
   id: string;
   browserLabel: string;
   chromeMode: "chrome-for-testing" | "headless-shell";
@@ -248,6 +251,7 @@ const runFfmpeg = (binary: string, args: string[]) =>
   });
 
 const startRenderJob = async ({
+  userId,
   id,
   browserLabel,
   chromeMode,
@@ -294,6 +298,7 @@ const startRenderJob = async ({
 
     lastProgressPercent.set(id, -1);
     emitRenderProgress({
+      userId,
       id,
       rendered: 0,
       total: totalFrames,
@@ -343,6 +348,7 @@ const startRenderJob = async ({
           }
           lastProgressPercent.set(id, percent);
           emitRenderProgress({
+            userId,
             id,
             rendered,
             total: totalFrames,
@@ -402,6 +408,7 @@ const startRenderJob = async ({
         }
         lastProgressPercent.set(id, percent);
         emitRenderProgress({
+          userId,
           id,
           rendered: totalRendered,
           total: totalFrames,
@@ -572,16 +579,16 @@ const startRenderJob = async ({
       `[render] complete frames=${totalFrames} time=${elapsedSeconds.toFixed(1)}s avgFps=${avgFps}`
     );
 
-    const updated = await updateContentItem(id, {
+    const updated = await updateContentItem(userId, id, {
       status: "rendered",
     });
     lastProgressPercent.delete(id);
-    emitContentUpdate({ type: "content:status", id, status: "rendered" });
-    emitContentUpdate({ type: "content:rendered", id, item: updated });
-    emitRenderComplete({ id, durationSeconds: elapsedSeconds, avgFps });
+    emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
+    emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
+    emitRenderComplete({ userId, id, durationSeconds: elapsedSeconds, avgFps });
   } catch (error) {
-    await updateContentItem(id, { status: "failed" });
-    emitContentUpdate({ type: "content:status", id, status: "failed" });
+    await updateContentItem(userId, id, { status: "failed" });
+    emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
     const message = error instanceof Error ? error.message : "Render failed";
     console.error(
       `Render job failed for ${id} (browser=${browserLabel}, mode=${chromeMode}):`,
@@ -595,6 +602,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const resolvedBrowser =
     process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
     process.env.REMOTION_BROWSER_EXECUTABLE ||
@@ -603,16 +614,16 @@ export async function POST(
     process.env.REMOTION_RENDER_CHROME_MODE === "headless-shell"
       ? "headless-shell"
       : "chrome-for-testing";
-  const item = await getContentItem(id);
+  const item = await getContentItem(user.id, id);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await ensureContentStore();
-  await updateContentItem(id, { status: "rendering" });
-  emitContentUpdate({ type: "content:status", id, status: "rendering" });
+  await ensureContentStore(user.id);
+  await updateContentItem(user.id, id, { status: "rendering" });
+  emitContentUpdate({ userId: user.id, type: "content:status", id, status: "rendering" });
 
-  const renderDirKey = getContentRenderDir(id);
+  const renderDirKey = getContentRenderDir(user.id, id);
   await storage.ensureDir(renderDirKey);
   const renderDir = resolveContentPath(renderDirKey);
   let nextIndex = 1;
@@ -626,7 +637,7 @@ export async function POST(
   }
   const slug = getSlug(item.title) || "untitled";
   const fileName = `${slug}_${nextIndex}.mp4`;
-  const renderPath = getContentRenderPath(id, fileName);
+  const renderPath = getContentRenderPath(user.id, id, fileName);
   const outputPath = resolveContentPath(renderPath);
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
   const compositionId = "ContentLoop";
@@ -634,11 +645,18 @@ export async function POST(
   const serveUrl = await getServeUrl(entryPoint);
 
   const origin = new URL(request.url).origin;
+  const assetToken = createContentAssetToken(user.id, id);
+  const withAssetToken = (url: string) =>
+    assetToken
+      ? `${url}${url.includes(\"?\") ? \"&\" : \"?\"}token=${encodeURIComponent(assetToken)}`
+      : url;
   const props = {
     title: item.title,
-    thumbnailSrc: `${origin}/api/content/${id}/asset?type=thumbnail`,
-    videoSrc: `${origin}/api/content/${id}/asset?type=video`,
-    audioSrc: `${origin}/api/content/${id}/asset?type=song`,
+    thumbnailSrc: withAssetToken(
+      `${origin}/api/content/${id}/asset?type=thumbnail`
+    ),
+    videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
+    audioSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=song`),
     segmentDurationSeconds: item.segmentDurationSeconds,
     fadeDurationSeconds: item.fadeDurationSeconds,
     introFadeSeconds: item.introFadeSeconds,
@@ -666,6 +684,7 @@ export async function POST(
 
   const browserLabel = resolvedBrowser ?? "auto";
   void startRenderJob({
+    userId: user.id,
     id,
     browserLabel,
     chromeMode,

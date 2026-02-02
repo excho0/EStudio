@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import {
   ensureContentStore,
   getContentAssetPath,
-  resolveContentPath,
   writeContentManifest,
 } from "@/lib/content-store";
 import { getStorage } from "@/lib/storage";
@@ -16,14 +15,20 @@ import {
   createContentItem,
   listContentItems,
 } from "@/lib/data/content";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
 const storage = getStorage();
 
-const writeUpload = async (file: File, id: string, kind: "thumbnail" | "video" | "song") => {
+const writeUpload = async (
+  userId: string,
+  file: File,
+  id: string,
+  kind: "thumbnail" | "video" | "song"
+) => {
   const extension = path.extname(file.name || "");
-  const relativePath = getContentAssetPath(id, kind, extension || ".bin");
+  const relativePath = getContentAssetPath(userId, id, kind, extension || ".bin");
   const buffer = Buffer.from(await file.arrayBuffer());
 
   await storage.writeFile(relativePath, buffer);
@@ -32,6 +37,7 @@ const writeUpload = async (file: File, id: string, kind: "thumbnail" | "video" |
 };
 
 const finalizeDraft = async (
+  userId: string,
   draftPath: string,
   id: string,
   kind: "thumbnail" | "video" | "song"
@@ -40,24 +46,32 @@ const finalizeDraft = async (
     throw new Error(`Draft file missing for ${kind}.`);
   }
   const extension = path.extname(draftPath);
-  const relativePath = getContentAssetPath(id, kind, extension || ".bin");
+  const relativePath = getContentAssetPath(userId, id, kind, extension || ".bin");
   await storage.move(draftPath, relativePath);
   return relativePath;
 };
 
 export async function GET(request: Request) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(request.url);
   const params = contentQuerySchema.parse({
     q: searchParams.get("q") ?? "",
     page: searchParams.get("page") ?? "1",
     limit: searchParams.get("limit") ?? "50",
   });
-  const result = await listContentItems(params);
+  const result = await listContentItems(user.id, params);
   return NextResponse.json(result);
 }
 
 export async function POST(request: Request) {
-  await ensureContentStore();
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  await ensureContentStore(user.id);
   const contentType = request.headers.get("content-type") ?? "";
   const isMultipart = contentType.includes("multipart/form-data");
 
@@ -96,18 +110,19 @@ export async function POST(request: Request) {
 
     const id = randomUUID();
     const [thumbnailPath, videoPath, songPath] = await Promise.all([
-      finalizeDraft(payload.thumbnailPath, id, "thumbnail"),
-      finalizeDraft(payload.videoPath, id, "video"),
-      finalizeDraft(payload.songPath, id, "song"),
+      finalizeDraft(user.id, payload.thumbnailPath, id, "thumbnail"),
+      finalizeDraft(user.id, payload.videoPath, id, "video"),
+      finalizeDraft(user.id, payload.songPath, id, "song"),
     ]);
     const colorPalette = thumbnailPath
-      ? await getPaletteFromPath(resolveContentPath(thumbnailPath))
+      ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
       : null;
 
     const overlapRatioValue =
       typeof payload.overlapRatio === "number" ? payload.overlapRatio : null;
     const item = contentCreateSchema.parse({
       id,
+      userId: user.id,
       title: payload.title?.trim() || "Untitled",
       status: "uploaded",
       colorPalette,
@@ -165,11 +180,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to create item." }, { status: 500 });
     }
     const createdItem = created;
-    await writeContentManifest(createdItem.id, {
+    await writeContentManifest(user.id, createdItem.id, {
       ...createdItem,
       assets: { thumbnailPath, videoPath, songPath },
     });
-    emitContentUpdate({ type: "content:created", item: createdItem });
+    emitContentUpdate({ userId: user.id, type: "content:created", item: createdItem });
     return NextResponse.json(createdItem);
   }
 
@@ -209,17 +224,18 @@ export async function POST(request: Request) {
 
   const id = randomUUID();
   const [thumbnailPath, videoPath, songPath] = await Promise.all([
-    writeUpload(thumbnail, id, "thumbnail"),
-    writeUpload(video, id, "video"),
-    writeUpload(song, id, "song"),
+    writeUpload(user.id, thumbnail, id, "thumbnail"),
+    writeUpload(user.id, video, id, "video"),
+    writeUpload(user.id, song, id, "song"),
   ]);
 
   const colorPalette = thumbnailPath
-    ? await getPaletteFromPath(resolveContentPath(thumbnailPath))
+    ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
     : null;
 
   const item = contentCreateSchema.parse({
     id,
+    userId: user.id,
     title,
     status: "uploaded",
     colorPalette,
@@ -271,10 +287,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create item." }, { status: 500 });
   }
   const createdItem = created;
-  await writeContentManifest(createdItem.id, {
+  await writeContentManifest(user.id, createdItem.id, {
     ...createdItem,
     assets: { thumbnailPath, videoPath, songPath },
   });
-  emitContentUpdate({ type: "content:created", item: createdItem });
+  emitContentUpdate({ userId: user.id, type: "content:created", item: createdItem });
   return NextResponse.json(createdItem);
 }

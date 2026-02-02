@@ -1,4 +1,4 @@
-import { desc, eq, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 import { z } from "zod";
 
@@ -45,6 +45,7 @@ const withContentDb = async <T>(handlers: {
 
 export const contentItemSchema = z.object({
   id: z.uuid(),
+  userId: z.string().min(1),
   title: z.string().min(1),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -84,6 +85,7 @@ export const contentQuerySchema = z.object({
 
 export const contentCreateSchema = z.object({
   id: z.uuid(),
+  userId: z.string().min(1),
   title: z.string().min(1),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).default("uploaded"),
   colorPalette: z.array(z.string()).optional().nullable(),
@@ -196,7 +198,10 @@ const normalizeRow = (row: unknown): ContentItemRow => {
   return parsed.data;
 };
 
-export async function listContentItems(query: z.infer<typeof contentQuerySchema>) {
+export async function listContentItems(
+  userId: string,
+  query: z.infer<typeof contentQuerySchema>
+) {
   const safe = contentQuerySchema.parse(query);
   const offset = (safe.page - 1) * safe.limit;
   const term = safe.q.toLowerCase();
@@ -212,14 +217,14 @@ export async function listContentItems(query: z.infer<typeof contentQuerySchema>
       const rows = await db
         .select()
         .from(table)
-        .where(filters)
+        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
         .orderBy(desc(table.createdAt))
         .limit(safe.limit)
         .offset(offset);
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
-        .where(filters);
+        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId));
       return {
         items: rows.map(normalizeRow),
         total: Number(totalRow[0]?.count ?? 0),
@@ -238,14 +243,14 @@ export async function listContentItems(query: z.infer<typeof contentQuerySchema>
       const rows = await db
         .select()
         .from(table)
-        .where(filters)
+        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
         .orderBy(desc(table.createdAt))
         .limit(safe.limit)
         .offset(offset);
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
-        .where(filters);
+        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId));
       return {
         items: rows.map(normalizeRow),
         total: Number(totalRow[0]?.count ?? 0),
@@ -256,7 +261,7 @@ export async function listContentItems(query: z.infer<typeof contentQuerySchema>
   });
 }
 
-export async function getContentStats() {
+export async function getContentStats(userId: string) {
   return withContentDb({
     pg: async ({ db, table }) => {
       const rows = await db
@@ -267,7 +272,8 @@ export async function getContentStats() {
           rendered: sql<number>`sum(case when ${table.status} = 'rendered' then 1 else 0 end)`,
           failed: sql<number>`sum(case when ${table.status} = 'failed' then 1 else 0 end)`,
         })
-        .from(table);
+        .from(table)
+        .where(eq(table.userId, userId));
       const row = rows[0] ?? {};
       return {
         total: Number(row.total ?? 0),
@@ -286,7 +292,8 @@ export async function getContentStats() {
           rendered: sql<number>`sum(case when ${table.status} = 'rendered' then 1 else 0 end)`,
           failed: sql<number>`sum(case when ${table.status} = 'failed' then 1 else 0 end)`,
         })
-        .from(table);
+        .from(table)
+        .where(eq(table.userId, userId));
       const row = rows[0] ?? {};
       return {
         total: Number(row.total ?? 0),
@@ -299,13 +306,13 @@ export async function getContentStats() {
   });
 }
 
-export async function getContentItem(id: string) {
+export async function getContentItem(userId: string, id: string) {
   return withContentDb({
     pg: async ({ db, table }) => {
       const rows = await db
         .select()
         .from(table)
-        .where(eq(table.id, id))
+        .where(and(eq(table.id, id), eq(table.userId, userId)))
         .limit(1);
       return rows[0] ? normalizeRow(rows[0]) : null;
     },
@@ -313,8 +320,21 @@ export async function getContentItem(id: string) {
       const rows = await db
         .select()
         .from(table)
-        .where(eq(table.id, id))
+        .where(and(eq(table.id, id), eq(table.userId, userId)))
         .limit(1);
+      return rows[0] ? normalizeRow(rows[0]) : null;
+    },
+  });
+}
+
+export async function getContentItemById(id: string) {
+  return withContentDb({
+    pg: async ({ db, table }) => {
+      const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
+      return rows[0] ? normalizeRow(rows[0]) : null;
+    },
+    sqlite: async ({ db, table }) => {
+      const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
       return rows[0] ? normalizeRow(rows[0]) : null;
     },
   });
@@ -342,10 +362,11 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
       await db.insert(table).values(values);
     },
   });
-  return getContentItem(data.id);
+  return getContentItem(data.userId, data.id);
 }
 
 export async function updateContentItem(
+  userId: string,
   id: string,
   updates: z.infer<typeof contentUpdateSchema>
 ) {
@@ -361,7 +382,7 @@ export async function updateContentItem(
   ) as typeof data;
 
   if (Object.keys(cleaned).length === 0) {
-    return getContentItem(id);
+    return getContentItem(userId, id);
   }
   await withContentDb({
     pg: async ({ db, table, now }) => {
@@ -373,7 +394,10 @@ export async function updateContentItem(
       if (colorPalette !== undefined) {
         values.colorPalette = serializeColorPalette(colorPalette);
       }
-      await db.update(table).set(values).where(eq(table.id, id));
+      await db
+        .update(table)
+        .set(values)
+        .where(and(eq(table.id, id), eq(table.userId, userId)));
     },
     sqlite: async ({ db, table, now }) => {
       const { colorPalette, visualizationEnabled, edgeRaysEnabled, ...rest } = cleaned;
@@ -390,19 +414,26 @@ export async function updateContentItem(
       if (edgeRaysEnabled !== undefined) {
         values.edgeRaysEnabled = edgeRaysEnabled ? 1 : 0;
       }
-      await db.update(table).set(values).where(eq(table.id, id));
+      await db
+        .update(table)
+        .set(values)
+        .where(and(eq(table.id, id), eq(table.userId, userId)));
     },
   });
-  return getContentItem(id);
+  return getContentItem(userId, id);
 }
 
-export async function deleteContentItem(id: string) {
+export async function deleteContentItem(userId: string, id: string) {
   await withContentDb({
     pg: async ({ db, table }) => {
-      await db.delete(table).where(eq(table.id, id));
+      await db
+        .delete(table)
+        .where(and(eq(table.id, id), eq(table.userId, userId)));
     },
     sqlite: async ({ db, table }) => {
-      await db.delete(table).where(eq(table.id, id));
+      await db
+        .delete(table)
+        .where(and(eq(table.id, id), eq(table.userId, userId)));
     },
   });
 }

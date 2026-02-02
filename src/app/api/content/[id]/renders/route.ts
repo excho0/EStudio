@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getContentRenderDir } from "@/lib/content-store";
 import { getContentItem } from "@/lib/data/content";
 import { getStorage, storageKey } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const item = await getContentItem(id);
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const item = await getContentItem(user.id, id);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -28,7 +33,7 @@ export async function GET(
   const limitRaw = parsePositiveInt(searchParams.get("limit"), 20);
   const limit = Math.min(100, Math.max(1, limitRaw));
 
-  const renderDir = getContentRenderDir(id);
+  const renderDir = getContentRenderDir(user.id, id);
   const entries = await storage.list(renderDir);
   if (entries.length === 0) {
     return NextResponse.json({

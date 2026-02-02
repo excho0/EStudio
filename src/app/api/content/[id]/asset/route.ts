@@ -5,9 +5,11 @@ import {
   findLatestRenderPath,
   getContentRenderDir,
 } from "@/lib/content-store";
-import { getContentItem } from "@/lib/data/content";
+import { getContentItem, getContentItemById } from "@/lib/data/content";
 import { Readable } from "stream";
 import { getStorage } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth-session";
+import { verifyContentAssetToken } from "@/lib/content-asset-token";
 
 export const runtime = "nodejs";
 
@@ -88,12 +90,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const item = await getContentItem(id);
+  const { searchParams } = new URL(request.url);
+  const user = await getSessionUser();
+  const token = searchParams.get("token");
+  const tokenPayload = token ? verifyContentAssetToken(token) : null;
+  if (token && !tokenPayload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const item = user
+    ? await getContentItem(user.id, id)
+    : tokenPayload && tokenPayload.contentId === id
+      ? await getContentItemById(id)
+      : null;
   if (!item) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = item.userId;
+  if (!userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (tokenPayload && tokenPayload.userId !== userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
   const renderName = searchParams.get("name");
 
@@ -105,10 +124,11 @@ export async function GET(
             if (safeName !== renderName || !safeName.toLowerCase().endsWith(".mp4")) {
               return null;
             }
-            return path.join(getContentRenderDir(item.id), safeName);
+            return path.join(getContentRenderDir(userId, item.id), safeName);
           })()
-        : await findLatestRenderPath(item.id)
+        : await findLatestRenderPath(userId, item.id)
       : await findContentAssetPath(
+          userId,
           item.id,
           type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
         );

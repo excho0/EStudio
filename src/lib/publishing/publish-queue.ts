@@ -48,20 +48,24 @@ const readPublishRow = async (publishId: string) => {
   return publish ?? null;
 };
 
-const readContentItemTitle = async (contentId: string) => {
+const readContentItemTitle = async (userId: string, contentId: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
     const [item] = await (db as PostgresDrizzleDb)
       .select({ title: schema.contentItems.title })
       .from(schema.contentItems)
-      .where(eq(schema.contentItems.id, contentId))
+      .where(
+        sql`${schema.contentItems.id} = ${contentId} and ${schema.contentItems.userId} = ${userId}`
+      )
       .limit(1);
     return item?.title ?? null;
   }
   const [item] = await (db as SqliteDrizzleDb)
     .select({ title: sqliteSchema.contentItems.title })
     .from(sqliteSchema.contentItems)
-    .where(eq(sqliteSchema.contentItems.id, contentId))
+    .where(
+      sql`${sqliteSchema.contentItems.id} = ${contentId} and ${sqliteSchema.contentItems.userId} = ${userId}`
+    )
     .limit(1);
   return item?.title ?? null;
 };
@@ -101,7 +105,7 @@ const runPublishJob = async (job: PublishJob) => {
     error: null,
     publishAttempts: nextAttempt,
   });
-  emitPublishUpdate({ id: job.publishId, status: "publishing" });
+  emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "publishing" });
 
   const adapter = getProviderAdapter(publish.provider);
   if (!adapter) {
@@ -109,14 +113,14 @@ const runPublishJob = async (job: PublishJob) => {
       status: "failed",
       error: "Unknown provider.",
     });
-    emitPublishUpdate({ id: job.publishId, status: "failed" });
+    emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "failed" });
     return;
   }
 
   const metadata = parseMetadata(publish.metadata);
   const title =
     (typeof metadata.title === "string" ? metadata.title : null) ??
-    (await readContentItemTitle(publish.contentId)) ??
+    (await readContentItemTitle(publish.userId, publish.contentId)) ??
     "Untitled upload";
   const description =
     typeof metadata.description === "string" ? metadata.description : undefined;
@@ -125,17 +129,22 @@ const runPublishJob = async (job: PublishJob) => {
       ? (metadata.options as Record<string, unknown>)
       : {};
 
-  const renderKey = getContentRenderPath(publish.contentId, publish.renderId);
+  const renderKey = getContentRenderPath(
+    publish.userId,
+    publish.contentId,
+    publish.renderId
+  );
   const renderPath = resolveContentPath(renderKey);
   if (!(await storage.exists(renderKey))) {
     await updatePublish(job.publishId, {
       status: "failed",
       error: "Render file not found.",
     });
-    emitPublishUpdate({ id: job.publishId, status: "failed" });
+    emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "failed" });
     return;
   }
   const thumbnailRelative = await findContentAssetPath(
+    publish.userId,
     publish.contentId,
     "thumbnail"
   );
@@ -178,6 +187,7 @@ const runPublishJob = async (job: PublishJob) => {
         if (stage && stage !== lastStage && stage !== "uploading") {
           lastStage = stage;
           emitPublishProgress({
+            userId: publish.userId,
             id: job.publishId,
             stage,
           });
@@ -189,6 +199,7 @@ const runPublishJob = async (job: PublishJob) => {
         lastStage = stage ?? lastStage;
         lastPercent = percent;
         emitPublishProgress({
+          userId: publish.userId,
           id: job.publishId,
           stage: progress.stage,
           progress:
@@ -209,6 +220,7 @@ const runPublishJob = async (job: PublishJob) => {
       error: result.warning ?? null,
     });
     emitPublishUpdate({
+      userId: publish.userId,
       id: job.publishId,
       status: result.status ?? "published",
       providerAssetId: result.providerAssetId,
@@ -266,6 +278,8 @@ class PublishQueue {
         const attempt = next.attempt ?? 1;
         const message =
           error instanceof Error ? error.message : "Publish failed unexpectedly.";
+        const publish = await readPublishRow(next.publishId);
+        const userId = publish?.userId ?? null;
         if (!this.isNonRetryableError(message) && attempt < this.maxAttempts) {
           const nextAttempt = attempt + 1;
           const delay = this.computeDelay(nextAttempt);
@@ -274,6 +288,7 @@ class PublishQueue {
             error: `Retrying upload (${nextAttempt}/${this.maxAttempts})`,
           });
           emitPublishUpdate({
+            userId,
             id: next.publishId,
             status: "queued",
             error: `Retrying upload (${nextAttempt}/${this.maxAttempts})`,
@@ -285,6 +300,7 @@ class PublishQueue {
             error: message,
           });
           emitPublishUpdate({
+            userId,
             id: next.publishId,
             status: "failed",
             error: message,

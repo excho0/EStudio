@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import {
-  contentKeys,
   contentPaths,
-  getContentManifestsDir,
-  getContentRendersRootDir,
+  getUserContentPaths,
+  getUserManifestsDir,
+  getUserRendersRootDir,
+  getUserVideosDir,
 } from "@/lib/content-store";
 import { getContentStats } from "@/lib/data/content";
 import { getStorage } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth-session";
 
 export const runtime = "nodejs";
 
@@ -18,19 +20,24 @@ const countFiles = async (key: string) => {
 };
 
 export async function GET() {
-  const stats = await getContentStats();
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const stats = await getContentStats(user.id);
+  const userPaths = getUserContentPaths(user.id);
   const [uploadsCount, rendersCount, manifestsCount] = await Promise.all([
-    countFiles(contentKeys.videosDir),
-    countFiles(getContentRendersRootDir()),
-    countFiles(getContentManifestsDir()),
+    countFiles(getUserVideosDir(user.id)),
+    countFiles(getUserRendersRootDir(user.id)),
+    countFiles(getUserManifestsDir(user.id)),
   ]);
 
   return NextResponse.json({
     storage: {
       baseDir: contentPaths.baseDir,
-      uploadsDir: contentPaths.videosDir,
-      rendersDir: contentPaths.rendersDir,
-      manifestsDir: contentPaths.manifestsDir,
+      uploadsDir: userPaths.videosDir,
+      rendersDir: userPaths.rendersDir,
+      manifestsDir: userPaths.manifestsDir,
       uploadsCount,
       rendersCount,
       manifestsCount,

@@ -180,6 +180,16 @@ app
 
     io.on("connection", (socket) => {
       socket.emit("content:update", { type: "connected" });
+      socket.on("user:register", (payload) => {
+        const userId =
+          typeof payload === "string"
+            ? payload
+            : (payload?.userId ?? null);
+        if (!userId || typeof userId !== "string") {
+          return;
+        }
+        socket.join(`user:${userId}`);
+      });
     });
 
     if (process.env.RENDER_SIMULATE === "true") {
