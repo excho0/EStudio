@@ -2,8 +2,9 @@
 
 import { useMemo } from "react";
 import { useTheme } from "next-themes";
-import { Check, Palette } from "lucide-react";
+import { Palette } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { SelectableCard } from "@/components/ui/selectable-card";
 
 
 import { cn } from "@/lib/utils";
@@ -107,42 +108,21 @@ export default function AppearanceSettingsPage() {
           {options.map((option) => {
             const active = theme === option.key;
             return (
-              <button
+              <SelectableCard
                 key={option.key}
-                type="button"
+                selected={active}
                 onClick={() => setTheme(option.key)}
-                className={cn(
-                  "group rounded-2xl border p-4 text-left transition-all",
-                  "hover:border-slate-400/70 hover:shadow-md",
-                  "dark:hover:border-white/20",
-                  active
-                    ? "border-slate-900/80 shadow-lg ring-1 ring-slate-900/10 dark:border-white/40 dark:ring-white/20"
-                    : "border-slate-200 dark:border-white/10"
-                )}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-base font-semibold">{option.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {option.description}
-                    </p>
+                <div>
+                  <p className="text-base font-semibold">{option.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {option.description}
+                  </p>
+                  <div className="mt-4">
+                    <ThemeSkeleton variant={option.key} />
                   </div>
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-full border",
-                      active
-                        ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                        : "border-slate-200 text-transparent dark:border-white/20"
-                    )}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </span>
                 </div>
-
-                <div className="mt-4">
-                  <ThemeSkeleton variant={option.key} />
-                </div>
-              </button>
+              </SelectableCard>
             );
           })}
         </div>

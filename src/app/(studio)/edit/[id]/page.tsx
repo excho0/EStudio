@@ -5,7 +5,6 @@ import { Link } from "@/components/route-transition";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
-  ChevronDown,
   Pencil,
   MoveHorizontal,
   MoveVertical,
@@ -863,19 +862,11 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <Palette className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Palette</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Dominant colors
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
+                  <CollapsibleTrigger
+                    title="Palette"
+                    description="Dominant colors"
+                    icon={Palette}
+                    rightSlot={
                       <div className="flex items-center -space-x-1">
                         {paletteState.slice(0, 5).map((color) => (
                           <span
@@ -890,10 +881,9 @@ export default function EditContentPage() {
                           </span>
                         ) : null}
                       </div>
-                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    }
+                  />
+                  <CollapsibleContent>
                     <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                       <div className="flex items-center text-center justify-center gap-2">
                         <Pipette className="flex size-5 shrink-0 " />
@@ -973,30 +963,19 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <AudioLines className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Visualization</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Bars + edge rays
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <CollapsibleTrigger
+                    title="Visualization"
+                    description="Bars + edge rays"
+                    icon={AudioLines}
+                  />
+                  <CollapsibleContent>
                     <Collapsible defaultOpen className="rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-                      <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:text-zinc-200 dark:hover:bg-white/5">
-                        <div className="flex items-center gap-2">
-                          <ChartNoAxesColumn className="h-4 w-4" />
-                          <span>Bars</span>
-                        </div>
-                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="grid gap-3 overflow-hidden p-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                      <CollapsibleTrigger
+                        title="Bars"
+                        icon={ChartNoAxesColumn}
+                        className="px-2 py-2 text-xs font-semibold text-slate-700 dark:text-zinc-200"
+                      />
+                      <CollapsibleContent className="p-2">
                         <SettingToggleRow
                           icon={Eye}
                           label="Bars visibility"
@@ -1029,14 +1008,12 @@ export default function EditContentPage() {
                     </Collapsible>
 
                     <Collapsible defaultOpen className="rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-                      <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:text-zinc-200 dark:hover:bg-white/5">
-                        <div className="flex items-center gap-2">
-                          <Spotlight className="h-4 w-4" />
-                          <span>Edge rays</span>
-                        </div>
-                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="grid gap-2 overflow-hidden p-2 text-xs text-slate-500 dark:text-zinc-400 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                      <CollapsibleTrigger
+                        title="Edge rays"
+                        icon={Spotlight}
+                        className="px-2 py-2 text-xs font-semibold text-slate-700 dark:text-zinc-200"
+                      />
+                      <CollapsibleContent className="p-2">
                         <SettingToggleRow
                           icon={Sparkles}
                           label="Edge rays visibility"
@@ -1092,21 +1069,12 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <Clapperboard className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Intro + Outro</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Fade timing
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <CollapsibleTrigger
+                    title="Intro + Outro"
+                    description="Fade timing"
+                    icon={Clapperboard}
+                  />
+                  <CollapsibleContent className="sm:grid-cols-2">
                     <div className="grid gap-2">
                       <LabelWithTooltip
                         htmlFor="introFadeSeconds"
@@ -1264,21 +1232,12 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <Repeat2 className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Loop</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Fade + overlap
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <CollapsibleTrigger
+                    title="Loop"
+                    description="Fade + overlap"
+                    icon={Repeat2}
+                  />
+                  <CollapsibleContent className="sm:grid-cols-2">
                     <div className="grid gap-2">
                       <LabelWithTooltip
                         htmlFor="fadeDurationSeconds"
@@ -1334,21 +1293,12 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <SlidersHorizontal className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Playback</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Speed
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <CollapsibleTrigger
+                    title="Playback"
+                    description="Speed"
+                    icon={SlidersHorizontal}
+                  />
+                  <CollapsibleContent className="sm:grid-cols-2">
                     <div className="grid gap-2">
                       <LabelWithTooltip
                         htmlFor="playbackRate"
@@ -1405,21 +1355,12 @@ export default function EditContentPage() {
                   // defaultOpen
                   className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                    <div className="flex items-center gap-3 text-left">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                        <Monitor className="h-4 w-4" />
-                      </span>
-                      <div className="flex flex-col items-start">
-                        <span>Output</span>
-                        <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                          Resolution
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <CollapsibleTrigger
+                    title="Output"
+                    description="Resolution"
+                    icon={Monitor}
+                  />
+                  <CollapsibleContent className="sm:grid-cols-2">
                     <div className="grid gap-2">
                       <LabelWithTooltip
                         htmlFor="width"

@@ -4,7 +4,7 @@ import { Link } from "@/components/route-transition";
 import { LogOut, UserRoundPen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,54 +32,62 @@ const getInitials = (name?: string | null, email?: string | null) => {
   return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
 };
 
+const providerOrder = ["google", "github", "discord"] as const;
+
+const resolveAvatarSrc = async (fallback?: string | null) => {
+  try {
+    const response = await fetch("/api/user/profile/connections");
+    if (!response.ok) return fallback ?? undefined;
+    const payload = (await response.json()) as {
+      profiles?: Record<string, { image?: string | null }>;
+    };
+    const profiles = payload.profiles ?? {};
+    const provider =
+      providerOrder.find((id) => profiles[id]?.image) ?? null;
+    if (provider) {
+      return `/api/user/profile/avatar?provider=${provider}&v=${Date.now()}`;
+    }
+    return fallback ?? undefined;
+  } catch {
+    return fallback ?? undefined;
+  }
+};
+
 export function UserNav() {
-  const { data } = useSession();
-  const { status } = useSession();
+  const { data, status } = useSession();
   const user = data?.user;
+  const [open, setOpen] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined);
   const initials = getInitials(user?.name, user?.email);
 
-  const providerOrder = useMemo(() => ["google", "github", "discord"], []);
-
-  const refreshAvatar = useCallback(async () => {
-    if (status !== "authenticated") {
-      setAvatarSrc(undefined);
-      return;
-    }
-    try {
-      const response = await fetch("/api/user/profile/connections");
-      if (!response.ok) return;
-      const payload = (await response.json()) as {
-        profiles?: Record<string, { image?: string | null }>;
-      };
-      const profiles = payload.profiles ?? {};
-      const provider =
-        providerOrder.find((id) => profiles[id]?.image) ?? null;
-        if (provider) {
-          setAvatarSrc(`/api/user/profile/avatar?provider=${provider}&v=${Date.now()}`);
-        } else {
-          setAvatarSrc(user?.image ?? undefined);
-        }
-    } catch {
-      setAvatarSrc(user?.image ?? undefined);
-    }
-  }, [providerOrder, status, user?.image]);
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let active = true;
+    const run = async () => {
+      const nextSrc = await resolveAvatarSrc(user?.image);
+      if (active) setAvatarSrc(nextSrc);
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [status, user?.image]);
 
   useEffect(() => {
-    if (status !== "authenticated") {
-      setAvatarSrc(undefined);
-      return;
-    }
-    void refreshAvatar();
-  }, [refreshAvatar, status]);
-
-  useEffect(() => {
+    if (status !== "authenticated") return;
+    let active = true;
     const handler = () => {
-      void refreshAvatar();
+      void (async () => {
+        const nextSrc = await resolveAvatarSrc(user?.image);
+        if (active) setAvatarSrc(nextSrc);
+      })();
     };
     window.addEventListener("profile:connections-updated", handler);
-    return () => window.removeEventListener("profile:connections-updated", handler);
-  }, [refreshAvatar]);
+    return () => {
+      active = false;
+      window.removeEventListener("profile:connections-updated", handler);
+    };
+  }, [status, user?.image]);
 
   return (
     <AnimatePresence mode="wait">
@@ -113,7 +121,7 @@ export function UserNav() {
           exit={{ opacity: 0, scale: 0.98 }}
           transition={{ duration: 1, ease: "easeInOut" }}
         >
-          <DropdownMenu>
+          <DropdownMenu open={open} onOpenChange={setOpen}>
             <TooltipProvider disableHoverableContent>
               <Tooltip delayDuration={100} disableMobileDrawer >
                 <TooltipTrigger asChild>
@@ -150,8 +158,15 @@ export function UserNav() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem className="hover:cursor-pointer" asChild>
-                  <Link href="/settings/profile" className="flex items-center">
+                <DropdownMenuItem
+                  className="hover:cursor-pointer"
+                  asChild
+                >
+                  <Link
+                    href="/settings/profile"
+                    className="flex items-center"
+                    onClick={() => setOpen(false)}
+                  >
                     <UserRoundPen className="w-4 h-4 mr-3 text-muted-foreground" />
                     Edit Profile
                   </Link>
@@ -160,7 +175,10 @@ export function UserNav() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="hover:cursor-pointer"
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={() => {
+                  setOpen(false);
+                  signOut({ callbackUrl: "/login" });
+                }}
               >
                 <LogOut className="w-4 h-4 mr-3 text-muted-foreground" />
                 Sign out

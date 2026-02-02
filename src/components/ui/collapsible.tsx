@@ -1,32 +1,168 @@
 "use client"
 
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible"
+import { ChevronDown } from "lucide-react"
+import { motion } from "framer-motion"
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+type CollapsibleStateContextValue = {
+  open: boolean
+}
+
+const CollapsibleStateContext =
+  React.createContext<CollapsibleStateContextValue | null>(null)
+
+const useCollapsibleState = () => {
+  const ctx = React.useContext(CollapsibleStateContext)
+  if (!ctx) {
+    throw new Error("Collapsible components must be used within Collapsible")
+  }
+  return ctx
+}
+
+const useControllableState = <T,>({
+  prop,
+  defaultProp,
+  onChange,
+}: {
+  prop?: T
+  defaultProp: T
+  onChange?: (value: T) => void
+}) => {
+  const [state, setState] = React.useState(defaultProp)
+  const isControlled = prop !== undefined
+  const value = isControlled ? (prop as T) : state
+
+  const setValue = React.useCallback(
+    (next: React.SetStateAction<T>) => {
+      const nextValue =
+        typeof next === "function"
+          ? (next as (prev: T) => T)(value)
+          : next
+      if (!isControlled) {
+        setState(nextValue)
+      }
+      onChange?.(nextValue)
+    },
+    [isControlled, onChange, value]
+  )
+
+  return [value, setValue] as const
+}
 
 function Collapsible({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.Root>) {
-  return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
+  const [open, setOpen] = useControllableState({
+    prop: openProp,
+    defaultProp: defaultOpen ?? false,
+    onChange: onOpenChange,
+  })
+
+  return (
+    <CollapsibleStateContext.Provider value={{ open }}>
+      <CollapsiblePrimitive.Root
+        data-slot="collapsible"
+        open={open}
+        onOpenChange={setOpen}
+        {...props}
+      />
+    </CollapsibleStateContext.Provider>
+  )
+}
+
+type CollapsibleTriggerProps = React.ComponentProps<
+  typeof CollapsiblePrimitive.CollapsibleTrigger
+> & {
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  rightSlot?: React.ReactNode
 }
 
 function CollapsibleTrigger({
+  className,
+  title,
+  description,
+  icon: Icon,
+  rightSlot,
+  children,
   ...props
-}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger>) {
+}: CollapsibleTriggerProps) {
+  const shouldRenderDefault = Boolean(title || description || Icon)
   return (
     <CollapsiblePrimitive.CollapsibleTrigger
       data-slot="collapsible-trigger"
+      className={cn(
+        "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5",
+        className
+      )}
       {...props}
-    />
+    >
+      {shouldRenderDefault ? (
+        <>
+          <div className="flex items-center gap-3 text-left">
+            {Icon ? (
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                <Icon className="h-4 w-4" />
+              </span>
+            ) : null}
+            <div className="flex flex-col items-start">
+              {title ? <span>{title}</span> : null}
+              {description ? (
+                <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                  {description}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {rightSlot ? <div className="text-sm">{rightSlot}</div> : null}
+            <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+          </div>
+        </>
+      ) : (
+        children
+      )}
+    </CollapsiblePrimitive.CollapsibleTrigger>
   )
 }
 
 function CollapsibleContent({
+  className,
+  children,
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>) {
+  const { open } = useCollapsibleState()
   return (
     <CollapsiblePrimitive.CollapsibleContent
       data-slot="collapsible-content"
+      asChild
+      forceMount
       {...props}
-    />
+    >
+      <motion.div
+        className={cn("overflow-hidden", className)}
+        initial={false}
+        animate={{
+          height: open ? "auto" : 0,
+          opacity: open ? 1 : 0,
+          marginTop: open ? 12 : 0,
+          paddingLeft: open ? 12 : 0,
+          paddingRight: open ? 12 : 0,
+          paddingBottom: open ? 8 : 0,
+        }}
+        transition={{ duration: 0.25, ease: "easeInOut" }}
+        style={{ pointerEvents: open ? "auto" : "none" }}
+      >
+        <div className="grid gap-3">{children}</div>
+      </motion.div>
+    </CollapsiblePrimitive.CollapsibleContent>
   )
 }
 

@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { defineStepper } from "@stepperize/react";
 import {
   CheckCircle,
-  ChevronDown,
   FileVideo,
   Film,
   Image as ImageIcon,
@@ -540,21 +539,12 @@ export default function DashboardUploadPage() {
                   <Collapsible
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
-                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex items-center gap-3 text-left">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                          <Clapperboard className="h-4 w-4" />
-                        </span>
-                        <div className="flex flex-col items-start">
-                          <span>Intro + Outro</span>
-                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                            Fade timing
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <CollapsibleTrigger
+                      title="Intro + Outro"
+                      description="Fade timing"
+                      icon={Clapperboard}
+                    />
+                    <CollapsibleContent className="sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="introFadeSeconds"
@@ -711,21 +701,12 @@ export default function DashboardUploadPage() {
                   <Collapsible
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
-                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex items-center gap-3 text-left">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                          <Repeat2 className="h-4 w-4" />
-                        </span>
-                        <div className="flex flex-col items-start">
-                          <span>Loop</span>
-                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                            Fade + overlap
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <CollapsibleTrigger
+                      title="Loop"
+                      description="Fade + overlap"
+                      icon={Repeat2}
+                    />
+                    <CollapsibleContent className="sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="fadeDurationSeconds"
@@ -780,21 +761,12 @@ export default function DashboardUploadPage() {
                   <Collapsible
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
-                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex items-center gap-3 text-left">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                          <SlidersHorizontal className="h-4 w-4" />
-                        </span>
-                        <div className="flex flex-col items-start">
-                          <span>Playback</span>
-                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                            Speed
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <CollapsibleTrigger
+                      title="Playback"
+                      description="Speed"
+                      icon={SlidersHorizontal}
+                    />
+                    <CollapsibleContent className="sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="playbackRate"
@@ -850,21 +822,12 @@ export default function DashboardUploadPage() {
                   <Collapsible
                     className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
                   >
-                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:text-zinc-100 dark:hover:bg-white/5">
-                      <div className="flex items-center gap-3 text-left">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                          <Monitor className="h-4 w-4" />
-                        </span>
-                        <div className="flex flex-col items-start">
-                          <span>Output</span>
-                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
-                            Resolution
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-3 grid gap-3 overflow-hidden px-3 pb-2 sm:grid-cols-2 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                    <CollapsibleTrigger
+                      title="Output"
+                      description="Resolution"
+                      icon={Monitor}
+                    />
+                    <CollapsibleContent className="sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="width"

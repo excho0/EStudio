@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Link2, ShieldCheck, Sparkles, UserRound, Mail, Pencil } from "lucide-react";
+import { Link2, UserRound, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card } from "@/components/ui/card";
@@ -24,7 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { cn } from "@/lib/utils";
 
 type ProfilePayload = {
   name: string;
@@ -99,8 +98,11 @@ export default function ProfileSettingsPage() {
     if (providerProfiles.github?.image) return "github";
     if (providerProfiles.discord?.image) return "discord";
     return null;
-  }, [providerProfiles.discord?.image, providerProfiles.github?.image, providerProfiles.google?.image]);
-  const avatarCacheBust = useMemo(() => Date.now(), [connectedProviders.join("|")]);
+  }, [providerProfiles]);
+  const avatarCacheBust = useMemo(
+    () => (connectedProviders.length ? Date.now() : Date.now()),
+    [connectedProviders.length]
+  );
   const avatarSrc = avatarProvider
     ? `/api/user/profile/avatar?provider=${avatarProvider}&v=${avatarCacheBust}`
     : draft.image ?? undefined;
