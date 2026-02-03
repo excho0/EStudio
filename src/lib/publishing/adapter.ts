@@ -42,6 +42,10 @@ export type PublishProgress = {
 export type ProviderAdapter = {
   id: ProviderKey;
   upload: (payload: PublishPayload) => Promise<PublishResult>;
+  deleteAsset?: (payload: {
+    userId: string;
+    providerAssetId: string;
+  }) => Promise<void>;
   updateMetadata?: (providerAssetId: string, payload: PublishPayload) => Promise<void>;
   getStatus?: (providerAssetId: string) => Promise<"queued" | "publishing" | "published" | "failed" | "published_with_warning">;
 };

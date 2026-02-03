@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { getProviderAdapter } from "@/lib/publishing";
 import {
@@ -55,7 +55,7 @@ const readContentItemTitle = async (userId: string, contentId: string) => {
       .select({ title: schema.contentItems.title })
       .from(schema.contentItems)
       .where(
-        sql`${schema.contentItems.id} = ${contentId} and ${schema.contentItems.userId} = ${userId}`
+        and(eq(schema.contentItems.id, contentId), eq(schema.contentItems.userId, userId))
       )
       .limit(1);
     return item?.title ?? null;
@@ -64,7 +64,10 @@ const readContentItemTitle = async (userId: string, contentId: string) => {
     .select({ title: sqliteSchema.contentItems.title })
     .from(sqliteSchema.contentItems)
     .where(
-      sql`${sqliteSchema.contentItems.id} = ${contentId} and ${sqliteSchema.contentItems.userId} = ${userId}`
+      and(
+        eq(sqliteSchema.contentItems.id, contentId),
+        eq(sqliteSchema.contentItems.userId, userId)
+      )
     )
     .limit(1);
   return item?.title ?? null;

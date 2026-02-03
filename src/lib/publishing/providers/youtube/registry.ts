@@ -15,7 +15,7 @@ export const youtubeProviderDefinition: ProviderDefinition = {
   oauthProviderName: "google",
   oauthAuthorizationParams: {
     scope:
-      "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+      "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl",
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",

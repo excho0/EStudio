@@ -186,6 +186,7 @@ export const publishes = sqliteTable(
     publishAttempts: integer("publishAttempts", { mode: "number" })
       .notNull()
       .default(0),
+    deletedAt: integer("deletedAt", { mode: "timestamp_ms" }),
     publishedAt: integer("publishedAt", { mode: "timestamp_ms" }),
     lastSyncedAt: integer("lastSyncedAt", { mode: "timestamp_ms" }),
     createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
@@ -271,6 +272,7 @@ export const publishesPg = pgTable(
     metadata: pgText("metadata"),
     error: pgText("error"),
     publishAttempts: pgInteger("publishAttempts").notNull().default(0),
+    deletedAt: pgTimestamp("deletedAt", { mode: "date" }),
     publishedAt: pgTimestamp("publishedAt", { mode: "date" }),
     lastSyncedAt: pgTimestamp("lastSyncedAt", { mode: "date" }),
     createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),

@@ -7,6 +7,10 @@ import { getStorage } from "@/lib/storage";
 
 export const youtubeAdapter: ProviderAdapter = {
   id: "youtube",
+  async deleteAsset({ userId, providerAssetId }) {
+    const { youtube } = await getGoogleYoutubeClient(userId);
+    await youtube.videos.delete({ id: providerAssetId });
+  },
   async upload(payload: PublishPayload): Promise<PublishResult> {
     if (!payload.userId) {
       throw new Error("Missing user id for YouTube upload.");

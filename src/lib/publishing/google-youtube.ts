@@ -101,7 +101,7 @@ export const getGoogleYoutubeClient = async (userId: string) => {
   }
 
   const account = await fetchGoogleYoutubeAccount(userId);
-  if (!account?.accessToken) {
+  if (!account?.accessToken && !account?.refreshToken) {
     throw new Error("YouTube account is not connected.");
   }
 
@@ -122,7 +122,25 @@ export const getGoogleYoutubeClient = async (userId: string) => {
     void updateAccountTokens(userId, tokens);
   });
 
-  await oauth2Client.getAccessToken();
+  const access = await oauth2Client.getAccessToken();
+  if (!access?.token) {
+    throw new Error("YouTube access token could not be refreshed.");
+  }
+
+  const headers = await oauth2Client.getRequestHeaders();
+  const authHeader = headers.get("authorization") ?? headers.get("Authorization");
+  if (!authHeader) {
+    try {
+      const refreshed = await oauth2Client.refreshAccessToken();
+      if (refreshed?.credentials) {
+        await updateAccountTokens(userId, refreshed.credentials);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to refresh token.";
+      throw new Error(`YouTube token refresh failed: ${message}`);
+    }
+  }
 
   return {
     oauth2Client,
