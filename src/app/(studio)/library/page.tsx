@@ -2,7 +2,14 @@
 
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Table } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,6 +34,12 @@ import { PublishDrawer } from "@/components/publishing/publish-drawer";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
   CheckCircle2,
   Eye,
   Film,
@@ -41,6 +54,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { queryKeys } from "@/lib/query-keys";
+
+type ContentColumnMeta = {
+  headerClassName?: string;
+  cellClassName?: string;
+  align?: "left" | "center" | "right";
+};
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");
@@ -327,6 +346,79 @@ export default function LibraryPage() {
     );
   };
 
+  const columns = useMemo<ColumnDef<ContentItem, unknown>[]>(() => [
+    {
+      id: "project",
+      header: "Project",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <ImageWithSkeleton
+              src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                item.updatedAt
+              )}`}
+              alt={`${item.title} thumbnail`}
+              className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+              wrapperClassName="h-12 w-16 rounded-md"
+            />
+            <div>
+              <div className="font-medium">{item.title}</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-500">
+                {formatDateTime(item.createdAt)}
+              </div>
+            </div>
+          </div>
+        );
+      },
+      meta: { cellClassName: "py-4" } satisfies ContentColumnMeta,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) =>
+        renderStatusBadge(
+          row.original.status,
+          true,
+          renderProgress[row.original.id]?.progress
+        ),
+    },
+    {
+      id: "settings",
+      header: "Settings",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="text-xs text-slate-500 dark:text-zinc-400">
+            <div>
+              {item.segmentDurationSeconds}s segments / {item.fadeDurationSeconds}s
+              {" "}fade
+            </div>
+            <div className="text-slate-500 dark:text-zinc-500">
+              {item.width}x{item.height} @ {item.fps}fps
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <div className="flex flex-wrap justify-center gap-2">
+          <ResponsiveActionMenu items={getActionItems(row.original)} />
+        </div>
+      ),
+      meta: { align: "center", cellClassName: "text-center" } satisfies ContentColumnMeta,
+    },
+  ], [formatDateTime, getActionItems, renderProgress]);
+
+  const table = useReactTable({
+    data: items,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
   useEffect(() => {
     setIsHydrated(true);
   }, []);
@@ -470,14 +562,35 @@ export default function LibraryPage() {
                     <col className="w-[22%]" />
                     <col className="w-[12%]" />
                   </colgroup>
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-                      <th className="py-3">Project</th>
-                      <th>Status</th>
-                      <th>Settings</th>
-                      <th className="text-center">Actions</th>
-                    </tr>
-                  </thead>
+                  <TableHeader className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => {
+                          const meta = header.column.columnDef.meta as
+                            | ContentColumnMeta
+                            | undefined;
+                          return (
+                            <TableHead
+                              key={header.id}
+                              className={cn(
+                                meta?.headerClassName,
+                                meta?.align === "center" && "text-center",
+                                meta?.align === "right" && "text-right",
+                                header.id === "project" && "py-3"
+                              )}
+                            >
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext()
+                                  )}
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
                 </Table>
               </div>
               <ScrollArea className="h-[60svh]" viewportRef={desktopScrollRef}>
@@ -488,68 +601,50 @@ export default function LibraryPage() {
                     <col className="w-[22%]" />
                     <col className="w-[12%]" />
                   </colgroup>
-                  <tbody className="text-sm">
+                  <TableBody className="text-sm">
                     {desktopVirtualizer.getVirtualItems()[0]?.start ? (
-                      <tr>
-                        <td
+                      <TableRow>
+                        <TableCell
                           colSpan={4}
                           style={{ height: desktopVirtualizer.getVirtualItems()[0].start }}
                         />
-                      </tr>
+                      </TableRow>
                     ) : null}
                     {desktopVirtualizer.getVirtualItems().map((virtualRow) => {
-                      const item = items[virtualRow.index];
-                      if (!item) return null;
+                      const row = table.getRowModel().rows[virtualRow.index];
+                      if (!row) return null;
+                      const item = row.original;
                       return (
-                        <React.Fragment key={item.id}>
-                          <tr
+                        <React.Fragment key={row.id}>
+                          <TableRow
                             data-index={virtualRow.index}
                             ref={desktopVirtualizer.measureElement}
                             className="border-t border-slate-200 dark:border-white/10"
                           >
-                            <td className="py-4">
-                              <div className="flex items-center gap-3">
-                                <ImageWithSkeleton
-                                  src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
-                                    item.updatedAt
-                                  )}`}
-                                  alt={`${item.title} thumbnail`}
-                                  className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                                  wrapperClassName="h-12 w-16 rounded-md"
-                                />
-                                <div>
-                                  <div className="font-medium">{item.title}</div>
-                                  <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                    {formatDateTime(item.createdAt)}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              {renderStatusBadge(
-                                item.status,
-                                true,
-                                renderProgress[item.id]?.progress
-                              )}
-                            </td>
-                            <td>
-                              <div className="text-xs text-slate-500 dark:text-zinc-400">
-                                {item.segmentDurationSeconds}s segments /{" "}
-                                {item.fadeDurationSeconds}s fade
-                              </div>
-                              <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                {item.width}x{item.height} @ {item.fps}fps
-                              </div>
-                            </td>
-                            <td className="text-center">
-                              <div className="flex flex-wrap justify-center gap-2">
-                                <ResponsiveActionMenu items={getActionItems(item)} />
-                              </div>
-                            </td>
-                          </tr>
+                            {row.getVisibleCells().map((cell) => {
+                              const meta = cell.column.columnDef.meta as
+                                | ContentColumnMeta
+                                | undefined;
+                              return (
+                                <TableCell
+                                  key={cell.id}
+                                  className={cn(
+                                    meta?.cellClassName,
+                                    meta?.align === "center" && "text-center",
+                                    meta?.align === "right" && "text-right"
+                                  )}
+                                >
+                                  {flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext()
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
                           {item.status === "rendering" ? (
-                            <tr className="border-b border-slate-200 dark:border-white/10">
-                              <td colSpan={4} className="pb-4">
+                            <TableRow className="border-b border-slate-200 dark:border-white/10">
+                              <TableCell colSpan={4} className="pb-4">
                                 <StatRow show className="px-1">
                                   <Progress
                                     value={Math.round(
@@ -559,15 +654,15 @@ export default function LibraryPage() {
                                     variant="amber"
                                   />
                                 </StatRow>
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ) : null}
                         </React.Fragment>
                       );
                     })}
                     {desktopVirtualizer.getVirtualItems().length ? (
-                      <tr>
-                        <td
+                      <TableRow>
+                        <TableCell
                           colSpan={4}
                           style={{
                             height:
@@ -577,9 +672,9 @@ export default function LibraryPage() {
                               ].end,
                           }}
                         />
-                      </tr>
+                      </TableRow>
                     ) : null}
-                  </tbody>
+                  </TableBody>
                 </Table>
               </ScrollArea>
             </div>
