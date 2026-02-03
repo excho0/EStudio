@@ -68,14 +68,26 @@ export function ResponsiveActionMenu({
   items,
   title = "Actions",
   triggerClassName,
+  open,
+  onOpenChange,
 }: {
   items: ActionItem[];
   title?: string;
   triggerLabel?: string;
   triggerClassName?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isControlled = typeof open === "boolean";
+  const currentOpen = isControlled ? open : internalOpen;
+  const setOpen = (nextOpen: boolean) => {
+    if (!isControlled) {
+      setInternalOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
   const [confirmValues, setConfirmValues] = React.useState<Record<string, boolean>>(
     {}
   );
@@ -99,7 +111,12 @@ export function ResponsiveActionMenu({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={setOpen}>
+      <Drawer
+        open={currentOpen}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+        }}
+      >
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
         <DrawerContent>
           <DrawerHeader>
@@ -237,7 +254,12 @@ export function ResponsiveActionMenu({
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={currentOpen}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+      }}
+    >
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {items.map((item, index) => {
