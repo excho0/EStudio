@@ -19,35 +19,9 @@ import { useAudioData } from "@remotion/media-utils";
 import { getAudioSpectrum } from "../lib/audio/fft";
 import { getLogBands } from "../lib/audio/bands";
 import { processAudioBars } from "../lib/audio/processing";
+import type { ContentLoopProps } from "@/types";
 
-export type ContentLoopProps = {
-  title: string;
-  thumbnailSrc?: string;
-  videoSrc: string;
-  audioSrc: string;
-  visualizationEnabled?: boolean;
-  visualizationBars?: number;
-  edgeRaysEnabled?: boolean;
-  edgeRaysIntensity?: number;
-  edgeRaysVocalBalance?: number;
-  colorPalette?: string[];
-  scalePercent?: number;
-  segmentDurationSeconds: number;
-  fadeDurationSeconds: number;
-  introFadeSeconds?: number;
-  outroFadeSeconds?: number;
-  audioFadeInSeconds?: number;
-  audioFadeOutSeconds?: number;
-  audioFadeInOffsetSeconds?: number;
-  audioFadeOutOffsetSeconds?: number;
-  videoDurationSeconds?: number;
-  playbackRate?: number;
-  overlapRatio?: number | null;
-  songDurationSeconds?: number;
-  fps?: number;
-  width?: number;
-  height?: number;
-};
+export type { ContentLoopProps } from "@/types";
 
 type VideoSlice = {
   from: number;

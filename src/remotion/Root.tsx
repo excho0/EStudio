@@ -1,11 +1,13 @@
 import React from "react";
 import { Composition } from "remotion";
 import { SampleVideo } from "./Video";
+import { ContentLoopComposition } from "./ContentLoopComposition";
 import {
-  ContentLoopComposition,
-  ContentLoopProps,
-} from "./ContentLoopComposition";
-import { AudioOnlyComposition, AudioOnlyProps } from "./AudioOnlyComposition";
+  buildContentLoopProps,
+  resolveContentLoopMetadata,
+} from "./content-loop-props";
+import { AudioOnlyComposition } from "./AudioOnlyComposition";
+import type { AudioOnlyProps } from "@/types";
 import { TemplateVideo } from "./TemplateVideo";
 
 export const RemotionRoot: React.FC = () => {
@@ -38,50 +40,8 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="ContentLoop"
         component={ContentLoopComposition}
-        defaultProps={{
-          title: "Content Loop",
-          thumbnailSrc: "",
-          videoSrc: "",
-          audioSrc: "",
-          visualizationEnabled: true,
-          visualizationBars: 128,
-          segmentDurationSeconds: 4,
-          fadeDurationSeconds: 1,
-          introFadeSeconds: 0,
-          outroFadeSeconds: 0,
-          audioFadeInSeconds: 0,
-          audioFadeOutSeconds: 0,
-          audioFadeInOffsetSeconds: 0,
-          audioFadeOutOffsetSeconds: 0,
-          videoDurationSeconds: 4,
-          playbackRate: 1,
-          overlapRatio: 0.25,
-          scalePercent: 100,
-          songDurationSeconds: 30,
-          fps: 30,
-          width: 1280,
-          height: 720,
-        }}
-        calculateMetadata={({ props }: { props: ContentLoopProps }) => {
-          const fps = Number.isFinite(props.fps ?? NaN) ? props.fps ?? 30 : 30;
-          const width = Number.isFinite(props.width ?? NaN) ? props.width ?? 1280 : 1280;
-          const height = Number.isFinite(props.height ?? NaN) ? props.height ?? 720 : 720;
-          const songDurationSeconds = Number.isFinite(props.songDurationSeconds ?? NaN)
-            ? props.songDurationSeconds ?? 1
-            : 1;
-          const durationInFrames = Math.max(
-            1,
-            Math.round(songDurationSeconds * fps)
-          );
-
-          return {
-            fps,
-            width,
-            height,
-            durationInFrames,
-            props,
-          };
-        }}
+        defaultProps={buildContentLoopProps({})}
+        calculateMetadata={({ props }) => resolveContentLoopMetadata(props)}
       />
       <Composition
         id="ContentLoopAudio"

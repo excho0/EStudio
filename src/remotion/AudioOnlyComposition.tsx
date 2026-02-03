@@ -1,15 +1,8 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, Html5Audio } from "remotion";
+import type { AudioOnlyProps } from "@/types";
 
-export type AudioOnlyProps = {
-  audioSrc: string;
-  audioFadeInSeconds?: number;
-  audioFadeOutSeconds?: number;
-  audioFadeInOffsetSeconds?: number;
-  audioFadeOutOffsetSeconds?: number;
-  songDurationSeconds?: number;
-  fps?: number;
-};
+export type { AudioOnlyProps } from "@/types";
 
 export const AudioOnlyComposition: React.FC<AudioOnlyProps> = ({
   audioSrc,
