@@ -43,13 +43,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { IconSelect } from "@/components/ui/icon-select";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -459,7 +453,6 @@ export default function EditContentPage() {
         : "Failed to load item."
     );
   }, [contentQuery.error]);
-  /* eslint-enable react-hooks/set-state-in-effect */
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!item) {
@@ -655,11 +648,9 @@ export default function EditContentPage() {
   }, [thumbnailFile]);
 
   useEffect(() => {
-    if (paletteMode === "auto") {
-      setPaletteState(item?.colorPalette ?? []);
-    }
+    if (!item || paletteMode !== "auto") return;
+    setPaletteState(item.colorPalette ?? []);
   }, [item, paletteMode]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleThumbnailChange = (file: File | null) => {
     setThumbnailFile(file);
@@ -783,7 +774,7 @@ export default function EditContentPage() {
                     text="Status"
                     tip="Current render state (uploaded, rendering, rendered, failed)."
                   />
-                  <Select
+                  <IconSelect
                     value={formValues.status}
                     onValueChange={(value) =>
                       setFormValues((current) => ({
@@ -791,40 +782,15 @@ export default function EditContentPage() {
                         status: value,
                       }))
                     }
-                  >
-                    {(() => {
-                      const selected = STATUS_OPTIONS.find(
-                        (option) => option.value === formValues.status
-                      );
-                      const Icon = selected?.icon;
-                      return (
-                    <SelectTrigger id="status" className="w-full">
-                      <SelectValue placeholder="Select status">
-                        {selected ? (
-                          <span className="inline-flex items-center gap-2">
-                            {Icon ? <Icon className="h-4 w-4" /> : null}
-                            {selected.label}
-                          </span>
-                        ) : null}
-                      </SelectValue>
-                    </SelectTrigger>
-                      );
-                    })()}
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((option) => {
-                        const Icon = option.icon;
-                        return (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            icon={<Icon className="h-4 w-4" />}
-                          >
-                            {option.label}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                    id="status"
+                    placeholder="Select status"
+                    triggerClassName="w-full"
+                    options={STATUS_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      icon: option.icon,
+                    }))}
+                  />
                 </div>
 
                 {!isTablet && (
@@ -834,7 +800,7 @@ export default function EditContentPage() {
                       text="Thumbnail"
                       tip="Image shown in the library and preview."
                     />
-                    <div className="flex items-center gap-4 p-3">
+                    <div className="flex items-center gap-4 py-2">
                       <div className="h-20 w-28 overflow-hidden rounded-md ">
                         {thumbnailPreview || item ? (
                           <ImageWithSkeleton
@@ -1458,14 +1424,14 @@ export default function EditContentPage() {
                 />
               </div>
             </div>
-        ) : (
+        ) : contentQuery.isFetched ? (
           <div className="text-sm text-slate-500 dark:text-zinc-400">
             Content item not found.
             <Link href="/library" className="ml-2 text-emerald-500">
               Go back
             </Link>
           </div>
-        )}
+        ) : null}
         <div>
           <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
             {loading || videoLoading || audioLoading || !videoBlobUrl || !canRenderPreview ? (
