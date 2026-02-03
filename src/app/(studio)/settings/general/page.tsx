@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   FolderOpen,
@@ -16,6 +17,8 @@ import {
   requestNotificationPermission,
   setNotificationEnabled,
 } from "@/lib/notifications";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 type SettingsStats = {
   total: number;
@@ -41,41 +44,31 @@ type SettingsResponse = {
 };
 
 export default function DashboardSettingsPage() {
-  const [loading, setLoading] = useState(true);
-  const [rescanLoading, setRescanLoading] = useState(false);
-  const [data, setData] = useState<SettingsResponse | null>(null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/settings");
-      if (!response.ok) {
-        throw new Error("Failed to load settings.");
-      }
-      const payload = (await response.json()) as SettingsResponse;
-      setData(payload);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load settings."
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery<SettingsResponse>({
+    queryKey: queryKeys.settings,
+    staleTime: 30_000,
+    queryFn: async () => {
+      return fetchJson<SettingsResponse>(
+        "/api/settings",
+        undefined,
+        "Failed to load settings."
       );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRescan = async () => {
-    setRescanLoading(true);
-    try {
+    },
+  });
+  const rescanMutation = useMutation({
+    mutationFn: async () => {
       const response = await fetch("/api/content/rescan", { method: "POST" });
       if (!response.ok) {
         throw new Error("Failed to rescan content storage.");
       }
-      const result = (await response.json()) as {
+      return (await response.json()) as {
         created: number;
         skipped: number;
         errors: string[];
       };
+    },
+    onSuccess: async (result) => {
       if (result.errors?.length) {
         toast.error(result.errors[0] ?? "Rescan completed with warnings.");
       } else {
@@ -83,20 +76,32 @@ export default function DashboardSettingsPage() {
           `Rescan completed: ${result.created} restored, ${result.skipped} skipped.`
         );
       }
-      await loadSettings();
-    } catch (error) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+    onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Failed to rescan storage."
       );
-    } finally {
-      setRescanLoading(false);
-    }
+    },
+  });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
+    getNotificationEnabled()
+  );
+  const data = settingsQuery.data ?? null;
+  const loading = settingsQuery.isLoading || settingsQuery.isFetching;
+  const rescanLoading = rescanMutation.isPending;
+  const handleRescan = async () => {
+    await rescanMutation.mutateAsync();
   };
 
   useEffect(() => {
-    loadSettings();
-    setNotificationsEnabled(getNotificationEnabled());
-  }, []);
+    if (!settingsQuery.error) return;
+    toast.error(
+      settingsQuery.error instanceof Error
+        ? settingsQuery.error.message
+        : "Failed to load settings."
+    );
+  }, [settingsQuery.error]);
 
   return (
     <div className="flex flex-col gap-6">

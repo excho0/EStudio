@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 import { io, type Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 type SocketIOContextValue = {
   connected: boolean;
@@ -52,6 +54,7 @@ export function SocketIOProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState<
     "connecting" | "connected" | "disconnected" | "error"
@@ -66,6 +69,7 @@ export function SocketIOProvider({
   useEffect(() => {
     const handleUpdate = () => {
       setEventToken((current) => current + 1);
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
     };
 
     const registerUser = async () => {
@@ -107,15 +111,23 @@ export function SocketIOProvider({
       setStatus("error");
     });
     socket.on("content:update", handleUpdate);
+    socket.on("publish:update", () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
+    });
+    socket.on("render:update", () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rendersBase });
+    });
     socket.on("metrics:update", setMetrics);
 
     return () => {
       socket.off("content:update", handleUpdate);
+      socket.off("publish:update");
+      socket.off("render:update");
       socket.off("metrics:update", setMetrics);
       socket.off("connect_error");
       socket.disconnect();
     };
-  }, [socket]);
+  }, [queryClient, socket]);
 
   const value = useMemo(
     () => ({ connected, status, eventToken, metrics, socket }),

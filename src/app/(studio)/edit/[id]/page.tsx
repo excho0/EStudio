@@ -63,6 +63,9 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
 import { ContentItem } from "@/components/studio/use-content-list";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -415,14 +418,89 @@ export default function EditContentPage() {
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<{
     formValues: FormValues;
     paletteMode: PaletteMode;
     paletteState: string[];
   } | null>(null);
+  const queryClient = useQueryClient();
+  const contentQuery = useQuery<ContentItem>({
+    queryKey: queryKeys.contentItem(params.id),
+    enabled: Boolean(params.id),
+    queryFn: async () => {
+      return fetchJson<ContentItem>(
+        `/api/content/${params.id}`,
+        undefined,
+        "Failed to load content item."
+      );
+    },
+  });
+  const loading = contentQuery.isLoading || contentQuery.isFetching;
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!contentQuery.data) return;
+    const data = contentQuery.data;
+    setItem(data);
+    setError(null);
+    setThumbnailVersion(Date.now());
+    const nextFormValues = buildFormValuesFromItem(data);
+    setFormValues(nextFormValues);
+    setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
+    setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
+    setInitialSnapshot(buildSnapshotFromItem(data));
+  }, [contentQuery.data]);
+
+  useEffect(() => {
+    if (!contentQuery.error) return;
+    setError(
+      contentQuery.error instanceof Error
+        ? contentQuery.error.message
+        : "Failed to load item."
+    );
+  }, [contentQuery.error]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!item) {
+        throw new Error("No content item loaded.");
+      }
+      const payload = buildPayloadFromForm(formValues, paletteMode, paletteState);
+      const response = await (thumbnailFile
+        ? (() => {
+            const formData = new FormData();
+            appendPayloadToFormData(payload, formData);
+            formData.append("thumbnail", thumbnailFile);
+            return fetch(`/api/content/${item.id}`, {
+              method: "PATCH",
+              body: formData,
+            });
+          })()
+        : fetch(`/api/content/${item.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }));
+      if (!response.ok) {
+        throw new Error("Failed to save changes.");
+      }
+      return (await response.json()) as ContentItem;
+    },
+    onSuccess: (updated) => {
+      setItem(updated);
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
+      setThumbnailVersion(Date.now());
+      setInitialSnapshot(buildSnapshotFromItem(updated));
+      queryClient.setQueryData(queryKeys.contentItem(params.id), updated);
+      toast.success("Content updated.");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to save.";
+      toast.error(message);
+    },
+  });
+  const saving = saveMutation.isPending;
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
   const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
@@ -565,42 +643,7 @@ export default function EditContentPage() {
     Number.isFinite(resolvedWidth) &&
     Number.isFinite(resolvedHeight);
 
-  useEffect(() => {
-    let active = true;
-    const fetchItem = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/content/${params.id}`);
-        if (!response.ok) {
-          throw new Error("Failed to load content item.");
-        }
-        const data = (await response.json()) as ContentItem;
-        if (active) {
-          setItem(data);
-          setThumbnailVersion(Date.now());
-          const nextFormValues = buildFormValuesFromItem(data);
-          setFormValues(nextFormValues);
-          setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
-          setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
-          setInitialSnapshot(buildSnapshotFromItem(data));
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : "Failed to load item.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-    fetchItem();
-    return () => {
-      active = false;
-    };
-  }, [params.id]);
-
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!thumbnailFile) {
       setThumbnailPreview(null);
@@ -616,47 +659,14 @@ export default function EditContentPage() {
       setPaletteState(item?.colorPalette ?? []);
     }
   }, [item, paletteMode]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleThumbnailChange = (file: File | null) => {
     setThumbnailFile(file);
   };
 
   const handleSave = async () => {
-    if (!item) return;
-    setSaving(true);
-    try {
-      const payload = buildPayloadFromForm(formValues, paletteMode, paletteState);
-      const response = await (thumbnailFile
-        ? (() => {
-            const formData = new FormData();
-            appendPayloadToFormData(payload, formData);
-            formData.append("thumbnail", thumbnailFile);
-            return fetch(`/api/content/${item.id}`, {
-              method: "PATCH",
-              body: formData,
-            });
-          })()
-        : fetch(`/api/content/${item.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          }));
-      if (!response.ok) {
-        throw new Error("Failed to save changes.");
-      }
-      const updated = (await response.json()) as ContentItem;
-      setItem(updated);
-      setThumbnailFile(null);
-      setThumbnailPreview(null);
-      setThumbnailVersion(Date.now());
-      setInitialSnapshot(buildSnapshotFromItem(updated));
-      toast.success("Content updated.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save.";
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
+    await saveMutation.mutateAsync();
   };
 
   const isDirty = useMemo(() => {

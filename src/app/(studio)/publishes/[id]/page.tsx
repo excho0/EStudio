@@ -3,11 +3,24 @@
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ExternalLink, Film, List, Radio, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle,
+  ExternalLink,
+  Film,
+  List,
+  Loader2,
+  Radio,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table } from "@/components/ui/table";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
 import {
   ResponsiveDrawer,
@@ -29,6 +42,9 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -44,15 +60,18 @@ type PublishRecord = {
   createdAt?: number | string | Date | null;
 };
 
-type PublishListResponse = {
-  publishes: PublishRecord[];
+type PublishMetadata = {
+  title?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  options?: {
+    privacy?: string;
+    scheduleAt?: string | null;
+  };
 };
 
-type PublishListState = {
-  page: number;
-  limit: number;
-  total: number;
-  items: PublishRecord[];
+type PublishListResponse = {
+  publishes: PublishRecord[];
 };
 
 const formatDateTime = (value?: number | string | Date | null) => {
@@ -73,15 +92,20 @@ const formatDateTime = (value?: number | string | Date | null) => {
   });
 };
 
-const parseMetadataTitle = (metadata: string | null) => {
+const parseMetadata = (metadata: string | null): PublishMetadata | null => {
   if (!metadata) return null;
   try {
-    const parsed = JSON.parse(metadata) as { title?: string };
-    return parsed.title ?? null;
+    return JSON.parse(metadata) as PublishMetadata;
   } catch {
     return null;
   }
 };
+
+const getMetadataTitle = (metadata: string | null) =>
+  parseMetadata(metadata)?.title ?? null;
+
+const getMetadataThumbnail = (metadata: string | null) =>
+  parseMetadata(metadata)?.thumbnailUrl ?? null;
 
 const getProviderUrl = (provider: string, providerAssetId: string) => {
   if (!providerAssetId) return null;
@@ -90,12 +114,101 @@ const getProviderUrl = (provider: string, providerAssetId: string) => {
   return definition.getAssetUrl(providerAssetId);
 };
 
+const DesktopSkeletonRows = () => (
+  <Table className="-mb-12">
+    <thead>
+      <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+        <th className="py-3">Publish</th>
+        <th>Status</th>
+        <th>Details</th>
+        <th className="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody className="text-sm">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <tr
+          key={`skeleton-row-${index}`}
+          className="border-t border-slate-200 dark:border-white/10"
+        >
+          <td className="py-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-12 w-16 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          </td>
+          <td>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </td>
+          <td>
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </td>
+          <td className="text-right">
+            <div className="flex justify-end">
+              <Skeleton className="h-8 w-10 rounded-md" />
+            </div>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </Table>
+);
+
+const MobileSkeletonCards = () => (
+  <div className="grid gap-4">
+    {Array.from({ length: 4 }).map((_, index) => (
+      <div
+        key={`skeleton-card-${index}`}
+        className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
+      >
+        <div className="flex flex-1 gap-3">
+          <Skeleton className="h-16 w-20 rounded-md" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-36" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-10 rounded-md" />
+      </div>
+    ))}
+  </div>
+);
+
+const getPublishStatusBadge = (status?: string | null) => {
+  const value = status ?? "unknown";
+  switch (value) {
+    case "queued":
+      return { label: "Queued", variant: "blue" as const, icon: Loader2 };
+    case "publishing":
+      return { label: "Publishing", variant: "blue" as const, icon: Loader2 };
+    case "published":
+      return { label: "Published", variant: "green" as const, icon: CheckCircle };
+    case "published_with_warning":
+      return { label: "Published (warn)", variant: "yellow" as const, icon: AlertTriangle };
+    case "failed":
+      return { label: "Failed", variant: "destructive" as const, icon: AlertTriangle };
+    case "draft":
+      return { label: "Draft", variant: "secondary" as const, icon: ShieldCheck };
+    case "deleted":
+      return { label: "Deleted", variant: "outline" as const, icon: Trash2 };
+    default:
+      return { label: value, variant: "outline" as const, icon: ShieldCheck };
+  }
+};
+
 type ProviderSectionProps = {
   provider: string;
   items: PublishRecord[];
   isMobile: boolean;
   contentId: string;
   onViewError: (item: PublishRecord) => void;
+  onDelete: (item: PublishRecord) => void;
 };
 
 const ProviderSection = ({
@@ -104,10 +217,10 @@ const ProviderSection = ({
   isMobile,
   contentId,
   onViewError,
+  onDelete,
 }: ProviderSectionProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(true);
-  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
@@ -118,6 +231,48 @@ const ProviderSection = ({
   const definition = getProviderDefinition(provider);
   const label = definition?.label ?? (provider || "unknown");
   const ProviderIcon = definition?.icon ?? Radio;
+  const renderActionMenu = (item: PublishRecord, providerUrl: string | null) => (
+    <ResponsiveActionMenu
+      triggerClassName="h-9"
+      items={[
+        ...(providerUrl
+          ? [
+              {
+                label: "Open in provider",
+                icon: ExternalLink,
+                href: providerUrl,
+              },
+            ]
+          : []),
+        {
+          label: "View render",
+          icon: Film,
+          href: `/renders/${contentId}`,
+        },
+        { type: "separator" as const },
+        ...(item.status === "failed"
+          ? [
+              {
+                label: "View error",
+                icon: ShieldCheck,
+                onSelect: () => onViewError(item),
+              },
+            ]
+          : []),
+        {
+          type: "confirm",
+          label: item.status === "deleted" ? "Remove record" : "Delete from provider",
+          icon: Trash2,
+          description:
+            item.status === "deleted"
+              ? "This removes the local publish record."
+              : "This deletes the published asset from the provider.",
+          destructive: true,
+          onConfirm: () => onDelete(item),
+        },
+      ]}
+    />
+  );
 
   return (
     <Collapsible
@@ -138,8 +293,11 @@ const ProviderSection = ({
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const item = items[virtualRow.index];
               if (!item) return null;
-              const title = parseMetadataTitle(item.metadata) ?? "Untitled publish";
+              const title = getMetadataTitle(item.metadata) ?? "Untitled publish";
+              const thumbnailUrl = getMetadataThumbnail(item.metadata);
               const providerUrl = getProviderUrl(item.provider, item.providerAssetId);
+              const statusBadge = getPublishStatusBadge(item.status);
+              const StatusIcon = statusBadge.icon;
               return (
                 <div
                   key={item.id}
@@ -151,48 +309,33 @@ const ProviderSection = ({
                   <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-16 w-20 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                          <Radio className="h-5 w-5" />
+                        <div className="flex h-16 w-20 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                          {thumbnailUrl ? (
+                            <ImageWithSkeleton
+                              src={thumbnailUrl}
+                              alt={title}
+                              className="h-full w-full object-cover"
+                              wrapperClassName="h-full w-full"
+                            />
+                          ) : (
+                            <Radio className="h-5 w-5" />
+                          )}
                         </div>
                         <div className="flex-1">
                           <div className="font-medium text-foreground">{title}</div>
                           <div className="text-xs text-slate-500 dark:text-zinc-500">
                             Updated: {formatDateTime(item.updatedAt)}
                           </div>
-                          <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/70 px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            {item.status}
-                          </div>
+                          <Badge
+                            variant={statusBadge.variant}
+                            className="mt-2"
+                          >
+                            <StatusIcon className="h-3.5 w-3.5" />
+                            {statusBadge.label}
+                          </Badge>
                         </div>
                       </div>
-                      <ResponsiveActionMenu
-                        triggerClassName="h-9"
-                        items={[
-                          ...(item.status === "failed"
-                            ? [
-                                {
-                                  label: "View error",
-                                  icon: ShieldCheck,
-                                  onSelect: () => onViewError(item),
-                                },
-                              ]
-                            : []),
-                          ...(providerUrl
-                            ? [
-                                {
-                                  label: "Open in provider",
-                                  icon: ExternalLink,
-                                  href: providerUrl,
-                                },
-                              ]
-                            : []),
-                          {
-                            label: "View render",
-                            icon: Film,
-                            href: `/renders/${contentId}`,
-                          },
-                        ]}
-                      />
+                      {renderActionMenu(item, providerUrl)}
                     </div>
                   </div>
                 </div>
@@ -226,8 +369,11 @@ const ProviderSection = ({
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const item = items[virtualRow.index];
                 if (!item) return null;
-                const title = parseMetadataTitle(item.metadata) ?? "Untitled publish";
+                const title = getMetadataTitle(item.metadata) ?? "Untitled publish";
+                const thumbnailUrl = getMetadataThumbnail(item.metadata);
                 const providerUrl = getProviderUrl(item.provider, item.providerAssetId);
+                const statusBadge = getPublishStatusBadge(item.status);
+                const StatusIcon = statusBadge.icon;
                 return (
                   <tr
                     key={item.id}
@@ -237,8 +383,17 @@ const ProviderSection = ({
                   >
                     <td className="py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-16 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                          <Radio className="h-4 w-4" />
+                        <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                          {thumbnailUrl ? (
+                            <ImageWithSkeleton
+                              src={thumbnailUrl}
+                              alt={title}
+                              className="h-full w-full object-cover"
+                              wrapperClassName="h-full w-full"
+                            />
+                          ) : (
+                            <Radio className="h-4 w-4" />
+                          )}
                         </div>
                         <div>
                           <div className="font-medium">{title}</div>
@@ -249,43 +404,16 @@ const ProviderSection = ({
                       </div>
                     </td>
                     <td className="text-slate-600 dark:text-zinc-300">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        {item.status}
-                      </span>
+                      <Badge variant={statusBadge.variant} className="text-md">
+                        <StatusIcon className="h-3.5 w-3.5" />
+                        {statusBadge.label}
+                      </Badge>
                     </td>
                     <td className="text-slate-600 dark:text-zinc-300">
                       {formatDateTime(item.updatedAt ?? item.createdAt)}
                     </td>
                     <td className="text-center">
-                      <ResponsiveActionMenu
-                        triggerClassName="h-9"
-                        items={[
-                          ...(item.status === "failed"
-                            ? [
-                                {
-                                  label: "View error",
-                                  icon: ShieldCheck,
-                                  onSelect: () => onViewError(item),
-                                },
-                              ]
-                            : []),
-                          ...(providerUrl
-                            ? [
-                                {
-                                  label: "Open in provider",
-                                  icon: ExternalLink,
-                                  href: providerUrl,
-                                },
-                              ]
-                            : []),
-                          {
-                            label: "View render",
-                            icon: Film,
-                            href: `/renders/${contentId}`,
-                          },
-                        ]}
-                      />
+                      {renderActionMenu(item, providerUrl)}
                     </td>
                   </tr>
                 );
@@ -320,12 +448,50 @@ export default function PublishesPage() {
 
   const [page, setPage] = useState(1);
   const limit = 20;
-  const [data, setData] = useState<PublishListState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const isHydrated = true;
   const isMobile = useIsMobile();
-  const items = useMemo(() => data?.items ?? [], [data]);
   const [errorPublish, setErrorPublish] = useState<PublishRecord | null>(null);
+  const queryClient = useQueryClient();
+
+  const publishQueryKey = useMemo(() => queryKeys.publishes(id), [id]);
+
+  const { data, isLoading, isFetching, error } = useQuery<PublishListResponse, Error>({
+    queryKey: publishQueryKey,
+    queryFn: async () => {
+      return fetchJson<PublishListResponse>(
+        `/api/content/${id}/publishes`,
+        undefined,
+        "Failed to load publishes."
+      );
+    },
+    enabled: Boolean(id),
+    placeholderData: (previous) => previous,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (publishId: string) => {
+      const response = await fetch(`/api/content/${id}/publishes/${publishId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Failed to delete publish.");
+      }
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: publishQueryKey });
+    },
+  });
+
+  const allItems = useMemo<PublishRecord[]>(() => data?.publishes ?? [], [data]);
+  const items = useMemo<PublishRecord[]>(() => {
+    const start = (page - 1) * limit;
+    return allItems.slice(start, start + limit);
+  }, [allItems, page, limit]);
+  const isBusy = isLoading || isFetching;
 
   const grouped = useMemo(() => {
     const map = new Map<string, PublishRecord[]>();
@@ -343,9 +509,9 @@ export default function PublishesPage() {
   }, [items]);
 
   const totalPages = useMemo(() => {
-    if (!data) return 1;
-    return Math.max(1, Math.ceil(data.total / data.limit));
-  }, [data]);
+    if (!allItems.length) return 1;
+    return Math.max(1, Math.ceil(allItems.length / limit));
+  }, [allItems, limit]);
   const canGoBack = page > 1;
   const canGoNext = page < totalPages;
 
@@ -365,110 +531,31 @@ export default function PublishesPage() {
   };
 
   useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+    if (!error) return;
+    const message = error.message || "Failed to load publishes.";
+    toast.error(message);
+  }, [error]);
 
-  useEffect(() => {
+  const handleDelete = async (item: PublishRecord) => {
     if (!id) return;
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/content/${id}/publishes`);
-        if (!response.ok) {
-          throw new Error("Failed to load publishes.");
-        }
-        const payload = (await response.json()) as PublishListResponse;
-        const all = payload.publishes ?? [];
-        const total = all.length;
-        const start = (page - 1) * limit;
-        const paged = all.slice(start, start + limit);
-        if (!cancelled) {
-          setData({ page, limit, total, items: paged });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setData({ page, limit, total: 0, items: [] });
-          const message = error instanceof Error ? error.message : "Failed to load publishes.";
-          toast.error(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, page]);
-
-  const DesktopSkeletonRows = () => (
-    <Table className="-mb-12">
-      <thead>
-        <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-          <th className="py-3">Publish</th>
-          <th>Status</th>
-          <th>Updated</th>
-          <th className="text-right">Action</th>
-        </tr>
-      </thead>
-      <tbody className="text-sm">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <tr
-            key={`skeleton-row-${index}`}
-            className="border-t border-slate-200 dark:border-white/10"
-          >
-            <td className="py-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-12 w-16 rounded-md" />
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-44" />
-                  <Skeleton className="h-3 w-28" />
-                </div>
-              </div>
-            </td>
-            <td>
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </td>
-            <td>
-              <div className="space-y-2">
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-            </td>
-            <td className="text-right">
-              <div className="flex justify-end">
-                <Skeleton className="h-8 w-10 rounded-md" />
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
-
-  const MobileSkeletonCards = () => (
-    <div className="grid gap-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div
-          key={`skeleton-card-${index}`}
-          className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
-        >
-          <div className="flex flex-1 gap-3">
-            <Skeleton className="h-16 w-20 rounded-md" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-6 w-20 rounded-full" />
-            </div>
-          </div>
-          <Skeleton className="h-8 w-10 rounded-md" />
-        </div>
-      ))}
-    </div>
-  );
+    try {
+      await toast.promise(deleteMutation.mutateAsync(item.id), {
+        loading:
+          item.status === "deleted"
+            ? "Removing publish record..."
+            : "Deleting publish...",
+        success: () => {
+          return item.status === "deleted"
+            ? "Publish removed."
+            : "Publish deleted from provider.";
+        },
+        error: (error) =>
+          error instanceof Error ? error.message : "Failed to delete publish.",
+      });
+    } catch {
+      // errors are surfaced via toast.promise
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -483,7 +570,7 @@ export default function PublishesPage() {
             <ResponsiveDrawerTitle>Publish error</ResponsiveDrawerTitle>
             <ResponsiveDrawerDescription>
               {errorPublish?.metadata
-                ? parseMetadataTitle(errorPublish.metadata) ?? "Publish error details"
+                ? getMetadataTitle(errorPublish.metadata) ?? "Publish error details"
                 : "Publish error details"}
             </ResponsiveDrawerDescription>
           </ResponsiveDrawerHeader>
@@ -521,13 +608,13 @@ export default function PublishesPage() {
 
       {!isHydrated ? (
         <></>
-      ) : loading ? (
+      ) : isBusy ? (
         isMobile ? (
           <MobileSkeletonCards />
         ) : (
           <DesktopSkeletonRows />
         )
-      ) : data && data.items.length > 0 ? (
+      ) : data && data.publishes.length > 0 ? (
         <div className="mt-2">
           <div className="space-y-4">
             {grouped.map((group) => (
@@ -538,6 +625,7 @@ export default function PublishesPage() {
                 isMobile={isMobile}
                 contentId={id ?? ""}
                 onViewError={setErrorPublish}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -554,7 +642,7 @@ export default function PublishesPage() {
                     <PaginationPrevious
                       className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
                       onClick={() => setPage((current) => Math.max(1, current - 1))}
-                      aria-disabled={!canGoBack || loading}
+                      aria-disabled={!canGoBack || isBusy}
                     />
                   </PaginationItem>
                   {getPageItems().flatMap((pageNumber, index, list) => {
@@ -572,7 +660,7 @@ export default function PublishesPage() {
                         <PaginationLink
                           isActive={pageNumber === page}
                           onClick={() => setPage(pageNumber)}
-                          aria-disabled={loading}
+                          aria-disabled={isBusy}
                         >
                           {pageNumber}
                         </PaginationLink>
@@ -586,7 +674,7 @@ export default function PublishesPage() {
                       onClick={() =>
                         setPage((current) => Math.min(totalPages, current + 1))
                       }
-                      aria-disabled={!canGoNext || loading}
+                      aria-disabled={!canGoNext || isBusy}
                     />
                   </PaginationItem>
                 </PaginationContent>

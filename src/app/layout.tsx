@@ -33,8 +33,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <SocketIOProvider>
-          <QueryProvider>
+        <QueryProvider>
+          <SocketIOProvider>
             <AppSessionProvider>
               <ThemeProvider
                 attribute="class"
@@ -47,8 +47,8 @@ export default function RootLayout({
                 <ToasterResponsive />
               </ThemeProvider>
             </AppSessionProvider>
-          </QueryProvider>
-        </SocketIOProvider>
+          </SocketIOProvider>
+        </QueryProvider>
       </body>
     </html>
   );

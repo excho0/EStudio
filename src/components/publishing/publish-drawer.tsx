@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   CalendarClock,
@@ -50,6 +50,9 @@ import {
   StepperShell,
 } from "@/components/controls/animated-stepper";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { Link } from "@/components/navigation/route-transition";
@@ -163,10 +166,6 @@ export function PublishDrawer({
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [stepId, setStepId] = useState(steps[0].id);
-  const [loading, setLoading] = useState(false);
-  const [rendersLoading, setRendersLoading] = useState(false);
-  const [targets, setTargets] = useState<ProviderState[]>([]);
-  const [renders, setRenders] = useState<RenderItem[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [selectedRender, setSelectedRender] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -189,10 +188,102 @@ export function PublishDrawer({
     uploaded?: number;
     total?: number;
   } | null>(null);
-  const providerDetailsLoaded = useRef<Set<string>>(new Set());
   const renderScrollRef = useRef<HTMLDivElement | null>(null);
   const { socket } = useSocketIO();
+  const canLoadData = open && status === "authenticated" && Boolean(contentId);
 
+  const publishTargetsQuery = useQuery<ProviderState[]>({
+    queryKey: queryKeys.publishProviders,
+    enabled: canLoadData,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const payload = await fetchJson<{
+        publishTargets?: Array<
+          PublishTarget & { connected?: boolean; channel?: ProviderState["channel"] }
+        >;
+      }>("/api/publish/providers", undefined, "Unable to load publish targets.");
+      const publishTargets = payload.publishTargets ?? [];
+      return publishTargets.map((target) => ({
+        ...target,
+        connected: Boolean(target.connected),
+        channel: target.channel ?? null,
+      }));
+    },
+  });
+
+  const providerDetailQueries = useQueries({
+    queries: (publishTargetsQuery.data ?? []).map((target) => {
+      const definition = getProviderDefinition(target.id);
+      const endpoint = definition?.connectionEndpoint;
+      return {
+        queryKey: queryKeys.publishProvider(target.id),
+        enabled: canLoadData && Boolean(endpoint),
+        staleTime: 60_000,
+        queryFn: async () => {
+          if (!endpoint) return null;
+          return fetchJson<{
+            connected: boolean;
+            channel?: { title: string | null; thumbnail: string | null };
+          }>(endpoint, undefined, "Unable to load provider connection.");
+        },
+      };
+    }),
+  });
+
+  const targets = useMemo(() => {
+    const base = publishTargetsQuery.data ?? [];
+    if (providerDetailQueries.length === 0) return base;
+    return base.map((target, index) => {
+      const detail = providerDetailQueries[index]?.data;
+      if (!detail) return target;
+      return {
+        ...target,
+        connected: detail.connected,
+        channel: detail.channel ?? null,
+        status: detail.connected ? "active" : target.status,
+      };
+    });
+  }, [publishTargetsQuery.data, providerDetailQueries]);
+
+  const selectedProviderData = useMemo(
+    () => targets.find((target) => target.id === selectedProvider) ?? null,
+    [targets, selectedProvider]
+  );
+
+  const contentSummaryQuery = useQuery<{ title?: string; thumbnailUrl: string }>({
+    queryKey: queryKeys.contentSummary(contentId),
+    enabled: canLoadData,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const payload = await fetchJson<{ title?: string }>(
+        `/api/content/${contentId}`,
+        undefined,
+        "Unable to load content summary."
+      );
+      return {
+        title: payload.title,
+        thumbnailUrl: `/api/content/${contentId}/asset?type=thumbnail`,
+      };
+    },
+  });
+
+  const rendersQuery = useQuery<RenderItem[]>({
+    queryKey: queryKeys.contentRendersSimple(contentId),
+    enabled: canLoadData,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const payload = await fetchJson<{ items?: RenderItem[] }>(
+        `/api/content/${contentId}/renders?limit=50`,
+        undefined,
+        "Unable to load renders."
+      );
+      return payload.items ?? [];
+    },
+  });
+
+  const renders = rendersQuery.data ?? [];
+  const loading = publishTargetsQuery.isLoading || publishTargetsQuery.isFetching;
+  const rendersLoading = rendersQuery.isLoading || rendersQuery.isFetching;
   const renderVirtualizer = useVirtualizer({
     count: renders.length,
     getScrollElement: () => renderScrollRef.current,
@@ -200,11 +291,6 @@ export function PublishDrawer({
     overscan: 8,
     getItemKey: (index) => renders[index]?.name ?? index,
   });
-
-  const selectedProviderData = useMemo(
-    () => targets.find((target) => target.id === selectedProvider) ?? null,
-    [targets, selectedProvider]
-  );
 
   const canContinueProvider = Boolean(
     selectedProvider &&
@@ -233,106 +319,47 @@ export function PublishDrawer({
     setThumbnailCacheBust(null);
     setVisibility("private");
     setScheduleAt(undefined);
-    setTargets([]);
-    setRenders([]);
   };
 
-  const loadPublishTargets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/publish/providers");
-      if (!response.ok) {
-        throw new Error("Unable to load publish targets.");
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProvider || !selectedRender || !canContinueDetails) {
+        throw new Error("Missing publish details.");
       }
-      const payload = (await response.json()) as {
-        publishTargets?: Array<
-          PublishTarget & { connected?: boolean; channel?: ProviderState["channel"] }
-        >;
-      };
-      const publishTargets = payload.publishTargets ?? [];
-      const mappedTargets: ProviderState[] = publishTargets.map((target) => ({
-        ...target,
-        connected: Boolean(target.connected),
-        channel: target.channel ?? null,
-      }));
-      setTargets(mappedTargets);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Unable to load publish targets."
+      const scheduleEnabled =
+        selectedProviderData?.capabilities?.supportsSchedule &&
+        visibility === "scheduled";
+      const scheduleValue = scheduleEnabled ? scheduleAt?.toISOString() : null;
+      const privacyValue = visibility === "scheduled" ? "private" : visibility;
+      const payload = await fetchJson<{ publish?: { id?: string } }>(
+        `/api/content/${contentId}/publishes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: selectedProvider,
+            renderId: selectedRender,
+            connectionId: selectedProvider,
+            providerAssetId: `pending-${crypto.randomUUID()}`,
+            status: "draft",
+            metadata: {
+              title: title.trim(),
+              description: description.trim(),
+              options: {
+                privacy: selectedProviderData?.capabilities?.supportsPrivacy
+                  ? privacyValue
+                  : undefined,
+                scheduleAt: scheduleValue || undefined,
+              },
+              thumbnailUrl: thumbnailUrl ?? undefined,
+            },
+          }),
+        },
+        "Unable to create publish."
       );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadProviderDetails = useCallback(async (providerId: string) => {
-    const definition = getProviderDefinition(providerId);
-    const endpoint = definition?.connectionEndpoint;
-    if (!endpoint) return;
-    try {
-      const response = await fetch(endpoint);
-      if (!response.ok) return;
-      const payload = (await response.json()) as {
-        connected: boolean;
-        channel?: { title: string | null; thumbnail: string | null };
-      };
-      setTargets((current) =>
-        current.map((target) =>
-          target.id === providerId
-            ? {
-                ...target,
-                connected: payload.connected,
-                channel: payload.channel ?? null,
-                status: payload.connected ? "active" : target.status,
-              }
-            : target
-        )
-      );
-    } catch {
-      // ignore for now
-    }
-  }, []);
-
-  const loadRenders = useCallback(async () => {
-    setRendersLoading(true);
-    try {
-      const response = await fetch(
-        `/api/content/${contentId}/renders?limit=50`
-      );
-      if (!response.ok) {
-        throw new Error("Unable to load renders.");
-      }
-      const payload = (await response.json()) as { items?: RenderItem[] };
-      setRenders(payload.items ?? []);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to load renders."
-      );
-    } finally {
-      setRendersLoading(false);
-    }
-  }, [contentId]);
-
-  const loadContentSummary = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/content/${contentId}`);
-      if (!response.ok) return;
-      const payload = (await response.json()) as { title?: string };
-      if (payload.title) {
-        setContentTitle(payload.title);
-        setTitle((current) =>
-          current.trim().length === 0 ? payload.title ?? "" : current
-        );
-      }
-      setThumbnailUrl(`/api/content/${contentId}/asset?type=thumbnail`);
-      setThumbnailCacheBust(Date.now());
-    } catch {
-      setThumbnailUrl(`/api/content/${contentId}/asset?type=thumbnail`);
-      setThumbnailCacheBust(Date.now());
-    }
-  }, [contentId]);
+      return payload.publish?.id ?? null;
+    },
+  });
 
   const openDrawer = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -387,26 +414,52 @@ export function PublishDrawer({
 
   useEffect(() => {
     if (!open) return;
-    if (!contentId) return;
-    if (status !== "authenticated") return;
-    void loadPublishTargets();
-    void loadRenders();
-    void loadContentSummary();
-  }, [contentId, loadContentSummary, loadPublishTargets, loadRenders, open, status]);
+    if (!contentSummaryQuery.data?.title) return;
+    setContentTitle(contentSummaryQuery.data.title ?? null);
+    setTitle((current) =>
+      current.trim().length === 0 ? contentSummaryQuery.data?.title ?? "" : current
+    );
+  }, [contentSummaryQuery.data?.title, open]);
 
   useEffect(() => {
-    if (!open || targets.length === 0) return;
-    targets.forEach((target) => {
-      if (providerDetailsLoaded.current.has(target.id)) return;
-      providerDetailsLoaded.current.add(target.id);
-      void loadProviderDetails(target.id);
-    });
-  }, [loadProviderDetails, open, targets]);
+    if (!open) return;
+    if (!contentSummaryQuery.data?.thumbnailUrl) return;
+    setThumbnailUrl(contentSummaryQuery.data.thumbnailUrl);
+    setThumbnailCacheBust(Date.now());
+  }, [contentSummaryQuery.data?.thumbnailUrl, open]);
 
   useEffect(() => {
-    if (open) return;
-    providerDetailsLoaded.current.clear();
-  }, [open]);
+    if (!open) return;
+    if (publishTargetsQuery.error) {
+      toast.error(
+        publishTargetsQuery.error instanceof Error
+          ? publishTargetsQuery.error.message
+          : "Unable to load publish targets."
+      );
+    }
+  }, [open, publishTargetsQuery.error]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (rendersQuery.error) {
+      toast.error(
+        rendersQuery.error instanceof Error
+          ? rendersQuery.error.message
+          : "Unable to load renders."
+      );
+    }
+  }, [open, rendersQuery.error]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (contentSummaryQuery.error) {
+      toast.error(
+        contentSummaryQuery.error instanceof Error
+          ? contentSummaryQuery.error.message
+          : "Unable to load content summary."
+      );
+    }
+  }, [open, contentSummaryQuery.error]);
 
   const handleNext = () => {
     if (stepId === "provider" && !canContinueProvider) return;
@@ -426,48 +479,12 @@ export function PublishDrawer({
     if (!selectedProvider || !selectedRender || !canContinueDetails) return;
     setSubmitting(true);
     try {
-      const scheduleEnabled =
-        selectedProviderData?.capabilities?.supportsSchedule &&
-        visibility === "scheduled";
-      const scheduleValue = scheduleEnabled
-        ? scheduleAt?.toISOString()
-        : null;
-      const privacyValue =
-        visibility === "scheduled" ? "private" : visibility;
-      const response = await fetch(`/api/content/${contentId}/publishes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: selectedProvider,
-          renderId: selectedRender,
-          connectionId: selectedProvider,
-          providerAssetId: `pending-${crypto.randomUUID()}`,
-          status: "draft",
-          metadata: {
-            title: title.trim(),
-            description: description.trim(),
-            options: {
-              privacy: selectedProviderData?.capabilities?.supportsPrivacy
-                ? privacyValue
-                : undefined,
-              scheduleAt: scheduleValue || undefined,
-            },
-            thumbnailUrl: thumbnailUrl ?? undefined,
-          },
-        }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? "Unable to create publish.");
-      }
-      const payload = (await response.json()) as { publish?: { id?: string } };
+      const publishId = await publishMutation.mutateAsync();
       toast.success("Publish draft created.");
-      if (payload.publish?.id) {
-        setActivePublishId(payload.publish.id);
+      if (publishId) {
+        setActivePublishId(publishId);
         setPublishStatus("queued");
-        onPublished?.(payload.publish.id);
+        onPublished?.(publishId);
       }
       openDrawer(false);
     } catch (error) {

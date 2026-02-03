@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { Link2 } from "lucide-react";
 import { toast } from "sonner";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PROVIDER_REGISTRY, type ProviderDefinition } from "@/lib/publishing/providers";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +60,10 @@ export default function ConnectionsSettingsPage() {
     () => Object.values(PROVIDER_REGISTRY),
     []
   );
+  const allProviders = useMemo(
+    () => providers.map((provider) => provider.oauthProviderName ?? provider.id),
+    [providers]
+  );
   const providerExamples = useMemo(() => {
     const labels = providers.map((provider) => provider.label);
     if (labels.length === 0) return "publishing services";
@@ -64,10 +71,59 @@ export default function ConnectionsSettingsPage() {
     if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
     return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
   }, [providers]);
-  const [connections, setConnections] = useState<Record<string, ProviderConnectionState>>(
-    () => buildProviderState(providers)
-  );
   const [unlinkTarget, setUnlinkTarget] = useState<ProviderDefinition | null>(null);
+  const queryClient = useQueryClient();
+
+  const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
+    queryKey: queryKeys.metaProviders,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      return fetchJson<{ oauthProviders?: string[] }>(
+        "/api/meta/providers",
+        undefined,
+        "Failed to load providers."
+      );
+    },
+  });
+
+  const enabledProviders = metaProvidersQuery.data?.oauthProviders ?? allProviders;
+
+  const connectionQueries = useQueries({
+    queries: providers.map((provider) => ({
+      queryKey: queryKeys.publishProvider(provider.id),
+      enabled: status === "authenticated",
+      staleTime: 60_000,
+      queryFn: async () => {
+        return fetchJson<{
+          connected: boolean;
+          needsReconnect?: boolean;
+          channel?: { title: string | null; thumbnail: string | null };
+        }>(
+          `/api/publish/providers/${provider.id}`,
+          undefined,
+          `Unable to load ${provider.label} connection.`
+        );
+      },
+    })),
+  });
+
+  const connections = useMemo(() => {
+    const next = buildProviderState(providers);
+    providers.forEach((provider, index) => {
+      const query = connectionQueries[index];
+      const data = query?.data;
+      const providerKey = provider.oauthProviderName ?? provider.id;
+      next[provider.id] = {
+        ...next[provider.id],
+        connected: Boolean(data?.connected),
+        needsReconnect: Boolean(data?.needsReconnect),
+        channel: data?.channel ?? null,
+        enabled: enabledProviders.includes(providerKey),
+        loading: query?.isLoading || query?.isFetching,
+      };
+    });
+    return next;
+  }, [providers, connectionQueries, enabledProviders]);
 
   const thumbnailCacheBust = useMemo(() => {
     const bust: Record<string, number> = {};
@@ -78,110 +134,40 @@ export default function ConnectionsSettingsPage() {
     return bust;
   }, [connections, providers]);
 
-  const loadConnections = useCallback(async () => {
-    setConnections((current) => {
-      const next = { ...current };
-      for (const provider of providers) {
-        next[provider.id] = { ...next[provider.id], loading: true };
-      }
-      return next;
-    });
-
-    const results = await Promise.all(
-      providers.map(async (provider) => {
-        try {
-          const response = await fetch(
-            `/api/publish/providers/${provider.id}`
-          );
-          if (!response.ok) {
-            throw new Error(
-              `Unable to load ${provider.label} connection.`
-            );
-          }
-          const payload = (await response.json()) as {
-            connected: boolean;
-            needsReconnect?: boolean;
-            channel?: { title: string | null; thumbnail: string | null };
-          };
-          return {
-            id: provider.id,
-            connected: Boolean(payload.connected),
-            needsReconnect: Boolean(payload.needsReconnect),
-            channel: payload.channel ?? null,
-          };
-        } catch (error) {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : `Unable to load ${provider.label} connection.`
-          );
-          return {
-            id: provider.id,
-            connected: false,
-            needsReconnect: false,
-            channel: null,
-          };
-        }
-      })
-    );
-
-    setConnections((current) => {
-      const next = { ...current };
-      for (const result of results) {
-        next[result.id] = {
-          ...next[result.id],
-          connected: result.connected,
-          needsReconnect: result.needsReconnect,
-          channel: result.channel,
-          loading: false,
-        };
-      }
-      return next;
-    });
-  }, [providers]);
-
-  const loadProviderConfig = useCallback(async () => {
-    try {
-      const response = await fetch("/api/meta/providers");
-      if (!response.ok) return;
-      const payload = (await response.json()) as { oauthProviders?: string[] };
-      const oauthProviders = payload.oauthProviders ?? [];
-      setConnections((current) => {
-        const next = { ...current };
-        for (const provider of providers) {
-          const providerKey = provider.oauthProviderName ?? provider.id;
-          next[provider.id] = {
-            ...next[provider.id],
-            enabled: oauthProviders.includes(providerKey),
-          };
-        }
-        return next;
-      });
-    } catch {
-      setConnections((current) => {
-        const next = { ...current };
-        for (const provider of providers) {
-          next[provider.id] = { ...next[provider.id], enabled: false };
-        }
-        return next;
-      });
-    }
-  }, [providers]);
-
   useEffect(() => {
-    if (status === "authenticated") {
-      void loadConnections();
-      void loadProviderConfig();
-    } else {
-      setConnections((current) => {
-        const next = { ...current };
-        for (const provider of providers) {
-          next[provider.id] = { ...next[provider.id], loading: false };
-        }
-        return next;
+    connectionQueries.forEach((query, index) => {
+      if (!query?.error) return;
+      const provider = providers[index];
+      const message =
+        query.error instanceof Error
+          ? query.error.message
+          : `Unable to load ${provider.label} connection.`;
+      toast.error(message);
+    });
+  }, [connectionQueries, providers]);
+
+  const unlinkMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      const response = await fetch(`/api/publish/providers/${providerId}`, {
+        method: "DELETE",
       });
-    }
-  }, [loadConnections, loadProviderConfig, providers, status]);
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload?.error ?? `Unable to unlink ${providerId}.`);
+      }
+    },
+    onSuccess: async (_data, providerId) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.publishProvider(providerId),
+      });
+      toast.success(`${providerId} disconnected.`);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to unlink provider."
+      );
+    },
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -341,29 +327,7 @@ export default function ConnectionsSettingsPage() {
               onClick={async () => {
                 if (!unlinkTarget) return;
                 try {
-                  const response = await fetch(
-                    `/api/publish/providers/${unlinkTarget.id}`,
-                    {
-                      method: "DELETE",
-                    }
-                  );
-                  if (!response.ok) {
-                    const payload = (await response.json()) as {
-                      error?: string;
-                    };
-                    throw new Error(
-                      payload?.error ??
-                        `Unable to unlink ${unlinkTarget.label}.`
-                    );
-                  }
-                  await loadConnections();
-                  toast.success(`${unlinkTarget.label} disconnected.`);
-                } catch (error) {
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : `Unable to unlink ${unlinkTarget.label}.`
-                  );
+                  await unlinkMutation.mutateAsync(unlinkTarget.id);
                 } finally {
                   setUnlinkTarget(null);
                 }

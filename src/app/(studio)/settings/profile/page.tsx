@@ -5,6 +5,7 @@ import { signIn, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Link2, UserRound, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 type ProfilePayload = {
   name: string;
@@ -64,14 +67,12 @@ export default function ProfileSettingsPage() {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<ProfilePayload>(emptyProfile);
   const [draft, setDraft] = useState<ProfilePayload>(emptyProfile);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<
     Record<string, { image?: string | null; name?: string | null }>
   >({});
   const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const [pendingProvider, setPendingProvider] = useState<
     (typeof allProviders)[number] | null
   >(null);
@@ -115,64 +116,95 @@ export default function ProfileSettingsPage() {
     [enabledProviders]
   );
 
-  const loadProfile = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/user/profile");
-      if (!response.ok) {
-        throw new Error("Unable to load profile.");
-      }
-      const payload = (await response.json()) as ProfilePayload;
-      const nextDraft = {
-        ...payload,
-        email: payload.pendingEmail ?? payload.email,
-      };
-      setProfile(payload);
-      setDraft(nextDraft);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to load profile."
+  const profileQuery = useQuery<ProfilePayload>({
+    queryKey: queryKeys.profile,
+    enabled: status === "authenticated",
+    staleTime: 60_000,
+    queryFn: async () => {
+      return fetchJson<ProfilePayload>(
+        "/api/user/profile",
+        undefined,
+        "Unable to load profile."
       );
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  const loadConnections = async () => {
-    setConnectionsLoading(true);
-    try {
-      const response = await fetch("/api/user/profile/connections");
-      if (!response.ok) {
-        throw new Error("Unable to load connected accounts.");
-      }
-      const payload = (await response.json()) as ConnectionsResponse;
-      setConnectedProviders(payload.connected ?? []);
-      setProviderProfiles(payload.profiles ?? {});
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Unable to load connected accounts."
+  const connectionsQuery = useQuery<ConnectionsResponse>({
+    queryKey: queryKeys.profileConnections,
+    enabled: status === "authenticated",
+    staleTime: 60_000,
+    queryFn: async () => {
+      return fetchJson<ConnectionsResponse>(
+        "/api/user/profile/connections",
+        undefined,
+        "Unable to load connected accounts."
       );
-    } finally {
-      setConnectionsLoading(false);
-    }
-  };
+    },
+  });
 
-  const loadProviderConfig = async () => {
-    try {
-      const response = await fetch("/api/meta/providers");
-      if (!response.ok) return;
-      const payload = (await response.json()) as { oauthProviders?: string[] };
-      setEnabledProviders(payload.oauthProviders ?? []);
-    } catch {
+  const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
+    queryKey: queryKeys.metaProviders,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      return fetchJson<{ oauthProviders?: string[] }>(
+        "/api/meta/providers",
+        undefined,
+        "Failed to load providers."
+      );
+    },
+  });
+
+  const loading = profileQuery.isLoading || profileQuery.isFetching;
+  const connectionsLoading =
+    connectionsQuery.isLoading || connectionsQuery.isFetching;
+
+  useEffect(() => {
+    if (!profileQuery.data) return;
+    const payload = profileQuery.data;
+    const nextDraft = {
+      ...payload,
+      email: payload.pendingEmail ?? payload.email,
+    };
+    setProfile(payload);
+    setDraft(nextDraft);
+  }, [profileQuery.data]);
+
+  useEffect(() => {
+    if (!profileQuery.error) return;
+    const message =
+      profileQuery.error instanceof Error
+        ? profileQuery.error.message
+        : "Unable to load profile.";
+    toast.error(message);
+  }, [profileQuery.error]);
+
+  useEffect(() => {
+    if (!connectionsQuery.data) return;
+    setConnectedProviders(connectionsQuery.data.connected ?? []);
+    setProviderProfiles(connectionsQuery.data.profiles ?? {});
+  }, [connectionsQuery.data]);
+
+  useEffect(() => {
+    if (!connectionsQuery.error) return;
+    const message =
+      connectionsQuery.error instanceof Error
+        ? connectionsQuery.error.message
+        : "Unable to load connected accounts.";
+    toast.error(message);
+  }, [connectionsQuery.error]);
+
+  useEffect(() => {
+    if (metaProvidersQuery.data) {
+      setEnabledProviders(metaProvidersQuery.data.oauthProviders ?? []);
+      return;
+    }
+    if (metaProvidersQuery.isError) {
       setEnabledProviders(allProviders.map((provider) => provider.id));
     }
-  };
+  }, [metaProvidersQuery.data, metaProvidersQuery.isError]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const saveMutation = useMutation({
+    mutationFn: async () => {
       const response = await fetch("/api/user/profile", {
         method: "PUT",
         headers: {
@@ -189,13 +221,16 @@ export default function ProfileSettingsPage() {
         throw new Error(payload?.error ?? "Unable to update profile.");
       }
 
-      const payload = (await response.json()) as ProfilePayload;
+      return (await response.json()) as ProfilePayload;
+    },
+    onSuccess: async (payload) => {
       const nextDraft = {
         ...payload,
         email: payload.pendingEmail ?? payload.email,
       };
       setProfile(payload);
       setDraft(nextDraft);
+      queryClient.setQueryData(queryKeys.profile, payload);
       if (update) {
         await update({
           name: payload.name,
@@ -209,14 +244,19 @@ export default function ProfileSettingsPage() {
       } else {
         toast.success("Profile updated.");
       }
-    } catch (error) {
+    },
+    onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Unable to update profile."
       );
-    } finally {
-      setSaving(false);
-    }
+    },
+  });
+
+  const handleSave = async () => {
+    await saveMutation.mutateAsync();
   };
+
+  const saving = saveMutation.isPending;
 
   useEffect(() => {
     const fallbackProfile: ProfilePayload = {
@@ -233,17 +273,6 @@ export default function ProfileSettingsPage() {
       ...fallbackProfile,
     }));
   }, [session?.user?.email, session?.user?.image, session?.user?.name]);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      void loadProfile();
-      void loadConnections();
-      void loadProviderConfig();
-    } else {
-      setLoading(false);
-      setConnectionsLoading(false);
-    }
-  }, [status]);
 
   useEffect(() => {
     const confirmed = searchParams?.get("email") === "confirmed";
@@ -566,16 +595,18 @@ export default function ProfileSettingsPage() {
               onClick={async () => {
                 if (!pendingUnlink) return;
                 try {
-                  const response = await fetch("/api/user/profile/connections", {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ provider: pendingUnlink.id }),
+                  await fetchJson(
+                    "/api/user/profile/connections",
+                    {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ provider: pendingUnlink.id }),
+                    },
+                    "Unable to unlink provider."
+                  );
+                  await queryClient.invalidateQueries({
+                    queryKey: queryKeys.profileConnections,
                   });
-                  if (!response.ok) {
-                    const payload = (await response.json()) as { error?: string };
-                    throw new Error(payload?.error ?? "Unable to unlink provider.");
-                  }
-                  await loadConnections();
                   toast.success("Provider unlinked.");
                   window.dispatchEvent(new Event("profile:connections-updated"));
                 } catch (error) {

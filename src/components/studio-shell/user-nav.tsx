@@ -4,7 +4,10 @@ import { Link } from "@/components/navigation/route-transition";
 import { LogOut, UserRoundPen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,60 +37,49 @@ const getInitials = (name?: string | null, email?: string | null) => {
 
 const providerOrder = ["google", "github", "discord"] as const;
 
-const resolveAvatarSrc = async (fallback?: string | null) => {
-  try {
-    const response = await fetch("/api/user/profile/connections");
-    if (!response.ok) return fallback ?? undefined;
-    const payload = (await response.json()) as {
-      profiles?: Record<string, { image?: string | null }>;
-    };
-    const profiles = payload.profiles ?? {};
-    const provider =
-      providerOrder.find((id) => profiles[id]?.image) ?? null;
-    if (provider) {
-      return `/api/user/profile/avatar?provider=${provider}&v=${Date.now()}`;
-    }
-    return fallback ?? undefined;
-  } catch {
-    return fallback ?? undefined;
-  }
-};
-
 export function UserNav() {
   const { data, status } = useSession();
   const user = data?.user;
   const [open, setOpen] = useState(false);
-  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined);
+  const queryClient = useQueryClient();
   const initials = getInitials(user?.name, user?.email);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    let active = true;
-    const run = async () => {
-      const nextSrc = await resolveAvatarSrc(user?.image);
-      if (active) setAvatarSrc(nextSrc);
-    };
-    void run();
-    return () => {
-      active = false;
-    };
-  }, [status, user?.image]);
+  const connectionsQuery = useQuery<{
+    profiles?: Record<string, { image?: string | null }>;
+  }>({
+    queryKey: queryKeys.profileConnections,
+    enabled: status === "authenticated",
+    staleTime: 60_000,
+    queryFn: async () => {
+      return fetchJson<{
+        profiles?: Record<string, { image?: string | null }>;
+      }>("/api/user/profile/connections", undefined, "Unable to load connections.");
+    },
+  });
+
+  const avatarProvider = useMemo(() => {
+    const profiles = connectionsQuery.data?.profiles ?? {};
+    return providerOrder.find((id) => profiles[id]?.image) ?? null;
+  }, [connectionsQuery.data]);
+
+  const avatarSrc = useMemo(() => {
+    if (avatarProvider) {
+      const bust = connectionsQuery.dataUpdatedAt || 0;
+      return `/api/user/profile/avatar?provider=${avatarProvider}&v=${bust}`;
+    }
+    return user?.image ?? undefined;
+  }, [avatarProvider, connectionsQuery.dataUpdatedAt, user?.image]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
-    let active = true;
     const handler = () => {
-      void (async () => {
-        const nextSrc = await resolveAvatarSrc(user?.image);
-        if (active) setAvatarSrc(nextSrc);
-      })();
+      queryClient.invalidateQueries({ queryKey: queryKeys.profileConnections });
     };
     window.addEventListener("profile:connections-updated", handler);
     return () => {
-      active = false;
       window.removeEventListener("profile:connections-updated", handler);
     };
-  }, [status, user?.image]);
+  }, [queryClient, status]);
 
   return (
     <AnimatePresence mode="wait">

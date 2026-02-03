@@ -1,4 +1,4 @@
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, like, or, sql } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 import { z } from "zod";
 
@@ -73,6 +73,7 @@ export const contentItemSchema = z.object({
   fps: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  publishesCount: z.number().int().nonnegative().optional(),
 });
 
 export type ContentItemRow = z.infer<typeof contentItemSchema>;
@@ -191,6 +192,9 @@ const normalizeRow = (row: unknown): ContentItemRow => {
         : Boolean(record.edgeRaysEnabled ?? true),
     edgeRaysIntensity: record.edgeRaysIntensity ?? 0.85,
     edgeRaysVocalBalance: record.edgeRaysVocalBalance ?? 0.6,
+    publishesCount: Number.isFinite(record.publishesCount)
+      ? Number(record.publishesCount)
+      : 0,
   });
   if (!parsed.success) {
     throw new Error(`Invalid content row: ${parsed.error.message}`);
@@ -214,8 +218,12 @@ export async function listContentItems(
             like(sql`lower(${table.id})`, `%${term}%`)
           )
         : undefined;
+      const columns = getTableColumns(table);
       const rows = await db
-        .select()
+        .select({
+          ...columns,
+          publishesCount: sql<number>`(select count(*) from ${schema.publishes} where ${schema.publishes.contentId} = ${table.id} and ${schema.publishes.userId} = ${userId})`,
+        })
         .from(table)
         .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
         .orderBy(desc(table.createdAt))
@@ -240,8 +248,12 @@ export async function listContentItems(
             like(sql`lower(${table.id})`, `%${term}%`)
           )
         : undefined;
+      const columns = getTableColumns(table);
       const rows = await db
-        .select()
+        .select({
+          ...columns,
+          publishesCount: sql<number>`(select count(*) from ${sqliteSchema.publishes} where ${sqliteSchema.publishes.contentId} = ${table.id} and ${sqliteSchema.publishes.userId} = ${userId})`,
+        })
         .from(table)
         .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
         .orderBy(desc(table.createdAt))

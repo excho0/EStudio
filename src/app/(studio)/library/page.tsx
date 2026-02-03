@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
 import { PublishDrawer } from "@/components/publishing/publish-drawer";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Eye,
@@ -39,13 +40,15 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import React from "react";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 350);
   const [page, setPage] = useState(1);
   const limit = 20;
-  const { items, loading, refresh, total } = useContentList({
+  const queryClient = useQueryClient();
+  const { items, loading, total } = useContentList({
     query: debouncedQuery,
     page,
     limit,
@@ -86,7 +89,6 @@ export default function LibraryPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  /* eslint-disable react-hooks/incompatible-library */
   const desktopVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => desktopScrollRef.current,
@@ -101,14 +103,13 @@ export default function LibraryPage() {
     overscan: 12,
     getItemKey: (index) => items[index]?.id ?? index,
   });
-  /* eslint-enable react-hooks/incompatible-library */
   const getActionItems = (item: ContentItem) => [
     {
       label: "Details",
       icon: Eye,
       href: `/edit/${item.id}`,
     },
-        ...(item.status === "rendered"
+    ...(item.status === "rendered"
       ? [
           {
             label: "Publish",
@@ -118,13 +119,16 @@ export default function LibraryPage() {
               setPublishDrawerOpen(true);
             },
           },
-          {
-            label: "View Publishes",
-            icon: Radio,
-            href: `/publishes/${item.id}`,
-          },
           { type: "separator" as const },
-
+          ...(item.publishesCount && item.publishesCount > 0
+            ? [
+                {
+                  label: "View Publishes",
+                  icon: Radio,
+                  href: `/publishes/${item.id}`,
+                },
+              ]
+            : []),
         ]
       : []),
     {
@@ -161,20 +165,32 @@ export default function LibraryPage() {
   ];
 
 
+  const renderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Render failed. Please check server logs.");
+      }
+    },
+    onSuccess: () => {
+      toast.message("Render started.");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : "Render failed. Please check server logs.";
+      setError(message);
+      toast.error(message);
+    },
+    onSettled: () => {
+      setRenderingId(null);
+    },
+  });
+
   const handleRender = async (id: string) => {
     setRenderingId(id);
     setError(null);
-    const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
-
-    if (!response.ok) {
-      setError("Render failed. Please check server logs.");
-      toast.error("Render failed. Please check server logs.");
-    } else {
-      toast.message("Render started.");
-    }
-
-    await refresh();
-    setRenderingId(null);
+    await renderMutation.mutateAsync(id);
   };
 
   const getPageItems = () => {
@@ -192,25 +208,44 @@ export default function LibraryPage() {
     return Array.from(pages).sort((a, b) => a - b);
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: async ({
+      id,
+      keepRenders,
+    }: {
+      id: string;
+      keepRenders?: boolean;
+    }) => {
+      const params = new URLSearchParams();
+      if (keepRenders) {
+        params.set("keepRenders", "1");
+      }
+      const query = params.toString();
+      const response = await fetch(
+        `/api/content/${id}${query ? `?${query}` : ""}`,
+        {
+          method: "DELETE",
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Delete failed. Please try again.");
+      }
+    },
+    onSuccess: () => {
+      toast.success("Item deleted.");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : "Delete failed. Please try again.";
+      setError(message);
+      toast.error(message);
+    },
+  });
+
   const handleDelete = async (id: string, keepRenders?: boolean) => {
     setError(null);
-    const params = new URLSearchParams();
-    if (keepRenders) {
-      params.set("keepRenders", "1");
-    }
-    const query = params.toString();
-    const response = await fetch(`/api/content/${id}${query ? `?${query}` : ""}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
-      setError("Delete failed. Please try again.");
-      toast.error("Delete failed. Please try again.");
-    } else {
-      toast.success("Item deleted.");
-    }
-
-    await refresh();
+    await deleteMutation.mutateAsync({ id, keepRenders });
   };
 
   const getStatusMeta = (status: string) => {

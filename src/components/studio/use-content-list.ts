@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocketIO } from "./socketIO-provider";
 import { z } from "zod";
 import { contentItemSchema } from "@/lib/data/content";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 export type ContentItem = z.infer<typeof contentItemSchema>;
 
@@ -34,23 +36,23 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   }
   searchParams.set("page", String(page));
   searchParams.set("limit", String(limit));
-  const queryKey = ["content", { query, page, limit }] as const;
+  const queryKey = queryKeys.contentList({ query, page, limit });
 
   const { data, isLoading, isFetching, refetch } = useQuery<ContentListResponse>({
     queryKey,
     queryFn: async () => {
-      const response = await fetch(`/api/content?${searchParams.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to load content list");
-      }
-      return (await response.json()) as ContentListResponse;
+      return fetchJson<ContentListResponse>(
+        `/api/content?${searchParams.toString()}`,
+        undefined,
+        "Failed to load content list"
+      );
     },
     placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
     if (eventToken > 0) {
-      queryClient.invalidateQueries({ queryKey: ["content"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
     }
   }, [eventToken, queryClient]);
 

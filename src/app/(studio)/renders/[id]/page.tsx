@@ -21,7 +21,10 @@ import {
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchJson } from "@/lib/fetch-json";
 
 type RenderItem = {
   name: string;
@@ -36,6 +39,72 @@ type RenderListResponse = {
   total: number;
   items: RenderItem[];
 };
+
+const DesktopSkeletonRows = () => (
+  <Table className="-mb-12">
+    <thead>
+      <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+        <th className="py-3">Render</th>
+        <th>Size</th>
+        <th>Updated</th>
+        <th className="text-right">Action</th>
+      </tr>
+    </thead>
+    <tbody className="text-sm">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <tr
+          key={`skeleton-row-${index}`}
+          className="border-t border-slate-200 dark:border-white/10"
+        >
+          <td className="py-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-12 w-16 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          </td>
+          <td>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </td>
+          <td>
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </td>
+          <td className="text-right">
+            <div className="flex justify-end">
+              <Skeleton className="h-8 w-10 rounded-md" />
+            </div>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </Table>
+);
+
+const MobileSkeletonCards = () => (
+  <div className="grid gap-4">
+    {Array.from({ length: 4 }).map((_, index) => (
+      <div
+        key={`skeleton-card-${index}`}
+        className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
+      >
+        <div className="flex flex-1 gap-3">
+          <Skeleton className="h-16 w-20 rounded-md" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-36" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-10 rounded-md" />
+      </div>
+    ))}
+  </div>
+);
 
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -61,11 +130,23 @@ export default function RendersPage() {
 
   const [page, setPage] = useState(1);
   const limit = 20;
-  const [data, setData] = useState<RenderListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const isHydrated = true;
   const isMobile = useIsMobile();
-  const items = data?.items ?? [];
+  const queryClient = useQueryClient();
+  const rendersQuery = useQuery<RenderListResponse>({
+    queryKey: queryKeys.contentRenders(id, page, limit),
+    enabled: Boolean(id),
+    staleTime: 15_000,
+    queryFn: async () => {
+      return fetchJson<RenderListResponse>(
+        `/api/content/${id}/renders?page=${page}&limit=${limit}`,
+        undefined,
+        "Failed to load renders."
+      );
+    },
+  });
+  const items = rendersQuery.data?.items ?? [];
+  const loading = rendersQuery.isLoading || rendersQuery.isFetching;
   const desktopScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -85,9 +166,9 @@ export default function RendersPage() {
   });
 
   const totalPages = useMemo(() => {
-    if (!data) return 1;
-    return Math.max(1, Math.ceil(data.total / data.limit));
-  }, [data]);
+    if (!rendersQuery.data) return 1;
+    return Math.max(1, Math.ceil(rendersQuery.data.total / rendersQuery.data.limit));
+  }, [rendersQuery.data]);
   const canGoBack = page > 1;
   const canGoNext = page < totalPages;
 
@@ -107,44 +188,17 @@ export default function RendersPage() {
   };
 
   useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+    if (!rendersQuery.error) return;
+    const message =
+      rendersQuery.error instanceof Error
+        ? rendersQuery.error.message
+        : "Failed to load renders.";
+    toast.error(message);
+  }, [rendersQuery.error]);
 
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/content/${id}/renders?page=${page}&limit=${limit}`);
-        if (!response.ok) {
-          throw new Error("Failed to load renders.");
-        }
-        const payload = (await response.json()) as RenderListResponse;
-        if (!cancelled) {
-          setData(payload);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setData({ page, limit, total: 0, items: [] });
-          const message = error instanceof Error ? error.message : "Failed to load renders.";
-          toast.error(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, page]);
-
-  const handleDeleteRender = async (name: string) => {
-    if (!id) return;
-    try {
+  const deleteRenderMutation = useMutation({
+    mutationFn: async (name: string) => {
+      if (!id) return;
       const response = await fetch(
         `/api/content/${id}/renders/${encodeURIComponent(name)}`,
         { method: "DELETE" }
@@ -152,89 +206,34 @@ export default function RendersPage() {
       if (!response.ok) {
         throw new Error("Failed to delete render.");
       }
-      setData((current) => {
-        if (!current) return current;
-        const nextItems = current.items.filter((item) => item.name !== name);
-        return {
-          ...current,
-          total: Math.max(0, current.total - 1),
-          items: nextItems,
-        };
-      });
+      return name;
+    },
+    onSuccess: (name) => {
+      if (!id || !name) return;
+      queryClient.setQueryData<RenderListResponse | undefined>(
+        queryKeys.contentRenders(id, page, limit),
+        (current) => {
+          if (!current) return current;
+          const nextItems = current.items.filter((item) => item.name !== name);
+          return {
+            ...current,
+            total: Math.max(0, current.total - 1),
+            items: nextItems,
+          };
+        }
+      );
       toast.success("Render deleted.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to delete render.";
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete render.";
       toast.error(message);
-    } finally {
-      return;
-    }
+    },
+  });
+
+  const handleDeleteRender = async (name: string) => {
+    await deleteRenderMutation.mutateAsync(name);
   };
-
-  const DesktopSkeletonRows = () => (
-    <Table className="-mb-12">
-      <thead>
-        <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-          <th className="py-3">Render</th>
-          <th>Size</th>
-          <th>Updated</th>
-          <th className="text-right">Action</th>
-        </tr>
-      </thead>
-      <tbody className="text-sm">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <tr
-            key={`skeleton-row-${index}`}
-            className="border-t border-slate-200 dark:border-white/10"
-          >
-            <td className="py-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-12 w-16 rounded-md" />
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-40" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
-            </td>
-            <td>
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </td>
-            <td>
-              <div className="space-y-2">
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-            </td>
-            <td className="text-right">
-              <div className="flex justify-end">
-                <Skeleton className="h-8 w-10 rounded-md" />
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
-
-  const MobileSkeletonCards = () => (
-    <div className="grid gap-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div
-          key={`skeleton-card-${index}`}
-          className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20 -mb-2"
-        >
-          <div className="flex flex-1 gap-3">
-            <Skeleton className="h-16 w-20 rounded-md" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-6 w-20 rounded-full" />
-            </div>
-          </div>
-          <Skeleton className="h-8 w-10 rounded-md" />
-        </div>
-      ))}
-    </div>
-  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -266,7 +265,7 @@ export default function RendersPage() {
         ) : (
           <DesktopSkeletonRows />
         )
-      ) : data && data.items.length > 0 ? (
+      ) : rendersQuery.data && rendersQuery.data.items.length > 0 ? (
         <div className="mt-2">
           {isMobile ? (
             <ScrollArea className="h-[50svh]" viewportRef={mobileScrollRef}>
@@ -367,10 +366,10 @@ export default function RendersPage() {
                         />
                       </tr>
                     ) : null}
-                    {desktopVirtualizer.getVirtualItems().map((virtualRow) => {
-                      const item = items[virtualRow.index];
-                      if (!item) return null;
-                      return (
+                {desktopVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = items[virtualRow.index];
+                  if (!item) return null;
+                  return (
                         <tr
                           key={item.name}
                           data-index={virtualRow.index}
