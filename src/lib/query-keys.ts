@@ -1,6 +1,13 @@
 export const queryKeys = {
   contentListBase: ["content"] as const,
-  contentList: (params: { query: string; page: number; limit: number }) =>
+  contentList: (params: {
+    query: string;
+    page: number;
+    limit: number;
+    status?: string;
+    sortBy?: string;
+    sortDir?: string;
+  }) =>
     ["content", params] as const,
   contentItem: (id: string | undefined | null) => ["content-item", id] as const,
   contentSummary: (id: string | undefined | null) =>

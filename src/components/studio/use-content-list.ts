@@ -14,6 +14,10 @@ type UseContentListOptions = {
   query?: string;
   page?: number;
   limit?: number;
+  status?: "uploaded" | "rendering" | "rendered" | "failed" | "all";
+  sortBy?: "createdAt" | "updatedAt" | "title" | "status";
+  sortDir?: "asc" | "desc";
+  enableSocketRefresh?: boolean;
 };
 
 type ContentListResponse = {
@@ -28,15 +32,28 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   const query = options.query ?? "";
   const page = options.page ?? 1;
   const limit = options.limit ?? 50;
+  const status = options.status ?? "all";
+  const sortBy = options.sortBy ?? "createdAt";
+  const sortDir = options.sortDir ?? "desc";
   const queryClient = useQueryClient();
+  const enableSocketRefresh = options.enableSocketRefresh ?? true;
 
   const searchParams = new URLSearchParams();
   if (query.trim()) {
     searchParams.set("q", query.trim());
   }
+  if (status && status !== "all") {
+    searchParams.set("status", status);
+  }
+  if (sortBy) {
+    searchParams.set("sortBy", sortBy);
+  }
+  if (sortDir) {
+    searchParams.set("sortDir", sortDir);
+  }
   searchParams.set("page", String(page));
   searchParams.set("limit", String(limit));
-  const queryKey = queryKeys.contentList({ query, page, limit });
+  const queryKey = queryKeys.contentList({ query, page, limit, status, sortBy, sortDir });
 
   const { data, isLoading, isFetching, refetch } = useQuery<ContentListResponse>({
     queryKey,
@@ -51,10 +68,10 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   });
 
   useEffect(() => {
-    if (eventToken > 0) {
+    if (enableSocketRefresh && eventToken > 0) {
       queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
     }
-  }, [eventToken, queryClient]);
+  }, [enableSocketRefresh, eventToken, queryClient]);
 
   return {
     items: data?.items ?? [],

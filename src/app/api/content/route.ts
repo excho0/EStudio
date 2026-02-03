@@ -59,6 +59,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const params = contentQuerySchema.parse({
     q: searchParams.get("q") ?? "",
+    status: searchParams.get("status") ?? undefined,
+    sortBy: searchParams.get("sortBy") ?? undefined,
+    sortDir: searchParams.get("sortDir") ?? undefined,
     page: searchParams.get("page") ?? "1",
     limit: searchParams.get("limit") ?? "50",
   });

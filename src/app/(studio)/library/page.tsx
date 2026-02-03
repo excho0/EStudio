@@ -1,6 +1,6 @@
 "use client";
 
-import { JSX, useEffect, useMemo, useRef, useState } from "react";
+import { JSX, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -10,12 +10,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { IconSelect } from "@/components/ui/icon-select";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { Progress } from "@/components/ui/progress";
 import { StatRow } from "@/components/ui/stat-row";
+import { Button } from "@/components/ui/button";
+import {
+  ResponsiveDrawer,
+  ResponsiveDrawerContent,
+  ResponsiveDrawerHeader,
+  ResponsiveDrawerTitle,
+  ResponsiveDrawerTrigger,
+} from "@/components/ui/responsive-drawer";
 import {
   Pagination,
   PaginationContent,
@@ -46,9 +56,17 @@ import {
   Loader2,
   Play,
   Radio,
+  SlidersHorizontal,
   Trash2,
   Upload,
   XCircle,
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+  CalendarClock,
+  History,
+  ListFilter,
+  Type,
+  Activity,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -65,12 +83,23 @@ export default function LibraryPage() {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 350);
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "uploaded" | "rendering" | "rendered" | "failed"
+  >("all");
+  const [sortBy, setSortBy] = useState<
+    "createdAt" | "updatedAt" | "title" | "status"
+  >("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const limit = 20;
   const queryClient = useQueryClient();
   const { items, loading, total } = useContentList({
     query: debouncedQuery,
     page,
     limit,
+    status: statusFilter,
+    sortBy,
+    sortDir,
+    enableSocketRefresh: true,
   });
   const [renderingId, setRenderingId] = useState<string | null>(null);
   const [publishContentId, setPublishContentId] = useState<string | null>(null);
@@ -86,15 +115,21 @@ export default function LibraryPage() {
     [limit, total]
   );
   const [stableTotalPages, setStableTotalPages] = useState(1);
-  const formatDate = (value: string) =>
-    new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-      new Date(value)
-    );
-  const formatDateTime = (value: string) =>
-    new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
+  const formatDate = useCallback(
+    (value: string) =>
+      new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+        new Date(value)
+      ),
+    []
+  );
+  const formatDateTime = useCallback(
+    (value: string) =>
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(value)),
+    []
+  );
   useEffect(() => {
     if (!loading && totalPages > 0) {
       setStableTotalPages(totalPages);
@@ -122,7 +157,90 @@ export default function LibraryPage() {
     overscan: 12,
     getItemKey: (index) => items[index]?.id ?? index,
   });
-  const getActionItems = (item: ContentItem) => [
+  const renderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Render failed. Please check server logs.");
+      }
+    },
+    onSuccess: () => {
+      toast.message("Render started.");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : "Render failed. Please check server logs.";
+      setError(message);
+      toast.error(message);
+    },
+    onSettled: () => {
+      setRenderingId(null);
+    },
+  });
+
+  const handleRender = useCallback(async (id: string) => {
+    setRenderingId(id);
+    setError(null);
+    await renderMutation.mutateAsync(id);
+  }, [renderMutation]);
+
+  const getPageItems = () => {
+    if (displayTotalPages <= 1) return [];
+    if (displayTotalPages <= 7) {
+      return Array.from({ length: displayTotalPages }, (_, index) => index + 1);
+    }
+    const pages = new Set<number>([
+      1,
+      displayTotalPages,
+      page,
+      Math.max(1, page - 1),
+      Math.min(displayTotalPages, page + 1),
+    ]);
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({
+      id,
+      keepRenders,
+    }: {
+      id: string;
+      keepRenders?: boolean;
+    }) => {
+      const params = new URLSearchParams();
+      if (keepRenders) {
+        params.set("keepRenders", "1");
+      }
+      const query = params.toString();
+      const response = await fetch(
+        `/api/content/${id}${query ? `?${query}` : ""}`,
+        {
+          method: "DELETE",
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Delete failed. Please try again.");
+      }
+    },
+    onSuccess: () => {
+      toast.success("Item deleted.");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : "Delete failed. Please try again.";
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  const handleDelete = useCallback(async (id: string, keepRenders?: boolean) => {
+    setError(null);
+    await deleteMutation.mutateAsync({ id, keepRenders });
+  }, [deleteMutation]);
+
+  const getActionItems = useCallback((item: ContentItem) => [
     {
       label: "Details",
       icon: Eye,
@@ -181,93 +299,9 @@ export default function LibraryPage() {
         handleDelete(item.id, options?.keepRenders),
       destructive: true,
     },
-  ];
+  ], [handleDelete, handleRender, renderingId]);
 
-
-  const renderMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
-      if (!response.ok) {
-        throw new Error("Render failed. Please check server logs.");
-      }
-    },
-    onSuccess: () => {
-      toast.message("Render started.");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
-    },
-    onError: (error) => {
-      const message =
-        error instanceof Error ? error.message : "Render failed. Please check server logs.";
-      setError(message);
-      toast.error(message);
-    },
-    onSettled: () => {
-      setRenderingId(null);
-    },
-  });
-
-  const handleRender = async (id: string) => {
-    setRenderingId(id);
-    setError(null);
-    await renderMutation.mutateAsync(id);
-  };
-
-  const getPageItems = () => {
-    if (displayTotalPages <= 1) return [];
-    if (displayTotalPages <= 7) {
-      return Array.from({ length: displayTotalPages }, (_, index) => index + 1);
-    }
-    const pages = new Set<number>([
-      1,
-      displayTotalPages,
-      page,
-      Math.max(1, page - 1),
-      Math.min(displayTotalPages, page + 1),
-    ]);
-    return Array.from(pages).sort((a, b) => a - b);
-  };
-
-  const deleteMutation = useMutation({
-    mutationFn: async ({
-      id,
-      keepRenders,
-    }: {
-      id: string;
-      keepRenders?: boolean;
-    }) => {
-      const params = new URLSearchParams();
-      if (keepRenders) {
-        params.set("keepRenders", "1");
-      }
-      const query = params.toString();
-      const response = await fetch(
-        `/api/content/${id}${query ? `?${query}` : ""}`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (!response.ok) {
-        throw new Error("Delete failed. Please try again.");
-      }
-    },
-    onSuccess: () => {
-      toast.success("Item deleted.");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
-    },
-    onError: (error) => {
-      const message =
-        error instanceof Error ? error.message : "Delete failed. Please try again.";
-      setError(message);
-      toast.error(message);
-    },
-  });
-
-  const handleDelete = async (id: string, keepRenders?: boolean) => {
-    setError(null);
-    await deleteMutation.mutateAsync({ id, keepRenders });
-  };
-
-  const getStatusMeta = (status: string) => {
+  const getStatusMeta = useCallback((status: string) => {
     switch (status) {
       case "rendered":
         return {
@@ -305,46 +339,45 @@ export default function LibraryPage() {
             "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
         };
     }
-  };
+  }, []);
 
-  const renderStatusBadge = (
-    status: string,
-    showLabel: boolean,
-    progress?: number
-  ) => {
-    const meta = getStatusMeta(status);
-    const Icon = meta.icon;
-    const showProgress = status === "rendering" && typeof progress === "number";
-    const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
-    return (
-      <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
-        <Icon
-          className={`h-4 w-4 shrink-0 ${
-            status === "rendering" ? "animate-spin" : ""
-          }`}
-        />
-        {showLabel ? (
-          <span className="flex items-center gap-2">
-            <span>{meta.label}</span>
-            {progressLabel ? (
-              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                {progressLabel}
-              </span>
-            ) : null}
-          </span>
-        ) : (
-          <span className="flex items-center gap-2">
-            <span className="sr-only">{meta.label}</span>
-            {progressLabel ? (
-              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                {progressLabel}
-              </span>
-            ) : null}
-          </span>
-        )}
-      </Badge>
-    );
-  };
+  const renderStatusBadge = useCallback(
+    (status: string, showLabel: boolean, progress?: number) => {
+      const meta = getStatusMeta(status);
+      const Icon = meta.icon;
+      const showProgress = status === "rendering" && typeof progress === "number";
+      const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
+      return (
+        <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
+          <Icon
+            className={`h-4 w-4 shrink-0 ${
+              status === "rendering" ? "animate-spin" : ""
+            }`}
+          />
+          {showLabel ? (
+            <span className="flex items-center gap-2">
+              <span>{meta.label}</span>
+              {progressLabel ? (
+                <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                  {progressLabel}
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="sr-only">{meta.label}</span>
+              {progressLabel ? (
+                <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
+                  {progressLabel}
+                </span>
+              ) : null}
+            </span>
+          )}
+        </Badge>
+      );
+    },
+    [getStatusMeta]
+  );
 
   const columns = useMemo<ColumnDef<ContentItem, unknown>[]>(() => [
     {
@@ -411,13 +444,79 @@ export default function LibraryPage() {
       ),
       meta: { align: "center", cellClassName: "text-center" } satisfies ContentColumnMeta,
     },
-  ], [formatDateTime, getActionItems, renderProgress]);
+  ], [formatDateTime, getActionItems, renderProgress, renderStatusBadge]);
 
   const table = useReactTable({
     data: items,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.id,
   });
+
+  const filtersPanel = (
+    <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-[0.2em] md:hidden">
+          Direction
+        </Label>
+        <IconSelect
+          value={sortDir}
+          onValueChange={(value) => {
+            setSortDir(value);
+            setPage(1);
+          }}
+          triggerClassName="h-9 w-full"
+          placeholder="Direction"
+          options={[
+            { value: "desc", label: "Descending", icon: ArrowDownWideNarrow },
+            { value: "asc", label: "Ascending", icon: ArrowUpWideNarrow },
+          ]}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-[0.2em] md:hidden">
+          Status
+        </Label>
+        <IconSelect
+          value={statusFilter}
+          onValueChange={(value) => {
+            setStatusFilter(value);
+            setPage(1);
+          }}
+          triggerClassName="h-9 w-full"
+          placeholder="All statuses"
+          options={[
+            { value: "all", label: "All statuses", icon: ListFilter },
+            { value: "uploaded", label: "Uploaded", icon: Upload },
+            { value: "rendering", label: "Rendering", icon: Loader2 },
+            { value: "rendered", label: "Rendered", icon: CheckCircle2 },
+            { value: "failed", label: "Failed", icon: XCircle },
+          ]}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-[0.2em] md:hidden">
+          Sort by
+        </Label>
+        <IconSelect
+          value={sortBy}
+          onValueChange={(value) => {
+            setSortBy(value);
+            setPage(1);
+          }}
+          triggerClassName="h-9 w-full"
+          placeholder="Sort by"
+          options={[
+            { value: "createdAt", label: "Created", icon: CalendarClock },
+            { value: "updatedAt", label: "Updated", icon: History },
+            { value: "title", label: "Title", icon: Type },
+            { value: "status", label: "Status", icon: Activity },
+          ]}
+        />
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     setIsHydrated(true);
@@ -513,21 +612,42 @@ export default function LibraryPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
-            <Input
-              placeholder="Search by title, status, or id..."
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              className="w-full sm:w-72"
-            />
+            <div className="flex w-full items-center gap-2 sm:justify-end">
+              <Input
+                placeholder="Search by title, status, or id..."
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                className="w-full sm:w-72"
+              />
+              <ResponsiveDrawer>
+                <ResponsiveDrawerTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 md:hidden"
+                    aria-label="Open filters"
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </Button>
+                </ResponsiveDrawerTrigger>
+                <ResponsiveDrawerContent className="md:hidden">
+                  <ResponsiveDrawerHeader>
+                    <ResponsiveDrawerTitle>Filters</ResponsiveDrawerTitle>
+                  </ResponsiveDrawerHeader>
+                  <div className="px-4 pb-4">{filtersPanel}</div>
+                </ResponsiveDrawerContent>
+              </ResponsiveDrawer>
+            </div>
+            <div className="hidden md:block">{filtersPanel}</div>
             {total >= 0 && query && (
               <span className="text-xs text-slate-500 dark:text-zinc-500">
                 Showing {items.length} of {total}
               </span>
             )}
-
           </div>
           {error && (
             <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-200">

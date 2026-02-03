@@ -1,5 +1,5 @@
-import { and, desc, eq, getTableColumns, like, or, sql } from "drizzle-orm";
-import type { InferInsertModel } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, like, or, sql } from "drizzle-orm";
+import type { InferInsertModel, SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -80,6 +80,9 @@ export type ContentItemRow = z.infer<typeof contentItemSchema>;
 
 export const contentQuerySchema = z.object({
   q: z.string().trim().optional().default(""),
+  status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  sortBy: z.enum(["createdAt", "updatedAt", "title", "status"]).default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(200).default(50),
 });
@@ -209,6 +212,14 @@ export async function listContentItems(
   const safe = contentQuerySchema.parse(query);
   const offset = (safe.page - 1) * safe.limit;
   const term = safe.q.toLowerCase();
+  const sortColumn =
+    safe.sortBy === "updatedAt"
+      ? "updatedAt"
+      : safe.sortBy === "title"
+        ? "title"
+        : safe.sortBy === "status"
+          ? "status"
+          : "createdAt";
   return withContentDb({
     pg: async ({ db, table }) => {
       const filters = term
@@ -218,6 +229,21 @@ export async function listContentItems(
             like(sql`lower(${table.id})`, `%${term}%`)
           )
         : undefined;
+      const scopedFilters = [
+        eq(table.userId, userId),
+        safe.status ? eq(table.status, safe.status) : undefined,
+        filters,
+      ].filter(Boolean) as Array<SQL>;
+      const whereClause = scopedFilters.length ? and(...scopedFilters) : undefined;
+      const sortColumnMap = {
+        createdAt: table.createdAt,
+        updatedAt: table.updatedAt,
+        title: table.title,
+        status: table.status,
+      } as const;
+      const orderColumn = sortColumnMap[sortColumn];
+      const orderBy =
+        safe.sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
       const columns = getTableColumns(table);
       const rows = await db
         .select({
@@ -225,14 +251,14 @@ export async function listContentItems(
           publishesCount: sql<number>`(select count(*) from ${schema.publishes} where ${schema.publishes.contentId} = ${table.id} and ${schema.publishes.userId} = ${userId})`,
         })
         .from(table)
-        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
-        .orderBy(desc(table.createdAt))
+        .where(whereClause ?? sql`true`)
+        .orderBy(orderBy)
         .limit(safe.limit)
         .offset(offset);
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
-        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId));
+        .where(whereClause ?? sql`true`);
       return {
         items: rows.map(normalizeRow),
         total: Number(totalRow[0]?.count ?? 0),
@@ -248,6 +274,21 @@ export async function listContentItems(
             like(sql`lower(${table.id})`, `%${term}%`)
           )
         : undefined;
+      const scopedFilters = [
+        eq(table.userId, userId),
+        safe.status ? eq(table.status, safe.status) : undefined,
+        filters,
+      ].filter(Boolean) as Array<SQL>;
+      const whereClause = scopedFilters.length ? and(...scopedFilters) : undefined;
+      const sortColumnMap = {
+        createdAt: table.createdAt,
+        updatedAt: table.updatedAt,
+        title: table.title,
+        status: table.status,
+      } as const;
+      const orderColumn = sortColumnMap[sortColumn];
+      const orderBy =
+        safe.sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
       const columns = getTableColumns(table);
       const rows = await db
         .select({
@@ -255,14 +296,14 @@ export async function listContentItems(
           publishesCount: sql<number>`(select count(*) from ${sqliteSchema.publishes} where ${sqliteSchema.publishes.contentId} = ${table.id} and ${sqliteSchema.publishes.userId} = ${userId})`,
         })
         .from(table)
-        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId))
-        .orderBy(desc(table.createdAt))
+        .where(whereClause ?? sql`true`)
+        .orderBy(orderBy)
         .limit(safe.limit)
         .offset(offset);
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
-        .where(filters ? sql`${filters} and ${table.userId} = ${userId}` : eq(table.userId, userId));
+        .where(whereClause ?? sql`true`);
       return {
         items: rows.map(normalizeRow),
         total: Number(totalRow[0]?.count ?? 0),
