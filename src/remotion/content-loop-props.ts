@@ -1,8 +1,4 @@
-"use client";
-
 import type { ContentLoopProps } from "@/types";
-
-export type { ContentLoopInput } from "@/types";
 
 export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   title: "Content Loop",
