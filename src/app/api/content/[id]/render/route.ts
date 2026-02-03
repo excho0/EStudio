@@ -625,7 +625,6 @@ export async function POST(
 
   const renderDirKey = getContentRenderDir(user.id, id);
   await storage.ensureDir(renderDirKey);
-  const renderDir = resolveContentPath(renderDirKey);
   let nextIndex = 1;
   try {
     const entries = await storage.list(renderDirKey);
