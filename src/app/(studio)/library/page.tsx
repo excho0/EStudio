@@ -35,7 +35,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useContentList, type ContentItem } from "@/components/studio/use-content-list";
+import { useContentList } from "@/components/studio/use-content-list";
+import type { ContentItem } from "@/types";
 import { useRenderProgress } from "@/components/studio/use-render-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
@@ -72,12 +73,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { queryKeys } from "@/lib/query-keys";
-
-type ContentColumnMeta = {
-  headerClassName?: string;
-  cellClassName?: string;
-  align?: "left" | "center" | "right";
-};
+import type { ContentColumnMeta } from "@/types";
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");

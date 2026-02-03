@@ -6,7 +6,7 @@ import { Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { PROVIDER_REGISTRY, type ProviderDefinition } from "@/lib/publishing/providers";
+import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
 import { Card } from "@/components/ui/card";
@@ -23,14 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-type ProviderConnectionState = {
-  connected: boolean;
-  needsReconnect: boolean;
-  channel: { title: string | null; thumbnail: string | null } | null;
-  loading: boolean;
-  enabled: boolean;
-};
+import type { ProviderConnectionState, ProviderDefinition } from "@/types";
 
 const buildProviderState = (providers: ProviderDefinition[]) =>
   Object.fromEntries(

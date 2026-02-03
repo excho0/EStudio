@@ -25,20 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
-
-type RenderItem = {
-  name: string;
-  size: number;
-  mtimeMs: number;
-  assetUrl: string;
-};
-
-type RenderListResponse = {
-  page: number;
-  limit: number;
-  total: number;
-  items: RenderItem[];
-};
+import type { RenderListResponse } from "@/types";
 
 const DesktopSkeletonRows = () => (
   <Table className="-mb-12">

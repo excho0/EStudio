@@ -47,32 +47,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-
-type PublishRecord = {
-  id: string;
-  renderId: string;
-  provider: string;
-  providerAssetId: string;
-  status: string;
-  metadata: string | null;
-  error?: string | null;
-  updatedAt?: number | string | Date | null;
-  createdAt?: number | string | Date | null;
-};
-
-type PublishMetadata = {
-  title?: string;
-  description?: string;
-  thumbnailUrl?: string;
-  options?: {
-    privacy?: string;
-    scheduleAt?: string | null;
-  };
-};
-
-type PublishListResponse = {
-  publishes: PublishRecord[];
-};
+import type {
+  PublishListResponse,
+  PublishMetadata,
+  PublishRecord,
+  ProviderSectionProps,
+} from "@/types";
 
 const formatDateTime = (value?: number | string | Date | null) => {
   if (!value) return "—";
@@ -200,15 +180,6 @@ const getPublishStatusBadge = (status?: string | null) => {
     default:
       return { label: value, variant: "outline" as const, icon: ShieldCheck };
   }
-};
-
-type ProviderSectionProps = {
-  provider: string;
-  items: PublishRecord[];
-  isMobile: boolean;
-  contentId: string;
-  onViewError: (item: PublishRecord) => void;
-  onDelete: (item: PublishRecord) => void;
 };
 
 const ProviderSection = ({

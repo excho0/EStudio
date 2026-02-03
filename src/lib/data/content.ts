@@ -9,6 +9,7 @@ import {
   type SqliteDrizzleDb,
 } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { ContentItem } from "@/types";
 
 const getDb = () => getDrizzleDb();
 
@@ -76,7 +77,6 @@ export const contentItemSchema = z.object({
   publishesCount: z.number().int().nonnegative().optional(),
 });
 
-export type ContentItemRow = z.infer<typeof contentItemSchema>;
 
 export const contentQuerySchema = z.object({
   q: z.string().trim().optional().default(""),
@@ -164,7 +164,7 @@ const parseColorPalette = (value: unknown) => {
 const serializeColorPalette = (value?: string[] | null) =>
   value && value.length > 0 ? JSON.stringify(value) : null;
 
-const normalizeRow = (row: unknown): ContentItemRow => {
+const normalizeRow = (row: unknown): ContentItem => {
   const record = row as Record<string, unknown>;
   const toIso = (value: unknown) =>
     value instanceof Date ? value.toISOString() : value;

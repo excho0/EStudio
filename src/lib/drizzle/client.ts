@@ -2,15 +2,19 @@ import path from "path";
 
 import Database from "better-sqlite3";
 import { neon } from "@neondatabase/serverless";
-import { drizzle as drizzleNeon, type NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { drizzle as drizzleSqlite, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
+import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
+
+import type {
+  DrizzleDb,
+  PostgresDrizzleDb,
+  SqliteDrizzleDb,
+} from "@/types";
 
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { ensureDirPathSync } from "@/lib/storage";
 
-export type PostgresDrizzleDb = NeonHttpDatabase<typeof schema>;
-export type SqliteDrizzleDb = BetterSQLite3Database<typeof sqliteSchema>;
-export type DrizzleDb = PostgresDrizzleDb | SqliteDrizzleDb;
+export type { DrizzleDb, PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 
 let cachedDb: DrizzleDb | null = null;
 

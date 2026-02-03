@@ -5,7 +5,7 @@ import {
   YOUTUBE_OAUTH_PROVIDER_ID,
   YOUTUBE_PROVIDER_KEY,
 } from "@/lib/publishing/providers/youtube/constants";
-import type { ProviderDefinition } from "@/lib/publishing/providers/registry";
+import type { ProviderDefinition } from "@/types";
 
 export const youtubeProviderDefinition: ProviderDefinition = {
   id: YOUTUBE_PROVIDER_KEY,

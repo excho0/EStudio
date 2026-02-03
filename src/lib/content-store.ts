@@ -1,4 +1,5 @@
 import { getStorage, resolveStoragePath, storageKey } from "@/lib/storage";
+import type { ContentAssetKind } from "@/types";
 
 const storage = getStorage();
 const baseDir = storage.baseDir;
@@ -16,7 +17,7 @@ export const contentKeys = {
 export const resolveContentPath = (relativePath: string) =>
   resolveStoragePath(relativePath);
 
-export type ContentAssetKind = "thumbnail" | "video" | "song";
+export type { ContentAssetKind } from "@/types";
 
 export const getUserRoot = (userId: string) => storageKey("users", userId);
 

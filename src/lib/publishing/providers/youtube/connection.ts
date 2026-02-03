@@ -3,8 +3,6 @@ import { and, eq } from "drizzle-orm";
 import {
   getDrizzleDb,
   isPostgres,
-  type PostgresDrizzleDb,
-  type SqliteDrizzleDb,
 } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import {
@@ -12,6 +10,11 @@ import {
   YOUTUBE_OAUTH_PROVIDER_ID,
 } from "@/lib/publishing/providers/youtube/constants";
 import { getStorage, storageKey } from "@/lib/storage";
+import type {
+  PostgresDrizzleDb,
+  SqliteDrizzleDb,
+  YoutubeConnection,
+} from "@/types";
 
 type YoutubeChannel = {
   id?: string | null;
@@ -30,11 +33,7 @@ type AvatarCacheMeta = {
   sourceUrl?: string;
 } | null;
 
-export type YoutubeConnection = {
-  connected: boolean;
-  needsReconnect?: boolean;
-  channel?: YoutubeChannel;
-};
+export type { YoutubeConnection } from "@/types";
 
 const storage = getStorage();
 

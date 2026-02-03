@@ -1,7 +1,7 @@
 import { Readable } from "stream";
 import sharp from "sharp";
 
-import type { PublishPayload, PublishResult, ProviderAdapter } from "@/lib/publishing/adapter";
+import type { PublishPayload, PublishResult, ProviderAdapter } from "@/types";
 import { getGoogleYoutubeClient } from "@/lib/publishing/google-youtube";
 import { getStorage } from "@/lib/storage";
 

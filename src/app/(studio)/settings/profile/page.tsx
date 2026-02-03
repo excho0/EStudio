@@ -27,13 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
-
-type ProfilePayload = {
-  name: string;
-  email: string;
-  image: string | null;
-  pendingEmail?: string | null;
-};
+import type { ConnectionsResponse, ProfilePayload } from "@/types";
 
 const allProviders = [
   {
@@ -49,11 +43,6 @@ const allProviders = [
     label: "Discord",
   },
 ];
-
-type ConnectionsResponse = {
-  connected: string[];
-  profiles?: Record<string, { image?: string | null; name?: string | null }>;
-};
 
 const emptyProfile: ProfilePayload = {
   name: "",

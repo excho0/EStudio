@@ -5,7 +5,8 @@ import crypto from "crypto";
 
 import type { Session } from "next-auth";
 import { auth } from "@/auth";
-import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
+import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
+import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { sendEmailChangeVerification } from "@/lib/email";
 

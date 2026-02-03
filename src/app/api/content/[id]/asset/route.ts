@@ -10,16 +10,9 @@ import { Readable } from "stream";
 import { getStorage } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth-session";
 import { verifyContentAssetToken } from "@/lib/content-asset-token";
+import type { AssetCacheEntry } from "@/types";
 
 export const runtime = "nodejs";
-
-type AssetCacheEntry = {
-  buffer: Buffer;
-  contentType: string;
-  size: number;
-  mtimeMs: number;
-  accessedAt: number;
-};
 
 const assetCache = new Map<string, AssetCacheEntry>();
 let assetCacheSize = 0;

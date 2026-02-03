@@ -19,29 +19,7 @@ import {
 } from "@/lib/notifications";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
-
-type SettingsStats = {
-  total: number;
-  uploaded: number;
-  rendering: number;
-  rendered: number;
-  failed: number;
-};
-
-type SettingsStorage = {
-  baseDir: string;
-  uploadsDir: string;
-  rendersDir: string;
-  manifestsDir: string;
-  uploadsCount: number;
-  rendersCount: number;
-  manifestsCount: number;
-};
-
-type SettingsResponse = {
-  storage: SettingsStorage;
-  stats: SettingsStats;
-};
+import type { SettingsResponse } from "@/types";
 
 export default function DashboardSettingsPage() {
   const queryClient = useQueryClient();

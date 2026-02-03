@@ -18,114 +18,23 @@ import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/helpers";
 import { getSessionUser } from "@/lib/auth-session";
 import { createContentAssetToken } from "@/lib/content-asset-token";
+import { buildContentLoopPropsFromItem } from "@/remotion/content-loop-props";
+import type {
+  BundleFn,
+  BrowserInstance,
+  GetExecutablePathFn,
+  OpenBrowserFn,
+  RenderJob,
+  RenderMediaFn,
+  SelectCompositionFn,
+} from "@/types";
 
 export const runtime = "nodejs";
 
 const storage = getStorage();
 
-type RenderJob = {
-  userId: string;
-  id: string;
-  browserLabel: string;
-  chromeMode: "chrome-for-testing" | "headless-shell";
-  serveUrl: string;
-  compositionId: string;
-  outputPath: string;
-  inputProps: Record<string, unknown>;
-};
-
 let bundlePromise: Promise<string> | null = null;
 const lastProgressPercent = new Map<string, number>();
-type BundleFn = (
-  entryPoint: string,
-  onProgress: (progress: number) => void,
-  options: {
-    outDir: string | null;
-    enableCaching: boolean;
-    publicPath: string | null;
-    publicDir: string | null;
-    rootDir: string | null;
-    webpackOverride: (config: Record<string, unknown>) => Record<string, unknown>;
-    onPublicDirCopyProgress: (progress: number) => void;
-    onSymlinkDetected: (path: string) => void;
-  }
-) => Promise<string>;
-
-type BrowserInstance = {
-  close: (options?: { silent?: boolean }) => Promise<void>;
-};
-
-type OpenBrowserFn = (
-  browser: "chrome",
-  options?: {
-    browserExecutable?: string | null;
-    chromeMode?: "chrome-for-testing" | "headless-shell";
-    logLevel?: "warn";
-  }
-) => Promise<BrowserInstance>;
-
-type RenderMediaFn = (options: {
-  serveUrl: string;
-  composition: {
-    id: string;
-    durationInFrames: number;
-    fps: number;
-    width: number;
-    height: number;
-    defaultProps?: Record<string, unknown>;
-  };
-  outputLocation: string;
-  codec: "h264" | "aac";
-  inputProps: Record<string, unknown>;
-  logLevel: "warn";
-  browserExecutable: string | null;
-  chromeMode: "chrome-for-testing" | "headless-shell";
-  concurrency?: number | string | null;
-  offthreadVideoThreads?: number;
-  frameRange?: [number, number] | number;
-  muted?: boolean;
-  imageFormat?: "jpeg" | "png" | "none";
-  audioCodec?: "pcm-16" | "aac" | "mp3" | "opus";
-  puppeteerInstance?: BrowserInstance;
-  forSeamlessAacConcatenation?: boolean;
-  ffmpegOverride?: (payload: {
-    type: "stitcher" | "pre-stitcher";
-    args: string[];
-  }) => string[];
-  onStart?: (data: {
-    frameCount: number;
-    parallelEncoding?: boolean;
-    resolvedConcurrency?: number | string | null;
-  }) => void;
-  onProgress?: (payload: {
-    renderedFrames?: number | null;
-    encodedFrames?: number | null;
-    progress?: number | null;
-  }) => void;
-}) => Promise<unknown>;
-
-type GetExecutablePathFn = (options: {
-  type: "compositor" | "ffmpeg" | "ffprobe";
-  indent: boolean;
-  logLevel: "warn";
-  binariesDirectory: string | null;
-}) => string;
-
-type SelectCompositionFn = (options: {
-  serveUrl: string;
-  id: string;
-  inputProps: Record<string, unknown>;
-  logLevel: "warn";
-  browserExecutable: string | null;
-  chromeMode: "chrome-for-testing" | "headless-shell";
-}) => Promise<{
-  id: string;
-  durationInFrames: number;
-  fps: number;
-  width: number;
-  height: number;
-  defaultProps?: Record<string, unknown>;
-}>;
 
 const loadRenderer = () => {
   const req = eval("require") as NodeJS.Require;
@@ -649,37 +558,18 @@ export async function POST(
     assetToken
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
-  const props = {
-    title: item.title,
+  const props = buildContentLoopPropsFromItem(item, {
     thumbnailSrc: withAssetToken(
       `${origin}/api/content/${id}/asset?type=thumbnail`
     ),
     videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
     audioSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=song`),
-    segmentDurationSeconds: item.segmentDurationSeconds,
-    fadeDurationSeconds: item.fadeDurationSeconds,
-    introFadeSeconds: item.introFadeSeconds,
-    outroFadeSeconds: item.outroFadeSeconds,
-    audioFadeInSeconds: item.audioFadeInSeconds,
-    audioFadeOutSeconds: item.audioFadeOutSeconds,
-    audioFadeInOffsetSeconds: item.audioFadeInOffsetSeconds,
-    audioFadeOutOffsetSeconds: item.audioFadeOutOffsetSeconds,
-    visualizationEnabled: item.visualizationEnabled,
-    visualizationBars: item.visualizationBars,
-    edgeRaysEnabled: item.edgeRaysEnabled,
-    edgeRaysIntensity: item.edgeRaysIntensity,
-    edgeRaysVocalBalance: item.edgeRaysVocalBalance,
     videoDurationSeconds: item.videoDurationSeconds ?? item.segmentDurationSeconds,
     overlapRatio: item.overlapRatio ?? null,
     playbackRate: item.playbackRate ?? 1,
     scalePercent: item.scalePercent ?? 100,
     colorPalette: item.colorPalette ?? undefined,
-    paletteMode: item.paletteMode ?? "auto",
-    songDurationSeconds: item.songDurationSeconds,
-    fps: item.fps,
-    width: item.width,
-    height: item.height,
-  };
+  });
 
   const browserLabel = resolvedBrowser ?? "auto";
   void startRenderJob({

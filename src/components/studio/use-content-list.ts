@@ -3,12 +3,9 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocketIO } from "./socketIO-provider";
-import { z } from "zod";
-import { contentItemSchema } from "@/lib/data/content";
+import type { ContentListResponse } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
-
-export type ContentItem = z.infer<typeof contentItemSchema>;
 
 type UseContentListOptions = {
   query?: string;
@@ -20,9 +17,7 @@ type UseContentListOptions = {
   enableSocketRefresh?: boolean;
 };
 
-type ContentListResponse = {
-  items: ContentItem[];
-  total: number;
+type LocalContentListResponse = ContentListResponse & {
   page?: number;
   limit?: number;
 };
@@ -55,7 +50,7 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   searchParams.set("limit", String(limit));
   const queryKey = queryKeys.contentList({ query, page, limit, status, sortBy, sortDir });
 
-  const { data, isLoading, isFetching, refetch } = useQuery<ContentListResponse>({
+  const { data, isLoading, isFetching, refetch } = useQuery<LocalContentListResponse>({
     queryKey,
     queryFn: async () => {
       return fetchJson<ContentListResponse>(

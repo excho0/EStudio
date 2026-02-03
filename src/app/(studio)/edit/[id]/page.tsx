@@ -52,14 +52,16 @@ import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { toast } from "sonner";
 import { Player } from "@remotion/player";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
+import { buildContentLoopPropsFromItem } from "@/remotion/content-loop-props";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
-import { ContentItem } from "@/components/studio/use-content-list";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { EditFormValues, PaletteMode } from "@/types";
 import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
+import { ContentItem } from "@/types";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -200,7 +202,7 @@ const defaultFormValues = {
   scalePercent: "100",
 };
 
-type FormValues = typeof defaultFormValues;
+type FormValues = EditFormValues;
 
 const buildFormValuesFromItem = (item: ContentItem): FormValues => {
   const overlapPercent = Number.isFinite(item.overlapRatio)
@@ -233,8 +235,6 @@ const buildFormValuesFromItem = (item: ContentItem): FormValues => {
     scalePercent: String(item.scalePercent ?? 100),
   };
 };
-
-type PaletteMode = "auto" | "manual";
 
 const buildSnapshotFromItem = (item: ContentItem) => ({
   formValues: buildFormValuesFromItem(item),
@@ -1440,8 +1440,7 @@ export default function EditContentPage() {
               <Player
                 acknowledgeRemotionLicense
                 component={ContentLoopComposition}
-                inputProps={{
-                  title: item.title,
+                inputProps={buildContentLoopPropsFromItem(item, {
                   thumbnailSrc: thumbnailPreview ?? thumbnailUrl ?? "",
                   videoSrc: videoBlobUrl,
                   audioSrc: audioBlobUrl ?? "",
@@ -1465,7 +1464,7 @@ export default function EditContentPage() {
                   overlapRatio: Number.isFinite(formValues.overlapPercent)
                     ? Math.min(0.9, Math.max(0, formValues.overlapPercent / 100))
                     : null,
-                }}
+                })}
                 durationInFrames={safeDurationInFrames}
                 fps={resolvedFps}
                 compositionWidth={resolvedWidth}

@@ -1,5 +1,5 @@
-import type { ProviderAdapter } from "@/lib/publishing/adapter";
 import { youtubeAdapter } from "@/lib/publishing/youtube-adapter";
+import { ProviderAdapter } from "@/types";
 
 const adapters: Record<string, ProviderAdapter> = {
   youtube: youtubeAdapter,
@@ -7,5 +7,3 @@ const adapters: Record<string, ProviderAdapter> = {
 
 export const getProviderAdapter = (provider: string) =>
   adapters[provider] ?? null;
-
-export type { ProviderAdapter } from "@/lib/publishing/adapter";

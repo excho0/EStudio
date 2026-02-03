@@ -1,7 +1,8 @@
 import {
-  getProviderDefinition,
   type ProviderDefinitionServer,
-} from "@/lib/publishing/providers/registry";
+} from "@/types";
+import { getProviderDefinition } from "@/lib/publishing/providers/registry";
+
 import {
   clearYoutubeCache,
   getYoutubeAvatar,

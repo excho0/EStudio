@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useSocketIO } from "./socketIO-provider";
+import type { RenderProgress } from "@/types";
 
-export type RenderProgress = {
-  id: string;
-  rendered: number;
-  total: number;
-  progress: number;
-  eta?: string;
-};
+export type { RenderProgress } from "@/types";
 
 export const useRenderProgress = () => {
   const { socket } = useSocketIO();

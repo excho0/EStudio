@@ -3,32 +3,7 @@ import "server-only";
 import { createReadStream, createWriteStream, promises as fs } from "fs";
 import { mkdirSync } from "fs";
 import path from "path";
-import type { ReadStream, WriteStream } from "fs";
-
-export type StorageStat = {
-  size: number;
-  mtimeMs: number;
-};
-
-export type StorageAdapter = {
-  baseDir: string;
-  resolvePath: (key: string) => string;
-  ensureDir: (key: string) => Promise<void>;
-  list: (key: string) => Promise<string[]>;
-  stat: (key: string) => Promise<StorageStat | null>;
-  exists: (key: string) => Promise<boolean>;
-  readFile: (key: string) => Promise<Buffer>;
-  writeFile: (key: string, data: Buffer | string) => Promise<void>;
-  deleteFile: (key: string) => Promise<void>;
-  deleteDir: (key: string) => Promise<void>;
-  move: (from: string, to: string) => Promise<void>;
-  createReadStream: (
-    key: string,
-    options?: { start?: number; end?: number }
-  ) => ReadStream;
-  createWriteStream: (key: string) => WriteStream;
-  getPublicUrl?: (key: string) => string | null;
-};
+import type { StorageAdapter } from "@/types";
 
 const normalizeKey = (key: string) => {
   const segments = key.split("/");

@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
-import {
-  getDrizzleDb,
-  isPostgres,
-  type PostgresDrizzleDb,
-  type SqliteDrizzleDb,
-} from "@/lib/drizzle/client";
+import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
+import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 
 export const runtime = "nodejs";
