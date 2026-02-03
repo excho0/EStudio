@@ -16,7 +16,6 @@ type SocketIOContextValue = {
   connected: boolean;
   status: "connecting" | "connected" | "disconnected" | "error";
   eventToken: number;
-  metrics: MetricsPayload | null;
   socket: Socket | null;
 };
 
@@ -45,9 +44,8 @@ export type MetricsPayload = {
   }[];
 };
 
-const SocketIOContext = createContext<SocketIOContextValue | null>(
-  null
-);
+const SocketIOContext = createContext<SocketIOContextValue | null>(null);
+const MetricsContext = createContext<MetricsPayload | null>(null);
 
 export function SocketIOProvider({
   children,
@@ -130,13 +128,15 @@ export function SocketIOProvider({
   }, [queryClient, socket]);
 
   const value = useMemo(
-    () => ({ connected, status, eventToken, metrics, socket }),
-    [connected, status, eventToken, metrics, socket]
+    () => ({ connected, status, eventToken, socket }),
+    [connected, status, eventToken, socket]
   );
 
   return (
     <SocketIOContext.Provider value={value}>
-      {children}
+      <MetricsContext.Provider value={metrics}>
+        {children}
+      </MetricsContext.Provider>
     </SocketIOContext.Provider>
   );
 }
@@ -147,4 +147,8 @@ export function useSocketIO() {
     throw new Error("useSocketIO must be used within SocketIOProvider.");
   }
   return context;
+}
+
+export function useSocketMetrics() {
+  return useContext(MetricsContext);
 }
