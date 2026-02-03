@@ -15,6 +15,13 @@
       "when": 1770104400839,
       "tag": "0001_equal_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1770151408305,
+      "tag": "0002_bouncy_black_crow",
+      "breakpoints": true
     }
   ]
 }

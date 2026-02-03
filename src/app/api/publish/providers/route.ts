@@ -35,11 +35,14 @@ const fetchProviderConnected = async (
   userId: string,
   providerId: string | undefined
 ) => {
-  if (!providerId) return false;
+  if (!providerId) return null;
   const db = getDrizzleDb();
   if (isPostgres) {
     const [account] = await (db as PostgresDrizzleDb)
-      .select({ provider: schema.accounts.provider })
+      .select({
+        provider: schema.accounts.provider,
+        providerAccountId: schema.accounts.providerAccountId,
+      })
       .from(schema.accounts)
       .where(
         and(
@@ -48,10 +51,13 @@ const fetchProviderConnected = async (
         )
       )
       .limit(1);
-    return Boolean(account);
+    return account ?? null;
   }
   const [account] = await (db as SqliteDrizzleDb)
-    .select({ provider: sqliteSchema.accounts.provider })
+    .select({
+      provider: sqliteSchema.accounts.provider,
+      providerAccountId: sqliteSchema.accounts.providerAccountId,
+    })
     .from(sqliteSchema.accounts)
     .where(
       and(
@@ -60,7 +66,7 @@ const fetchProviderConnected = async (
       )
     )
     .limit(1);
-  return Boolean(account);
+  return account ?? null;
 };
 
 export async function GET() {
@@ -70,14 +76,16 @@ export async function GET() {
   const providers = Object.values(PROVIDER_REGISTRY);
   const publishTargets = await Promise.all(
     providers.map(async (provider) => {
-      const connected = user
+      const account = user
         ? await fetchProviderConnected(user.id, provider.oauthProviderId)
-        : false;
+        : null;
+      const connected = Boolean(account);
       return {
         id: provider.id,
         label: provider.label,
         status: connected ? "active" : "idle",
         connected,
+        connectionId: account?.providerAccountId ?? null,
         capabilities: provider.capabilities,
       };
     })

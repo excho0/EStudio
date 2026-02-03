@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import type { Session } from "next-auth";
 
@@ -66,6 +66,66 @@ const fetchContentItem = async (userId: string, id: string) => {
   return item ?? null;
 };
 
+const fetchAccountByProviderAccountId = async (
+  userId: string,
+  provider: string,
+  providerAccountId: string
+) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    const [account] = await (db as PostgresDrizzleDb)
+      .select({
+        provider: schema.accounts.provider,
+        providerAccountId: schema.accounts.providerAccountId,
+      })
+      .from(schema.accounts)
+      .where(
+        and(
+          eq(schema.accounts.userId, userId),
+          eq(schema.accounts.provider, provider),
+          eq(schema.accounts.providerAccountId, providerAccountId)
+        )
+      )
+      .limit(1);
+    return account ?? null;
+  }
+  const [account] = await (db as SqliteDrizzleDb)
+    .select({
+      provider: sqliteSchema.accounts.provider,
+      providerAccountId: sqliteSchema.accounts.providerAccountId,
+    })
+    .from(sqliteSchema.accounts)
+    .where(
+      and(
+        eq(sqliteSchema.accounts.userId, userId),
+        eq(sqliteSchema.accounts.provider, provider),
+        eq(sqliteSchema.accounts.providerAccountId, providerAccountId)
+      )
+    )
+    .limit(1);
+  return account ?? null;
+};
+
+const fetchUserAccountPairs = async (userId: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    return (db as PostgresDrizzleDb)
+      .select({
+        provider: schema.accounts.provider,
+        providerAccountId: schema.accounts.providerAccountId,
+      })
+      .from(schema.accounts)
+      .where(eq(schema.accounts.userId, userId));
+  }
+  return (db as SqliteDrizzleDb)
+    .select({
+      provider: sqliteSchema.accounts.provider,
+      providerAccountId: sqliteSchema.accounts.providerAccountId,
+    })
+    .from(sqliteSchema.accounts)
+    .where(eq(sqliteSchema.accounts.userId, userId));
+};
+
 const publishSchema = z.object({
   renderId: z.string().trim().min(1),
   provider: z.string().trim().min(1),
@@ -113,6 +173,11 @@ export async function GET(
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
 
+  const accountPairs = await fetchUserAccountPairs(user.id);
+  if (accountPairs.length === 0) {
+    return NextResponse.json({ publishes: [] });
+  }
+
   const db = getDrizzleDb();
   const publishes = isPostgres
     ? await (db as PostgresDrizzleDb)
@@ -121,7 +186,15 @@ export async function GET(
         .where(
           and(
             eq(schema.publishes.userId, user.id),
-            eq(schema.publishes.contentId, contentId)
+            eq(schema.publishes.contentId, contentId),
+            or(
+              ...accountPairs.map((account) =>
+                and(
+                  eq(schema.publishes.provider, account.provider),
+                  eq(schema.publishes.providerAccountId, account.providerAccountId)
+                )
+              )
+            )
           )
         )
     : await (db as SqliteDrizzleDb)
@@ -130,7 +203,15 @@ export async function GET(
         .where(
           and(
             eq(sqliteSchema.publishes.userId, user.id),
-            eq(sqliteSchema.publishes.contentId, contentId)
+            eq(sqliteSchema.publishes.contentId, contentId),
+            or(
+              ...accountPairs.map((account) =>
+                and(
+                  eq(sqliteSchema.publishes.provider, account.provider),
+                  eq(sqliteSchema.publishes.providerAccountId, account.providerAccountId)
+                )
+              )
+            )
           )
         );
 
@@ -172,6 +253,18 @@ export async function POST(
   const adapter = getProviderAdapter(payload.data.provider);
   if (!adapter) {
     return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
+  }
+
+  const account = await fetchAccountByProviderAccountId(
+    user.id,
+    payload.data.provider,
+    payload.data.connectionId
+  );
+  if (!account) {
+    return NextResponse.json(
+      { error: "Provider account not connected." },
+      { status: 400 }
+    );
   }
 
   const activeStatuses = ["queued", "publishing"] as const;
@@ -230,6 +323,7 @@ export async function POST(
         renderId: payload.data.renderId,
         provider: payload.data.provider,
         connectionId: payload.data.connectionId,
+        providerAccountId: payload.data.connectionId,
         providerAssetId: payload.data.providerAssetId,
         status,
         metadata,
@@ -248,6 +342,7 @@ export async function POST(
     renderId: payload.data.renderId,
     provider: payload.data.provider,
     connectionId: payload.data.connectionId,
+    providerAccountId: payload.data.connectionId,
     providerAssetId: payload.data.providerAssetId,
     status,
     metadata,

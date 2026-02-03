@@ -179,6 +179,7 @@ export const publishes = sqliteTable(
     renderId: text("renderId").notNull(),
     provider: text("provider").notNull(),
     connectionId: text("connectionId").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
     providerAssetId: text("providerAssetId").notNull(),
     status: text("status").notNull().default("draft"),
     metadata: text("metadata"),
@@ -196,6 +197,7 @@ export const publishes = sqliteTable(
     index("publishes_user_id_idx").on(table.userId),
     index("publishes_content_id_idx").on(table.contentId),
     index("publishes_connection_id_idx").on(table.connectionId),
+    index("publishes_provider_account_idx").on(table.provider, table.providerAccountId),
     index("publishes_provider_asset_idx").on(table.provider, table.providerAssetId),
     index("publishes_status_idx").on(table.status),
   ]
@@ -267,6 +269,7 @@ export const publishesPg = pgTable(
     renderId: pgText("renderId").notNull(),
     provider: pgText("provider").notNull(),
     connectionId: pgText("connectionId").notNull(),
+    providerAccountId: pgText("providerAccountId"),
     providerAssetId: pgText("providerAssetId").notNull(),
     status: pgText("status").notNull().default("draft"),
     metadata: pgText("metadata"),
@@ -282,6 +285,7 @@ export const publishesPg = pgTable(
     pgIndex("publishes_user_id_idx").on(table.userId),
     pgIndex("publishes_content_id_idx").on(table.contentId),
     pgIndex("publishes_connection_id_idx").on(table.connectionId),
+    pgIndex("publishes_provider_account_idx").on(table.provider, table.providerAccountId),
     pgIndex("publishes_provider_asset_idx").on(table.provider, table.providerAssetId),
     pgIndex("publishes_status_idx").on(table.status),
   ]

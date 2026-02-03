@@ -26,13 +26,7 @@ import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectableCard } from "@/components/ui/selectable-card";
 import DatePickerStandard2 from "@/components/controls/date-picker-standard-2";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { IconSelect, type IconSelectOption } from "@/components/ui/icon-select";
 import {
   ResponsiveDrawer,
   ResponsiveDrawerContent,
@@ -61,6 +55,7 @@ type PublishTarget = {
   id: string;
   label: string;
   status?: string;
+  connectionId?: string | null;
 };
 
 type RenderItem = {
@@ -75,6 +70,7 @@ type ProviderState = {
   label: string;
   status?: string;
   connected: boolean;
+  connectionId?: string | null;
   channel?: { title: string | null; thumbnail: string | null } | null;
   capabilities?: {
     supportsSchedule?: boolean;
@@ -207,6 +203,7 @@ export function PublishDrawer({
         ...target,
         connected: Boolean(target.connected),
         channel: target.channel ?? null,
+        connectionId: target.connectionId ?? null,
       }));
     },
   });
@@ -331,6 +328,10 @@ export function PublishDrawer({
         visibility === "scheduled";
       const scheduleValue = scheduleEnabled ? scheduleAt?.toISOString() : null;
       const privacyValue = visibility === "scheduled" ? "private" : visibility;
+      const connectionId = selectedProviderData?.connectionId ?? null;
+      if (!connectionId) {
+        throw new Error("Missing provider connection.");
+      }
       const payload = await fetchJson<{ publish?: { id?: string } }>(
         `/api/content/${contentId}/publishes`,
         {
@@ -339,7 +340,7 @@ export function PublishDrawer({
           body: JSON.stringify({
             provider: selectedProvider,
             renderId: selectedRender,
-            connectionId: selectedProvider,
+            connectionId,
             providerAssetId: `pending-${crypto.randomUUID()}`,
             status: "draft",
             metadata: {
@@ -821,73 +822,47 @@ export function PublishDrawer({
                             <label className="text-sm font-medium text-slate-900 dark:text-white">
                               Visibility
                             </label>
-                            <Select
-                              value={visibility}
-                              onValueChange={(value) =>
-                                setVisibility(
-                                  value as "public" | "unlisted" | "private" | "scheduled"
-                                )
-                              }
-                            >
-                              {(() => {
-                                const icon =
-                                  visibility === "public"
+                            {(() => {
+                              const options: IconSelectOption<
+                                "public" | "unlisted" | "private" | "scheduled"
+                              >[] = (
+                                selectedProviderData.capabilities.privacyOptions ??
+                                ["public", "unlisted", "private"]
+                              ).map((option) => ({
+                                value: option,
+                                label: option[0]!.toUpperCase() + option.slice(1),
+                                icon:
+                                  option === "public"
                                     ? Globe
-                                    : visibility === "unlisted"
+                                    : option === "unlisted"
                                       ? Link2
-                                      : visibility === "private"
-                                        ? Lock
-                                        : CalendarClock;
-                                const label =
-                                  visibility === "public"
-                                    ? "Public"
-                                    : visibility === "unlisted"
-                                      ? "Unlisted"
-                                      : visibility === "private"
-                                        ? "Private"
-                                        : "Scheduled";
-                                const Icon = icon;
-                                return (
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select visibility">
-                                      <span className="inline-flex items-center gap-2">
-                                        <Icon className="h-4 w-4" />
-                                        {label}
-                                      </span>
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                );
-                              })()}
-                              <SelectContent>
-                                {(selectedProviderData.capabilities.privacyOptions ??
-                                  ["public", "unlisted", "private"]
-                                ).map((option) => (
-                                  <SelectItem
-                                    key={option}
-                                    value={option}
-                                    icon={
-                                      option === "public" ? (
-                                        <Globe className="h-4 w-4" />
-                                      ) : option === "unlisted" ? (
-                                        <Link2 className="h-4 w-4" />
-                                      ) : (
-                                        <Lock className="h-4 w-4" />
-                                      )
-                                    }
-                                  >
-                                    {option[0]!.toUpperCase() + option.slice(1)}
-                                  </SelectItem>
-                                ))}
-                                {selectedProviderData.capabilities.supportsSchedule ? (
-                                  <SelectItem
-                                    value="scheduled"
-                                    icon={<CalendarClock className="h-4 w-4" />}
-                                  >
-                                    Scheduled
-                                  </SelectItem>
-                                ) : null}
-                              </SelectContent>
-                            </Select>
+                                      : Lock,
+                              }));
+                              if (selectedProviderData.capabilities.supportsSchedule) {
+                                options.push({
+                                  value: "scheduled",
+                                  label: "Scheduled",
+                                  icon: CalendarClock,
+                                });
+                              }
+                              return (
+                                <IconSelect
+                                  value={visibility}
+                                  onValueChange={(value) =>
+                                    setVisibility(
+                                      value as
+                                        | "public"
+                                        | "unlisted"
+                                        | "private"
+                                        | "scheduled"
+                                    )
+                                  }
+                                  placeholder="Select visibility"
+                                  triggerClassName="w-full"
+                                  options={options}
+                                />
+                              );
+                            })()}
                           </div>
                         ) : null}
 
