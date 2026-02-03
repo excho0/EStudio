@@ -11,8 +11,10 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
         defaultOptions: {
           queries: {
             staleTime: 10_000,
-            refetchOnWindowFocus: false,
-            retry: 1,
+            refetchOnWindowFocus: true,
+            retry: 3,
+            retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+            // refetchInterval: 30_000,
           },
         },
       })
