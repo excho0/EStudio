@@ -6,6 +6,20 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    settings: {
+      "import/resolver": {
+        typescript: {
+          project: ["./tsconfig.json"],
+        },
+      },
+      "import/ignore": ["^server-only$"],
+      "import/core-modules": ["server-only"],
+    },
+    rules: {
+      "import/no-unresolved": "error",
+    },
+  },
+  {
     files: [
       "src/app/**/renders/**/page.tsx",
       "src/app/**/library/page.tsx",
