@@ -8,6 +8,13 @@
       "when": 1770058045715,
       "tag": "0000_curvy_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1770104400839,
+      "tag": "0001_equal_patch",
+      "breakpoints": true
     }
   ]
 }

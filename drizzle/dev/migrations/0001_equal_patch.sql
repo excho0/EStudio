@@ -1,0 +1,1 @@
+ALTER TABLE `publishes` ADD `deletedAt` integer;
