@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, like, or, sql } from "drizzle-orm";
 import type { InferInsertModel, SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -195,7 +195,7 @@ const normalizeRow = (row: unknown): ContentItem => {
         : Boolean(record.edgeRaysEnabled ?? true),
     edgeRaysIntensity: record.edgeRaysIntensity ?? 0.85,
     edgeRaysVocalBalance: record.edgeRaysVocalBalance ?? 0.6,
-    publishesCount: Number.isFinite(record.publishesCount)
+    publishesCount: Number.isFinite(Number(record.publishesCount))
       ? Number(record.publishesCount)
       : 0,
   });
@@ -248,19 +248,43 @@ export async function listContentItems(
       const rows = await db
         .select({
           ...columns,
-          publishesCount: sql<number>`(select count(*) from ${schema.publishes} where ${schema.publishes.contentId} = ${table.id} and ${schema.publishes.userId} = ${userId})`,
+          publishesCount: sql<number>`(select count(*) from ${schema.publishes} where ${schema.publishes.contentId} = ${table.id} and ${schema.publishes.userId} = ${table.userId})`,
         })
         .from(table)
         .where(whereClause ?? sql`true`)
         .orderBy(orderBy)
         .limit(safe.limit)
         .offset(offset);
+      const contentIds = rows.map((row) => row.id).filter(Boolean);
+      const publishCountRows = contentIds.length
+        ? await db
+            .select({
+              contentId: schema.publishes.contentId,
+              count: sql<number>`count(*)`,
+            })
+            .from(schema.publishes)
+            .where(
+              and(
+                eq(schema.publishes.userId, userId),
+                inArray(schema.publishes.contentId, contentIds)
+              )
+            )
+            .groupBy(schema.publishes.contentId)
+        : [];
+      const publishCountMap = new Map(
+        publishCountRows.map((row) => [row.contentId, Number(row.count) || 0])
+      );
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
         .where(whereClause ?? sql`true`);
       return {
-        items: rows.map(normalizeRow),
+        items: rows.map((row) =>
+          normalizeRow({
+            ...row,
+            publishesCount: publishCountMap.get(row.id) ?? row.publishesCount ?? 0,
+          })
+        ),
         total: Number(totalRow[0]?.count ?? 0),
         page: safe.page,
         limit: safe.limit,
@@ -293,19 +317,43 @@ export async function listContentItems(
       const rows = await db
         .select({
           ...columns,
-          publishesCount: sql<number>`(select count(*) from ${sqliteSchema.publishes} where ${sqliteSchema.publishes.contentId} = ${table.id} and ${sqliteSchema.publishes.userId} = ${userId})`,
+          publishesCount: sql<number>`(select count(*) from ${sqliteSchema.publishes} where ${sqliteSchema.publishes.contentId} = ${table.id} and ${sqliteSchema.publishes.userId} = ${table.userId})`,
         })
         .from(table)
         .where(whereClause ?? sql`true`)
         .orderBy(orderBy)
         .limit(safe.limit)
         .offset(offset);
+      const contentIds = rows.map((row) => row.id).filter(Boolean);
+      const publishCountRows = contentIds.length
+        ? await db
+            .select({
+              contentId: sqliteSchema.publishes.contentId,
+              count: sql<number>`count(*)`,
+            })
+            .from(sqliteSchema.publishes)
+            .where(
+              and(
+                eq(sqliteSchema.publishes.userId, userId),
+                inArray(sqliteSchema.publishes.contentId, contentIds)
+              )
+            )
+            .groupBy(sqliteSchema.publishes.contentId)
+        : [];
+      const publishCountMap = new Map(
+        publishCountRows.map((row) => [row.contentId, Number(row.count) || 0])
+      );
       const totalRow = await db
         .select({ count: sql<number>`count(*)` })
         .from(table)
         .where(whereClause ?? sql`true`);
       return {
-        items: rows.map(normalizeRow),
+        items: rows.map((row) =>
+          normalizeRow({
+            ...row,
+            publishesCount: publishCountMap.get(row.id) ?? row.publishesCount ?? 0,
+          })
+        ),
         total: Number(totalRow[0]?.count ?? 0),
         page: safe.page,
         limit: safe.limit,

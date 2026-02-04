@@ -10,6 +10,7 @@ import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
+import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 
 export const runtime = "nodejs";
 
@@ -67,12 +68,25 @@ const fetchContentItem = async (userId: string, id: string) => {
   return item ?? null;
 };
 
+const resolveProviderKey = (providerId: string) => {
+  if (PROVIDER_REGISTRY[providerId as keyof typeof PROVIDER_REGISTRY]) {
+    return providerId;
+  }
+  const match = Object.values(PROVIDER_REGISTRY).find(
+    (provider) => provider.oauthProviderId === providerId
+  );
+  return match?.id ?? providerId;
+};
+
 const fetchAccountByProviderAccountId = async (
   userId: string,
-  provider: string,
+  providerId: string,
   providerAccountId: string
 ) => {
   const db = getDrizzleDb();
+  const providerKey = resolveProviderKey(providerId);
+  const provider = PROVIDER_REGISTRY[providerKey as keyof typeof PROVIDER_REGISTRY];
+  const providerAccountProviderId = provider?.oauthProviderId ?? providerKey;
   if (isPostgres) {
     const [account] = await (db as PostgresDrizzleDb)
       .select({
@@ -83,7 +97,7 @@ const fetchAccountByProviderAccountId = async (
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, provider),
+          eq(schema.accounts.provider, providerAccountProviderId),
           eq(schema.accounts.providerAccountId, providerAccountId)
         )
       )
@@ -99,7 +113,7 @@ const fetchAccountByProviderAccountId = async (
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, provider),
+        eq(sqliteSchema.accounts.provider, providerAccountProviderId),
         eq(sqliteSchema.accounts.providerAccountId, providerAccountId)
       )
     )
@@ -110,21 +124,29 @@ const fetchAccountByProviderAccountId = async (
 const fetchUserAccountPairs = async (userId: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
-    return (db as PostgresDrizzleDb)
+    const rows = await (db as PostgresDrizzleDb)
       .select({
         provider: schema.accounts.provider,
         providerAccountId: schema.accounts.providerAccountId,
       })
       .from(schema.accounts)
       .where(eq(schema.accounts.userId, userId));
+    return rows.map((row) => ({
+      ...row,
+      provider: resolveProviderKey(row.provider),
+    }));
   }
-  return (db as SqliteDrizzleDb)
+  const rows = await (db as SqliteDrizzleDb)
     .select({
       provider: sqliteSchema.accounts.provider,
       providerAccountId: sqliteSchema.accounts.providerAccountId,
     })
     .from(sqliteSchema.accounts)
     .where(eq(sqliteSchema.accounts.userId, userId));
+  return rows.map((row) => ({
+    ...row,
+    provider: resolveProviderKey(row.provider),
+  }));
 };
 
 const publishSchema = z.object({

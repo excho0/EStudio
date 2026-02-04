@@ -87,6 +87,7 @@ export function SocketIOProvider({
     socket.on("content:update", handleUpdate);
     socket.on("publish:update", () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
     });
     socket.on("render:update", () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.rendersBase });

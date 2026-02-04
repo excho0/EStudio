@@ -252,18 +252,18 @@ export default function LibraryPage() {
               setPublishDrawerOpen(true);
             },
           },
-          { type: "separator" as const },
-          ...(item.publishesCount && item.publishesCount > 0
-            ? [
-                {
-                  label: "View Publishes",
-                  icon: Radio,
-                  href: `/publishes/${item.id}`,
-                },
-              ]
-            : []),
         ]
       : []),
+        ...(item.publishesCount && item.publishesCount > 0
+      ? [
+          {
+            label: "View Publishes",
+            icon: Radio,
+            href: `/publishes/${item.id}`,
+          },
+        ]
+      : []),
+    { type: "separator" as const },
     {
       label: renderingId === item.id ? "Rendering..." : "Render now",
       icon: Play,
