@@ -922,7 +922,7 @@ export default function DashboardUploadPage() {
                     key={`media-${uploadKey}`}
                     maxFiles={3}
                     maxSize={10 * 1024 * 1024 * 1024} // 10GB
-                    accept="image/*,video/*,audio/*,.flac"
+                    accept="image/*,video/*,audio/*"
                     multiple
                     simulateUpload={false}
                     typeLimits={{ "image/": 1, "video/": 1, "audio/": 1 }}
