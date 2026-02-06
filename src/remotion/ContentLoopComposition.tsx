@@ -188,6 +188,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     frame: number | null;
   }>({ src: null, frame: null });
   const thumbnailRenderHandle = useRef<number | null>(null);
+  const audioRenderHandle = useRef<number | null>(null);
   const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
   const thumbnailLoaded = Boolean(thumbnailSrc && loadedThumbnailSrc === thumbnailSrc);
   const fadeStartFrame =
@@ -438,7 +439,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       currentBars: currentSmoothedBars,
     };
 
-    }, [
+  }, [
     audioData,
     edgeRaysEnabled,
     frame,
@@ -447,26 +448,29 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     visualizationEnabled,
   ]);
 
-  const breathIntensity = useMemo(() => {
+  const edgeEnergy = useMemo(() => {
     if (!audioData) return 0;
     const currentBars = smoothBars?.currentBars;
     if (!currentBars || currentBars.length === 0) return 0;
-    const totalBars = currentBars.length;
-    const lowBandRatio = 0.18;
-    const vocalBandStartRatio = 0.25;
-    const vocalBandEndRatio = 0.55;
-    const lowCount = Math.max(1, Math.floor(totalBars * lowBandRatio));
-    let lowSum = 0;
-    for (let i = 0; i < lowCount; i += 1) {
-      lowSum += currentBars[i] ?? 0;
-    }
-    const lowAvg = lowSum / lowCount;
+    const total = currentBars.length;
 
-    const vocalStart = Math.max(0, Math.floor(totalBars * vocalBandStartRatio));
-    const vocalEnd = Math.max(vocalStart + 1, Math.floor(totalBars * vocalBandEndRatio));
+    let sum = 0;
+    for (let i = 0; i < total; i += 1) {
+      sum += currentBars[i] ?? 0;
+    }
+    const avg = sum / total;
+
+    const lowEnd = Math.max(1, Math.floor(total * 0.2));
+    const vocalStart = Math.max(0, Math.floor(total * 0.25));
+    const vocalEnd = Math.max(vocalStart + 1, Math.floor(total * 0.6));
+
+    let lowSum = 0;
+    for (let i = 0; i < lowEnd; i += 1) lowSum += currentBars[i] ?? 0;
+    const lowAvg = lowSum / lowEnd;
+
     let vocalSum = 0;
     let vocalCount = 0;
-    for (let i = vocalStart; i < vocalEnd && i < totalBars; i += 1) {
+    for (let i = vocalStart; i < vocalEnd && i < total; i += 1) {
       vocalSum += currentBars[i] ?? 0;
       vocalCount += 1;
     }
@@ -474,36 +478,58 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
     const vocalWeight = Math.min(1, Math.max(0, edgeRaysVocalBalance));
     const lowWeight = 1 - vocalWeight;
-    const combined = lowAvg * lowWeight + vocalAvg * vocalWeight;
-    const min = 0.12;
-    const max = 0.85;
-    const floor = 0.01;
-    const curve = 0.6;
-    const normalized = Math.max(
-      0,
-      Math.min(1, (combined - floor) / Math.max(1e-6, 1 - floor))
-    );
-    const shaped = Math.pow(normalized, curve);
-    return min + (max - min) * shaped;
+    const base = lowAvg * lowWeight + vocalAvg * vocalWeight;
+    const crest = Math.max(lowAvg, vocalAvg);
+
+    const mixed = avg * 0.45 + base * 0.35 + crest * 0.2;
+    const floor = 0.003;
+    const normalized = Math.max(0, Math.min(1, (mixed - floor) / (1 - floor)));
+    return Math.pow(normalized, 0.6);
   }, [audioData, edgeRaysVocalBalance, smoothBars]);
 
   const glowRef = useRef(0);
+  const lastEnergyRef = useRef(0);
+  const transientRef = useRef(0);
+  const gateRef = useRef(0);
   const glowIntensity = useMemo(() => {
-    const intensityScale = 0.4 + edgeRaysIntensity * 1.2;
-    const target = Math.min(1, breathIntensity * intensityScale);
+    const intensityScale = 0.35 + edgeRaysIntensity * 1.35;
+    const target = Math.min(1, edgeEnergy * intensityScale);
+    if (isRendering) {
+      lastEnergyRef.current = target;
+      return Math.max(0, target);
+    }
     if (frame === 0) {
       glowRef.current = target;
+      lastEnergyRef.current = target;
       return target;
     }
+
+    const lastEnergy = lastEnergyRef.current;
+    const rise = Math.max(0, target - lastEnergy);
+    lastEnergyRef.current = target;
+
+    const transient = transientRef.current + (rise - transientRef.current) * 0.35;
+    transientRef.current = transient;
+
+    const gateTarget = rise > 0.03 ? 1 : 0;
+    const gate = gateRef.current + (gateTarget - gateRef.current) * 0.2;
+    gateRef.current = gate;
+
     const current = glowRef.current;
-    const attack = 0.85;
-    const release = 0.08;
-    const next = target > current
+    const attack = 0.8;
+    const release = 0.18;
+    const smoothed = target > current
       ? current + (target - current) * attack
       : current + (target - current) * release;
-    glowRef.current = next;
-    return next;
-  }, [breathIntensity, edgeRaysIntensity, frame]);
+    glowRef.current = smoothed;
+
+    const kick = transient * 1.4 * gate;
+    return Math.min(1, smoothed + kick);
+  }, [edgeEnergy, edgeRaysIntensity, frame, isRendering]);
+
+  const renderGlowIntensity = isRendering
+    ? Math.max(glowIntensity, edgeRaysEnabled ? 0.1 : 0)
+    : glowIntensity;
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
@@ -629,10 +655,12 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       )}
-      {edgeRaysEnabled && glowIntensity > 0 ? (
+      {edgeRaysEnabled && renderGlowIntensity > 0 ? (
         <AbsoluteFill 
           style={{
-            pointerEvents: "none", opacity: visualizationOpacity * introOutroOpacity,
+            pointerEvents: "none",
+            opacity: visualizationOpacity * introOutroOpacity,
+            zIndex: 2,
           }
         }
           
@@ -652,11 +680,17 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 ...position,
                 background: `radial-gradient(circle at 30% 30%, ${hexToRgba(
                   glowColor,
-                  glowIntensity
+                  renderGlowIntensity
                 )} 0%, ${hexToRgba(glowColor, 0)} 70%)`,
-                filter: `blur(${140 + glowIntensity * 180}px)`,
+                filter: `blur(${isRendering ? 90 : 140 + renderGlowIntensity * 180}px)`,
                 opacity: 1,
-                mixBlendMode: "normal",
+                mixBlendMode: isRendering ? "normal" : "screen",
+                boxShadow: isRendering
+                  ? `0 0 ${120 + renderGlowIntensity * 160}px ${hexToRgba(
+                      glowColor,
+                      renderGlowIntensity * 0.7
+                    )}`
+                  : undefined,
               }}
             />
           ))}

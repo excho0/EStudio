@@ -31,10 +31,22 @@ import type {
 
 export const runtime = "nodejs";
 
+type InputProps = Record<string, unknown>;
+
 const storage = getStorage();
 
 let bundlePromise: Promise<string> | null = null;
 const lastProgressPercent = new Map<string, number>();
+
+/**
+ * Rendering strategy (the "pure solution"):
+ * - Small frame chunks + work stealing queue
+ * - Multi-browser instances
+ * - Browser recycling to avoid Chrome heap/decoder buildup
+ */
+const DEFAULT_FRAME_CHUNK_SIZE = 60; // small granularity to balance cost variance
+const DEFAULT_MAX_FRAMES_PER_BROWSER = 360; // recycle browser periodically
+const DEFAULT_PER_BROWSER_CONCURRENCY = 2; // keep low to avoid intra-browser contention
 
 const loadRenderer = () => {
   const req = eval("require") as NodeJS.Require;
@@ -85,23 +97,6 @@ const resolveConcurrency = (value?: string | null) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
-/**
- * Returns a default concurrency value for the render job.
- * The value is based on the number of CPUs available on the system.
- * If the number of CPUs is less than or equal to 2, the concurrency value is set to the number of CPUs.
- * Otherwise, the concurrency value is set to the minimum of the number of CPUs minus 1, and 75% of the number of CPUs, rounded down to the nearest whole number.
- * The concurrency value is capped at 2, to prevent overloading the system.
- * @returns {number} The default concurrency value.
- */
-const getDefaultConcurrency = () => {
-  const cpuCount = Math.max(1, os.cpus().length);
-  if (cpuCount <= 2) {
-    return cpuCount;
-  }
-  const target = Math.floor(cpuCount * 0.75);
-  return Math.max(2, Math.min(cpuCount - 1, target));
-};
-
 const resolveOffthreadThreads = (value?: string | null) => {
   if (!value) {
     return undefined;
@@ -124,13 +119,17 @@ const resolvePositiveInt = (value?: string | null) => {
   return Math.floor(numeric);
 };
 
-const buildFrameRanges = (totalFrames: number, chunkSize: number) => {
-  const ranges: Array<{ start: number; end: number }> = [];
-  for (let start = 0; start < totalFrames; start += chunkSize) {
-    const end = Math.min(totalFrames - 1, start + chunkSize - 1);
-    ranges.push({ start, end });
+/**
+ * Returns a default concurrency value for the render job.
+ * - Scales with CPU count but avoids overloading.
+ */
+const getDefaultConcurrency = () => {
+  const cpuCount = Math.max(1, os.cpus().length);
+  if (cpuCount <= 2) {
+    return cpuCount;
   }
-  return ranges;
+  const target = Math.floor(cpuCount * 0.75);
+  return Math.max(2, Math.min(cpuCount - 1, target));
 };
 
 const getDefaultOffthreadThreads = () => {
@@ -141,8 +140,18 @@ const getDefaultOffthreadThreads = () => {
   return Math.max(2, Math.min(6, Math.floor(cpuCount / 3)));
 };
 
-const shouldUseMultiRender = () =>
-  process.env.REMOTION_MULTI_RENDER === "true";
+const buildFrameRanges = (totalFrames: number, chunkSize: number) => {
+  const ranges: Array<{ start: number; end: number; index: number }> = [];
+  let index = 0;
+  for (let start = 0; start < totalFrames; start += chunkSize) {
+    const end = Math.min(totalFrames - 1, start + chunkSize - 1);
+    ranges.push({ start, end, index });
+    index++;
+  }
+  return ranges;
+};
+
+const shouldUseMultiRender = () => process.env.REMOTION_MULTI_RENDER === "true";
 
 const runFfmpeg = (binary: string, args: string[]) =>
   new Promise<void>((resolve, reject) => {
@@ -172,19 +181,33 @@ const startRenderJob = async ({
   try {
     const { renderMedia, selectComposition, openBrowser, getExecutablePath } =
       loadRenderer();
+
+    // Enforce the union type at compile time (avoids "string" errors)
+    const resolvedChromeMode: "headless-shell" | "chrome-for-testing" =
+      chromeMode === "headless-shell" ? "headless-shell" : "chrome-for-testing";
+
+    const browserExecutable =
+      process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
+      process.env.REMOTION_BROWSER_EXECUTABLE ||
+      null;
+
+    const renderDefaults = {
+      logLevel: "warn" as const,
+      browserExecutable,
+      chromeMode: resolvedChromeMode,
+    };
+
+    const props = inputProps as InputProps;
+
     const composition = await selectComposition({
       serveUrl,
       id: compositionId,
-      inputProps,
-      logLevel: "warn",
-      browserExecutable:
-        process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-        process.env.REMOTION_BROWSER_EXECUTABLE ||
-        null,
-      chromeMode,
+      inputProps: props,
+      ...renderDefaults,
     });
 
     const totalFrames = composition.durationInFrames;
+
     const concurrencyOverride = resolveConcurrency(
       process.env.REMOTION_RENDER_CONCURRENCY
     );
@@ -192,12 +215,27 @@ const startRenderJob = async ({
       concurrencyOverride === null
         ? getDefaultConcurrency()
         : concurrencyOverride;
+
     const offthreadOverride = resolveOffthreadThreads(
       process.env.REMOTION_OFFTHREAD_VIDEO_THREADS
     );
     const offthreadVideoThreads =
       offthreadOverride ?? getDefaultOffthreadThreads();
+
     const ffmpegLogEnabled = process.env.REMOTION_LOG_FFMPEG === "true";
+    const ffmpegOverride = ffmpegLogEnabled
+      ? ({
+          type,
+          args,
+        }: {
+          type: "stitcher" | "pre-stitcher";
+          args: string[];
+        }) => {
+          console.log(`[render] ffmpeg ${type}: ${args.join(" ")}`);
+          return args;
+        }
+      : undefined;
+
     console.log(
       `[render] concurrency=${String(concurrency)} source=${process.env.REMOTION_RENDER_CONCURRENCY ?? "auto"}`
     );
@@ -214,12 +252,6 @@ const startRenderJob = async ({
       progress: 0,
     });
 
-    const ffmpegOverride = ffmpegLogEnabled
-      ? ({ type, args }: { type: "stitcher" | "pre-stitcher"; args: string[] }) => {
-          console.log(`[render] ffmpeg ${type}: ${args.join(" ")}`);
-          return args;
-        }
-      : undefined;
     const startedAt = Date.now();
 
     if (!shouldUseMultiRender()) {
@@ -228,16 +260,11 @@ const startRenderJob = async ({
         composition,
         outputLocation: outputPath,
         codec: "h264",
-        inputProps,
-        logLevel: "warn",
-        browserExecutable:
-          process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-          process.env.REMOTION_BROWSER_EXECUTABLE ||
-          null,
-        chromeMode,
+        inputProps: props,
         concurrency,
         offthreadVideoThreads,
         ffmpegOverride,
+        ...renderDefaults,
         onStart: ({ frameCount, parallelEncoding, resolvedConcurrency }) => {
           console.log(
             `[render] start frames=${frameCount} parallelEncoding=${Boolean(parallelEncoding)} resolvedConcurrency=${String(resolvedConcurrency)}`
@@ -266,55 +293,76 @@ const startRenderJob = async ({
         },
       });
     } else {
+      // ===== Multi-render (solution) =====
+      // - Small chunks (to balance uneven frame costs)
+      // - Work stealing queue
+      // - Browser recycling (to avoid Chrome heap/decoder buildup)
+      const cpuCount = Math.max(1, os.cpus().length);
+
       const instanceOverride = resolvePositiveInt(
         process.env.REMOTION_MULTI_RENDER_INSTANCES
       );
+      // Default: ~1 browser per 4 cores, capped reasonably
+      const defaultInstances = Math.max(1, Math.min(12, Math.floor(cpuCount / 4) || 1));
       const instanceCount = Math.max(
         1,
-        Math.min(instanceOverride ?? 4, totalFrames)
+        Math.min(instanceOverride ?? defaultInstances, totalFrames)
       );
+
       const chunkOverride = resolvePositiveInt(
         process.env.REMOTION_MULTI_RENDER_CHUNK_SIZE
       );
-      const chunkSize =
-        chunkOverride ?? Math.ceil(totalFrames / instanceCount);
-      const ranges = buildFrameRanges(totalFrames, chunkSize);
-      const perInstanceConcurrency =
+      const chunkSize = Math.max(
+        1,
+        chunkOverride ?? DEFAULT_FRAME_CHUNK_SIZE
+      );
+
+      const maxFramesPerBrowserOverride = resolvePositiveInt(
+        process.env.REMOTION_MULTI_RENDER_MAX_FRAMES_PER_BROWSER
+      );
+      const maxFramesPerBrowser = Math.max(
+        chunkSize,
+        maxFramesPerBrowserOverride ?? DEFAULT_MAX_FRAMES_PER_BROWSER
+      );
+
+      const perBrowserConcurrencyOverride = resolvePositiveInt(
+        process.env.REMOTION_MULTI_RENDER_PER_BROWSER_CONCURRENCY
+      );
+      const perBrowserConcurrency =
         typeof concurrency === "number"
-          ? Math.max(1, Math.floor(concurrency / instanceCount))
-          : concurrency;
+          ? Math.max(
+              1,
+              Math.min(
+                perBrowserConcurrencyOverride ?? DEFAULT_PER_BROWSER_CONCURRENCY,
+                concurrency
+              )
+            )
+          : (perBrowserConcurrencyOverride ?? DEFAULT_PER_BROWSER_CONCURRENCY);
+
+      const ranges = buildFrameRanges(totalFrames, chunkSize);
+
       console.log(
-        `[render] multi instances=${instanceCount} chunkSize=${chunkSize} perInstanceConcurrency=${String(perInstanceConcurrency)}`
+        `[render] multi instances=${instanceCount} chunkSize=${chunkSize} maxFramesPerBrowser=${maxFramesPerBrowser} perBrowserConcurrency=${String(perBrowserConcurrency)}`
       );
 
       const tempDir = await createTempDir("remotion-multi");
       const listPath = path.join(tempDir, "concat.txt");
-      const chunkPaths = ranges.map((range, index) =>
-        path.join(tempDir, `chunk-${index}.mp4`)
+      const chunkPaths = ranges.map((range) =>
+        path.join(tempDir, `chunk-${range.index}.ts`)
       );
       const audioPath = path.join(tempDir, "audio.aac");
-      const concatPath = path.join(tempDir, "concat.mp4");
+      const concatPath = path.join(tempDir, "concat.ts");
 
       const chunkRendered = new Array(ranges.length).fill(0);
-      const chunkTotals = ranges.map(
-        (range) => range.end - range.start + 1
-      );
+      const chunkTotals = ranges.map((range) => range.end - range.start + 1);
 
       const updateProgress = (chunkIndex: number, renderedCount: number) => {
-        chunkRendered[chunkIndex] = Math.min(
-          chunkTotals[chunkIndex],
-          renderedCount
-        );
-        const totalRendered = chunkRendered.reduce(
-          (sum, value) => sum + value,
-          0
-        );
+        chunkRendered[chunkIndex] = Math.min(chunkTotals[chunkIndex], renderedCount);
+        const totalRendered = chunkRendered.reduce((sum, v) => sum + v, 0);
         const safeProgress = Math.min(1, totalRendered / totalFrames);
         const percent = Math.floor(safeProgress * 100);
         const lastPercent = lastProgressPercent.get(id) ?? -1;
-        if (percent === lastPercent) {
-          return;
-        }
+        if (percent === lastPercent) return;
         lastProgressPercent.set(id, percent);
         emitRenderProgress({
           userId,
@@ -325,84 +373,109 @@ const startRenderJob = async ({
         });
       };
 
-      const browsers = await Promise.all(
-        Array.from({ length: Math.min(instanceCount, ranges.length) }, () =>
-          openBrowser("chrome", {
-            browserExecutable:
-              process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-              process.env.REMOTION_BROWSER_EXECUTABLE ||
-              null,
-            chromeMode,
-            logLevel: "warn",
-          })
-        )
-      );
+      // Work-stealing queue
+      const queue = ranges.slice();
 
-      const queue = ranges.map((range, index) => ({ range, index }));
-      const runChunk = async (browser: BrowserInstance) => {
-        while (queue.length > 0) {
-          const next = queue.shift();
-          if (!next) {
-            return;
+      const openNewBrowser = async () =>
+        openBrowser("chrome", {
+          ...renderDefaults,
+        });
+
+      // Each worker holds a browser, but recycles it periodically
+      const worker = async () => {
+        let browser: BrowserInstance | null = null;
+        let framesSinceRecycle = 0;
+
+        const ensureBrowser = async () => {
+          if (!browser) browser = await openNewBrowser();
+          return browser;
+        };
+
+        const recycleBrowser = async () => {
+          if (browser) {
+            await browser.close({ silent: true });
+            browser = null;
           }
-          const { range, index } = next;
-          await renderMedia({
-            serveUrl,
-            composition,
-            outputLocation: chunkPaths[index],
-            codec: "h264",
-            inputProps,
-            logLevel: "warn",
-            browserExecutable:
-              process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-              process.env.REMOTION_BROWSER_EXECUTABLE ||
-              null,
-            chromeMode,
-            concurrency: perInstanceConcurrency,
-            offthreadVideoThreads,
-            ffmpegOverride,
-            frameRange: [range.start, range.end],
-            muted: true,
-            puppeteerInstance: browser,
-            onProgress: ({ renderedFrames, encodedFrames, progress }) => {
-              const rendered = Number.isFinite(renderedFrames)
-                ? Number(renderedFrames)
-                : Number.isFinite(encodedFrames)
-                  ? Number(encodedFrames)
-                  : typeof progress === "number"
-                    ? Math.round(progress * chunkTotals[index])
-                    : 0;
-              updateProgress(index, rendered);
-            },
-          });
-          updateProgress(index, chunkTotals[index]);
+          framesSinceRecycle = 0;
+        };
+
+        try {
+          while (queue.length > 0) {
+            const next = queue.shift();
+            if (!next) break;
+
+            // Recycle before starting next chunk if we've processed enough frames
+            if (framesSinceRecycle >= maxFramesPerBrowser) {
+              await recycleBrowser();
+            }
+
+            const b = await ensureBrowser();
+
+            const { start, end, index } = next;
+
+            await renderMedia({
+              serveUrl,
+              composition,
+              outputLocation: chunkPaths[index],
+              codec: "h264-ts",
+              inputProps: props,
+              concurrency: perBrowserConcurrency,
+              offthreadVideoThreads,
+              ffmpegOverride,
+              frameRange: [start, end],
+              muted: true,
+              puppeteerInstance: b,
+              ...renderDefaults,
+              onProgress: ({ renderedFrames, encodedFrames, progress }) => {
+                const rendered = Number.isFinite(renderedFrames)
+                  ? Number(renderedFrames)
+                  : Number.isFinite(encodedFrames)
+                    ? Number(encodedFrames)
+                    : typeof progress === "number"
+                      ? Math.round(progress * chunkTotals[index])
+                      : 0;
+                updateProgress(index, rendered);
+              },
+            });
+
+            // Mark done
+            updateProgress(index, chunkTotals[index]);
+            framesSinceRecycle += chunkTotals[index];
+          }
+
+        } finally {
+          const b: BrowserInstance | null = browser;
+          browser = null;
+          if (b) {
+            await b.close({ silent: true });
+          }
         }
       };
 
-      await Promise.all(browsers.map((browser) => runChunk(browser)));
+      await Promise.all(
+        Array.from({ length: Math.min(instanceCount, ranges.length) }, () => worker())
+      );
 
-      const audioBrowser = browsers[0];
-      const audioInputProps = {
-        audioSrc: inputProps.audioSrc,
-        audioFadeInSeconds: inputProps.audioFadeInSeconds,
-        audioFadeOutSeconds: inputProps.audioFadeOutSeconds,
-        audioFadeInOffsetSeconds: inputProps.audioFadeInOffsetSeconds,
-        audioFadeOutOffsetSeconds: inputProps.audioFadeOutOffsetSeconds,
-        songDurationSeconds: inputProps.songDurationSeconds,
-        fps: inputProps.fps,
+      // Render audio once
+      const audioInputProps: InputProps = {
+        audioSrc: (props as Record<string, unknown>).audioSrc,
+        audioFadeInSeconds: (props as Record<string, unknown>).audioFadeInSeconds,
+        audioFadeOutSeconds: (props as Record<string, unknown>).audioFadeOutSeconds,
+        audioFadeInOffsetSeconds: (props as Record<string, unknown>).audioFadeInOffsetSeconds,
+        audioFadeOutOffsetSeconds: (props as Record<string, unknown>).audioFadeOutOffsetSeconds,
+        songDurationSeconds: (props as Record<string, unknown>).songDurationSeconds,
+        fps: (props as Record<string, unknown>).fps,
       };
+
       const audioComposition = await selectComposition({
         serveUrl,
         id: "ContentLoopAudio",
         inputProps: audioInputProps,
-        logLevel: "warn",
-        browserExecutable:
-          process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-          process.env.REMOTION_BROWSER_EXECUTABLE ||
-          null,
-        chromeMode,
+        ...renderDefaults,
       });
+
       console.log("[render] audio render start");
+      const audioBrowser = await openBrowser("chrome", { ...renderDefaults });
       await renderMedia({
         serveUrl,
         composition: audioComposition,
@@ -411,34 +484,24 @@ const startRenderJob = async ({
         audioCodec: "aac",
         imageFormat: "none",
         inputProps: audioInputProps,
-        logLevel: "warn",
-        browserExecutable:
-          process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
-          process.env.REMOTION_BROWSER_EXECUTABLE ||
-          null,
-        chromeMode,
         concurrency: 1,
         offthreadVideoThreads,
         ffmpegOverride,
         puppeteerInstance: audioBrowser,
+        ...renderDefaults,
         onStart: ({ frameCount }) => {
           console.log(`[render] audio frames=${frameCount}`);
         },
       });
+      await audioBrowser.close({ silent: true });
       console.log("[render] audio render done");
 
-      await Promise.all(
-        browsers.map((browser) => browser.close({ silent: true }))
-      );
-
+      // Concat chunks
       const listContent = chunkPaths
         .map((chunkPath) => `file '${chunkPath.replace(/'/g, "'\\''")}'`)
         .join("\n");
       await writeFilePath(listPath, listContent);
 
-      console.log(
-        `[render] concat start chunks=${chunkPaths.length} -> ${concatPath}`
-      );
       const ffmpegPath =
         (getExecutablePath?.({
           type: "ffmpeg",
@@ -448,33 +511,75 @@ const startRenderJob = async ({
         }) ??
           process.env.REMOTION_FFMPEG_PATH ??
           "ffmpeg");
+
+      console.log(
+        `[render] concat start chunks=${chunkPaths.length} -> ${concatPath}`
+      );
       await runFfmpeg(ffmpegPath, [
         "-hide_banner",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        listPath,
-        "-c",
-        "copy",
-        "-y",
-        concatPath,
+        "-fflags", "+genpts",
+        "-avoid_negative_ts", "make_zero",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", listPath,
+        "-c", "copy",
+        "-muxpreload", "0",
+        "-muxdelay", "0",
+        "-y", concatPath,
       ]);
       console.log("[render] concat done");
 
-      console.log(`[render] mux start -> ${outputPath}`);
+      console.log(`[render] mux(start re-encode) -> ${outputPath}`);
       await runFfmpeg(ffmpegPath, [
         "-hide_banner",
+
+        // Fix timestamps coming from TS concat
+        "-fflags",
+        "+genpts",
+        "-avoid_negative_ts",
+        "make_zero",
+
+        // Inputs
         "-i",
         concatPath,
         "-i",
         audioPath,
+
+        // Re-encode video to eliminate boundary glitches / black flashes
         "-c:v",
-        "copy",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "18",
+        "-preset",
+        "veryfast",
+
+        // Force constant framerate output
+        "-vsync",
+        "cfr",
+        "-r",
+        String(composition.fps),
+
+        // Stable GOP (keyframe every 1s, no scene-cut keyframes)
+        "-g",
+        String(composition.fps),
+        "-keyint_min",
+        String(composition.fps),
+        "-sc_threshold",
+        "0",
+
+        // Audio
         "-c:a",
         "aac",
+        "-b:a",
+        "192k",
         "-shortest",
+
+        // Web-friendly MP4
+        "-movflags",
+        "+faststart",
+
         "-y",
         outputPath,
       ]);
@@ -515,14 +620,17 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   const resolvedBrowser =
     process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
     process.env.REMOTION_BROWSER_EXECUTABLE ||
     null;
-  const chromeMode =
+
+  const chromeMode: "headless-shell" | "chrome-for-testing" =
     process.env.REMOTION_RENDER_CHROME_MODE === "headless-shell"
       ? "headless-shell"
       : "chrome-for-testing";
+
   const item = await getContentItem(user.id, id);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -534,6 +642,7 @@ export async function POST(
 
   const renderDirKey = getContentRenderDir(user.id, id);
   await storage.ensureDir(renderDirKey);
+
   let nextIndex = 1;
   try {
     const entries = await storage.list(renderDirKey);
@@ -543,22 +652,25 @@ export async function POST(
   } catch {
     nextIndex = 1;
   }
+
   const slug = getSlug(item.title) || "untitled";
   const fileName = `${slug}_${nextIndex}.mp4`;
   const renderPath = getContentRenderPath(user.id, id, fileName);
   const outputPath = resolveContentPath(renderPath);
+
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
   const compositionId = "ContentLoop";
 
   const serveUrl = await getServeUrl(entryPoint);
 
   const origin = new URL(request.url).origin;
-  const assetToken = createContentAssetToken(user.id, id);
+  const assetToken = createContentAssetToken(user.id, id, 2 * 60 * 60);
   const withAssetToken = (url: string) =>
     assetToken
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
-  const props = buildContentLoopPropsFromItem(item, {
+
+  const props: InputProps = buildContentLoopPropsFromItem(item, {
     thumbnailSrc: withAssetToken(
       `${origin}/api/content/${id}/asset?type=thumbnail`
     ),
@@ -569,9 +681,10 @@ export async function POST(
     playbackRate: item.playbackRate ?? 1,
     scalePercent: item.scalePercent ?? 100,
     colorPalette: item.colorPalette ?? undefined,
-  });
+  }) as unknown as InputProps;
 
   const browserLabel = resolvedBrowser ?? "auto";
+
   void startRenderJob({
     userId: user.id,
     id,

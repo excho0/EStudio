@@ -44,7 +44,7 @@ export type RenderMediaFn = (options: {
     defaultProps?: Record<string, unknown>;
   };
   outputLocation: string;
-  codec: "h264" | "aac";
+  codec: "h264" | "h264-ts" | "aac";
   inputProps: Record<string, unknown>;
   logLevel: "warn";
   browserExecutable: string | null;
