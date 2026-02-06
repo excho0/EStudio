@@ -6,11 +6,11 @@ import {
   getContentRenderDir,
 } from "@/lib/content-store";
 import { getContentItem, getContentItemById } from "@/lib/data/content";
-import { Readable } from "stream";
 import { getStorage } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth-session";
 import { verifyContentAssetToken } from "@/lib/content-asset-token";
 import type { AssetCacheEntry } from "@/types";
+import type { ReadStream } from "fs";
 
 export const runtime = "nodejs";
 
@@ -20,6 +20,7 @@ const maxCacheMb = Number(process.env.ASSET_MEMORY_CACHE_MAX_MB ?? "128");
 const maxCacheBytes = Number.isFinite(maxCacheMb)
   ? Math.max(0, maxCacheMb) * 1024 * 1024
   : 0;
+
 const storage = getStorage();
 
 const corsHeaders = {
@@ -39,6 +40,8 @@ const mimeByExtension: Record<string, string> = {
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
   ".m4a": "audio/mp4",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -60,14 +63,14 @@ const cacheAsset = (
   };
   if (assetCache.has(key)) {
     const existing = assetCache.get(key);
-    if (existing) {
-      assetCacheSize -= existing.size;
-    }
+    if (existing) assetCacheSize -= existing.size;
   }
   assetCache.set(key, cached);
   assetCacheSize += cached.size;
 
   if (assetCacheSize <= maxCacheBytes) return;
+
+  // LRU eviction
   const entries = Array.from(assetCache.entries()).sort(
     (a, b) => a[1].accessedAt - b[1].accessedAt
   );
@@ -78,30 +81,134 @@ const cacheAsset = (
   }
 };
 
+/**
+ * Abort-safe Node stream -> Web ReadableStream bridge.
+ * Fixes: "Controller is already closed" when client cancels / seeks / range-switches.
+ */
+const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+
+      const cleanup = () => {
+        nodeStream.off("data", onData);
+        nodeStream.off("end", onEnd);
+        nodeStream.off("close", onClose);
+        nodeStream.off("error", onError);
+        signal.removeEventListener("abort", onAbort);
+      };
+
+      const safeClose = () => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        try {
+          controller.close();
+        } catch {
+          // ignore "already closed"
+        }
+      };
+
+      const safeError = (err: unknown) => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        try {
+          controller.error(err);
+        } catch {
+          // ignore
+        }
+      };
+
+      const onAbort = () => {
+        // Client went away (seek/cancel/navigation). Stop reading immediately.
+        try {
+          nodeStream.destroy();
+        } catch {
+          // ignore
+        }
+        safeClose();
+      };
+
+      const onData = (chunk: string | Buffer) => {
+        if (closed) return;
+
+        const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+
+        try {
+          controller.enqueue(new Uint8Array(buf));
+        } catch {
+          try {
+            (nodeStream as any).destroy?.();
+          } catch {}
+          safeClose();
+          return;
+        }
+
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+          (nodeStream as any).pause?.();
+        }
+      };
+
+
+      const onEnd = () => safeClose();
+      const onClose = () => safeClose();
+      const onError = (err: unknown) => safeError(err);
+
+      signal.addEventListener("abort", onAbort);
+
+      nodeStream.on("data", onData);
+      nodeStream.on("end", onEnd);
+      nodeStream.on("close", onClose);
+      nodeStream.on("error", onError);
+    },
+    pull() {
+      try {
+        (nodeStream as any).resume?.();
+      } catch {}
+    },
+
+    cancel() {
+      // Consumer cancelled (common with Range changes).
+      try {
+        nodeStream.destroy();
+      } catch {
+        // ignore
+      }
+    },
+  });
+};
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const { searchParams } = new URL(request.url);
+
   const user = await getSessionUser();
   const token = searchParams.get("token");
   const tokenPayload = token ? verifyContentAssetToken(token) : null;
+
   if (token && !tokenPayload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   const item = user
     ? await getContentItem(user.id, id)
     : tokenPayload && tokenPayload.contentId === id
       ? await getContentItemById(id)
       : null;
+
   if (!item) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
   const userId = item.userId;
   if (!userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
   if (tokenPayload && tokenPayload.userId !== userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -114,7 +221,10 @@ export async function GET(
       ? renderName
         ? (() => {
             const safeName = path.basename(renderName);
-            if (safeName !== renderName || !safeName.toLowerCase().endsWith(".mp4")) {
+            if (
+              safeName !== renderName ||
+              !safeName.toLowerCase().endsWith(".mp4")
+            ) {
               return null;
             }
             return path.join(getContentRenderDir(userId, item.id), safeName);
@@ -134,68 +244,90 @@ export async function GET(
   if (!stat) {
     return NextResponse.json({ error: "Asset not available" }, { status: 404 });
   }
+
   const extension = path.extname(relativePath).toLowerCase();
   const contentType = mimeByExtension[extension] ?? "application/octet-stream";
+  const canRange =
+    contentType.startsWith("video/") || contentType.startsWith("audio/");
   const range = request.headers.get("range");
-  const canRange = contentType.startsWith("video/") || contentType.startsWith("audio/");
 
+  // Range request
   if (range && canRange) {
-    const match = /bytes=(\d+)-(\d*)/.exec(range);
+    const match = /^bytes=(\d+)-(\d*)$/.exec(range.trim());
     if (!match) {
       return new NextResponse(null, {
         status: 416,
         headers: {
+          ...corsHeaders,
           "Content-Range": `bytes */${stat.size}`,
         },
       });
     }
 
     const start = Number(match[1]);
-    const end = match[2] ? Number(match[2]) : stat.size - 1;
+    const requestedEnd = match[2] ? Number(match[2]) : stat.size - 1;
 
-    if (Number.isNaN(start) || Number.isNaN(end) || start > end) {
+    if (
+      Number.isNaN(start) ||
+      Number.isNaN(requestedEnd) ||
+      start < 0 ||
+      requestedEnd < 0 ||
+      start >= stat.size
+    ) {
       return new NextResponse(null, {
         status: 416,
         headers: {
+          ...corsHeaders,
           "Content-Range": `bytes */${stat.size}`,
         },
       });
     }
 
-    const safeEnd = Math.min(end, stat.size - 1);
-    const chunkSize = safeEnd - start + 1;
-    const stream = storage.createReadStream(relativePath, {
-      start,
-      end: safeEnd,
-    });
+    const end = Math.min(requestedEnd, stat.size - 1);
+    if (start > end) {
+      return new NextResponse(null, {
+        status: 416,
+        headers: {
+          ...corsHeaders,
+          "Content-Range": `bytes */${stat.size}`,
+        },
+      });
+    }
 
-    return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
+    const chunkSize = end - start + 1;
+
+    const nodeStream = storage.createReadStream(relativePath, { start, end });
+    const webStream = nodeStreamToWeb(nodeStream as unknown as ReadStream, request.signal);
+
+    return new NextResponse(webStream, {
       status: 206,
       headers: {
         ...corsHeaders,
         "Content-Type": contentType,
         "Content-Length": String(chunkSize),
-        "Content-Range": `bytes ${start}-${safeEnd}/${stat.size}`,
+        "Content-Range": `bytes ${start}-${end}/${stat.size}`,
         "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
   }
 
+  // Small assets cache (audio/images only)
   if (shouldCacheAsset(contentType, stat.size)) {
-  const cacheKey = relativePath;
+    const cacheKey = relativePath;
     const cached = assetCache.get(cacheKey);
+
     if (cached && cached.mtimeMs === stat.mtimeMs) {
       cached.accessedAt = Date.now();
-      return new NextResponse(cached.buffer, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": cached.contentType,
-          "Content-Length": String(cached.size),
-          "Accept-Ranges": canRange ? "bytes" : "none",
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      });
+        return new NextResponse(new Uint8Array(cached.buffer), {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": cached.contentType,
+            "Content-Length": String(cached.size),
+            "Accept-Ranges": canRange ? "bytes" : "none",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
     }
 
     const buffer = await storage.readFile(relativePath);
@@ -205,7 +337,8 @@ export async function GET(
       size: buffer.length,
       mtimeMs: stat.mtimeMs,
     });
-    return new NextResponse(buffer, {
+
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         ...corsHeaders,
         "Content-Type": contentType,
@@ -214,10 +347,14 @@ export async function GET(
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
+
   }
 
-  const stream = storage.createReadStream(relativePath);
-  return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
+  // Normal stream (non-range)
+  const nodeStream = storage.createReadStream(relativePath);
+  const webStream = nodeStreamToWeb(nodeStream as unknown as ReadStream, request.signal);
+
+  return new NextResponse(webStream, {
     headers: {
       ...corsHeaders,
       "Content-Type": contentType,
