@@ -2,10 +2,15 @@
 
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible"
 import { ChevronDown } from "lucide-react"
-import { motion } from "framer-motion"
+import { motion, type Transition } from "framer-motion"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+
+export const COLLAPSIBLE_ANIMATION_TRANSITION = {
+  duration: 0.25,
+  ease: "easeInOut",
+} as const
 
 type CollapsibleStateContextValue = {
   open: boolean
@@ -136,8 +141,15 @@ function CollapsibleTrigger({
 function CollapsibleContent({
   className,
   children,
+  animateSpacing = true,
+  animateOpacity = true,
+  transition = COLLAPSIBLE_ANIMATION_TRANSITION,
   ...props
-}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>) {
+}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent> & {
+  animateSpacing?: boolean;
+  animateOpacity?: boolean;
+  transition?: Transition;
+}) {
   const { open } = useCollapsibleState()
   return (
     <CollapsiblePrimitive.CollapsibleContent
@@ -147,20 +159,20 @@ function CollapsibleContent({
       {...props}
     >
       <motion.div
-        className={cn("overflow-hidden", className)}
+        className={cn("overflow-hidden grid gap-3", className)}
         initial={false}
         animate={{
           height: open ? "auto" : 0,
-          opacity: open ? 1 : 0,
-          marginTop: open ? 12 : 0,
-          paddingLeft: open ? 12 : 0,
-          paddingRight: open ? 12 : 0,
-          paddingBottom: open ? 8 : 0,
+          opacity: animateOpacity ? (open ? 1 : 0) : 1,
+          marginTop: animateSpacing && open ? 12 : 0,
+          paddingLeft: animateSpacing && open ? 12 : 0,
+          paddingRight: animateSpacing && open ? 12 : 0,
+          paddingBottom: animateSpacing && open ? 8 : 0,
         }}
-        transition={{ duration: 0.25, ease: "easeInOut" }}
+        transition={transition}
         style={{ pointerEvents: open ? "auto" : "none" }}
       >
-        <div className="grid gap-3">{children}</div>
+         {children}
       </motion.div>
     </CollapsiblePrimitive.CollapsibleContent>
   )

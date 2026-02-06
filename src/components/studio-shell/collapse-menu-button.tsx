@@ -103,7 +103,7 @@ export function CollapseMenuButton({
           </div>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+      <CollapsibleContent animateSpacing={false} animateOpacity={false} transition={{ type: "tween", duration: 0.25, ease: "easeInOut" }} className="gap-0!">
         {submenus.map(({ href, label, active, icon: SubIcon }, index) => (
           <Button
             key={index}
