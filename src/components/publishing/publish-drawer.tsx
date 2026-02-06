@@ -241,10 +241,14 @@ export function PublishDrawer({
       };
     });
   }, [publishTargetsQuery.data, providerDetailQueries]);
+  const connectedTargets = useMemo(
+    () => targets.filter((target) => target.connected),
+    [targets]
+  );
 
   const selectedProviderData = useMemo(
-    () => targets.find((target) => target.id === selectedProvider) ?? null,
-    [targets, selectedProvider]
+    () => connectedTargets.find((target) => target.id === selectedProvider) ?? null,
+    [connectedTargets, selectedProvider]
   );
 
   const contentSummaryQuery = useQuery<{ title?: string; thumbnailUrl: string }>({
@@ -341,7 +345,6 @@ export function PublishDrawer({
             provider: selectedProvider,
             renderId: selectedRender,
             connectionId,
-            providerAssetId: `pending-${crypto.randomUUID()}`,
             status: "draft",
             metadata: {
               title: title.trim(),
@@ -578,13 +581,9 @@ export function PublishDrawer({
                           >
                             {loading ? (
                               <SelectableCardSkeletons count={2} />
-                            ) : targets.length === 0 ? (
-                              <Card className="p-4 text-sm text-muted-foreground">
-                                No publish targets are available yet.
-                              </Card>
                             ) : (
                               <div className="grid w-full gap-4 grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">
-                                {targets.map((target) => {
+                                {connectedTargets.map((target) => {
                                   const isSelected = target.id === selectedProvider;
                                   const isConnected = target.connected;
                                   const isComingSoon =
@@ -669,6 +668,13 @@ export function PublishDrawer({
                             <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
                               <Wrench className="h-5 w-5 shrink-0 flex" />
                             </span>
+                            { !loading && connectedTargets.length === 0 && (
+                              <>
+                                <span className="underline font-bold text-primary">No providers connected!</span>
+                                <span> you can</span>
+                              </>
+                            )}
+                              
                             <div>
                               <span>Manage providers in</span>{" "}
                               <Button

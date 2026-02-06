@@ -2,8 +2,9 @@ export type PublishRecord = {
   id: string;
   renderId: string;
   provider: string;
-  providerAssetId: string;
-  status: string;
+  providerAccountId?: string | null;
+  providerAssetId: string | null;
+  status: "draft" | "queued" | "publishing" | "published" | "published_with_warning" | "failed" | "deleted";
   metadata: string | null;
   error?: string | null;
   updatedAt?: number | string | Date | null;

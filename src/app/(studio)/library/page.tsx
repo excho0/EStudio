@@ -242,7 +242,7 @@ export default function LibraryPage() {
       icon: Eye,
       href: `/edit/${item.id}`,
     },
-    ...(item.status === "rendered"
+    ...(item.status === "rendered" || item.status === "rendering"
       ? [
           {
             label: "Publish",
@@ -270,7 +270,7 @@ export default function LibraryPage() {
       onSelect: () => handleRender(item.id),
       disabled: renderingId === item.id,
     },
-    ...(item.status === "rendered"
+    ...(item.status === "rendered" || item.status === "rendering"
       ? [
           {
             label: "View renders",

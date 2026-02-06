@@ -14,6 +14,8 @@ import {
   Radio,
   ShieldCheck,
   Trash2,
+  RefreshCwIcon,
+  CircleX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table } from "@/components/ui/table";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
+import type { ActionItem } from "@/components/controls/responsive-action-menu";
 import {
   ResponsiveDrawer,
   ResponsiveDrawerContent,
@@ -47,11 +50,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { fetchJson } from "@/lib/fetch-json";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { ConnectionsResponse } from "@/types";
 import type {
   PublishListResponse,
-  PublishMetadata,
   PublishRecord,
   ProviderSectionProps,
+  StudioPublishMetadata,
 } from "@/types";
 
 const formatDateTime = (value?: number | string | Date | null) => {
@@ -72,10 +76,10 @@ const formatDateTime = (value?: number | string | Date | null) => {
   });
 };
 
-const parseMetadata = (metadata: string | null): PublishMetadata | null => {
+const parseMetadata = (metadata: string | null): StudioPublishMetadata | null => {
   if (!metadata) return null;
   try {
-    return JSON.parse(metadata) as PublishMetadata;
+    return JSON.parse(metadata) as StudioPublishMetadata;
   } catch {
     return null;
   }
@@ -87,7 +91,7 @@ const getMetadataTitle = (metadata: string | null) =>
 const getMetadataThumbnail = (metadata: string | null) =>
   parseMetadata(metadata)?.thumbnailUrl ?? null;
 
-const getProviderUrl = (provider: string, providerAssetId: string) => {
+const getProviderUrl = (provider: string, providerAssetId: string | null) => {
   if (!providerAssetId) return null;
   const definition = getProviderDefinition(provider);
   if (!definition?.getAssetUrl) return null;
@@ -164,9 +168,19 @@ const getPublishStatusBadge = (status?: string | null) => {
   const value = status ?? "unknown";
   switch (value) {
     case "queued":
-      return { label: "Queued", variant: "blue" as const, icon: Loader2 };
+      return {
+        label: "Queued",
+        variant: "blue" as const,
+        icon: Loader2,
+        iconClassName: "animate-spin",
+      };
     case "publishing":
-      return { label: "Publishing", variant: "blue" as const, icon: Loader2 };
+      return {
+        label: "Publishing",
+        variant: "blue" as const,
+        icon: Loader2,
+        iconClassName: "animate-spin",
+      };
     case "published":
       return { label: "Published", variant: "green" as const, icon: CheckCircle };
     case "published_with_warning":
@@ -187,9 +201,14 @@ const ProviderSection = ({
   items,
   isMobile,
   contentId,
+  connectedAccountIds,
+  onRetry,
   onViewError,
   onDelete,
-}: ProviderSectionProps) => {
+}: ProviderSectionProps & {
+  connectedAccountIds: Set<string>;
+  onRetry: (publishId: string) => void;
+}) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(true);
   const virtualizer = useVirtualizer({
@@ -202,48 +221,68 @@ const ProviderSection = ({
   const definition = getProviderDefinition(provider);
   const label = definition?.label ?? (provider || "unknown");
   const ProviderIcon = definition?.icon ?? Radio;
-  const renderActionMenu = (item: PublishRecord, providerUrl: string | null) => (
-    <ResponsiveActionMenu
-      triggerClassName="h-9"
-      items={[
-        ...(providerUrl
-          ? [
-              {
-                label: "Open in provider",
-                icon: ExternalLink,
-                href: providerUrl,
-              },
-            ]
-          : []),
-        {
-          label: "View render",
-          icon: Film,
-          href: `/renders/${contentId}`,
-        },
-        { type: "separator" as const },
-        ...(item.status === "failed"
-          ? [
-              {
-                label: "View error",
-                icon: ShieldCheck,
-                onSelect: () => onViewError(item),
-              },
-            ]
-          : []),
-        {
-          type: "confirm",
-          label: item.status === "deleted" ? "Remove record" : "Delete from provider",
-          icon: Trash2,
-          description:
-            item.status === "deleted"
-              ? "This removes the local publish record."
-              : "This deletes the published asset from the provider.",
-          destructive: true,
-          onConfirm: () => onDelete(item),
-        },
-      ]}
-    />
-  );
+  const renderActionMenu = (item: PublishRecord, providerUrl: string | null) => {
+    const isConnected = Boolean(
+      item.providerAccountId && connectedAccountIds.has(item.providerAccountId)
+    );
+    const hasProviderAsset = Boolean(item.providerAssetId);
+    const items: ActionItem[] = [
+      ...(providerUrl
+        ? [
+            {
+              label: "Open in provider",
+              icon: ExternalLink,
+              href: providerUrl,
+            },
+          ]
+        : []),
+      {
+        label: "View render",
+        icon: Film,
+        href: `/renders/${contentId}`,
+      },
+      ...((item.status === "failed" || isConnected)
+        ? [{ type: "separator" as const }]
+        : []),
+      ...(item.status === "failed" || item.status === "published_with_warning"
+        ? [
+            {
+              label: `View ${item.status === "failed" ? "error" : "warning"} `,
+              icon: item.status === "failed" ? CircleX : AlertTriangle,
+              onSelect: () => onViewError(item),
+            },
+          ]
+        : []),
+      ...(item.status === "failed"
+        ? [
+            {
+              label: "Retry publish",
+              icon: RefreshCwIcon,
+              onSelect: () => onRetry(item.id),
+            },
+          ]
+        : []),
+      ...(isConnected
+        ? [
+            {
+              type: "confirm" as const,
+              label:
+                item.status === "deleted" || !hasProviderAsset
+                  ? "Remove record"
+                  : "Delete from provider",
+              icon: Trash2,
+              description:
+                item.status === "deleted" || !hasProviderAsset
+                  ? "This removes the local publish record."
+                  : "This deletes the published asset from the provider.",
+              destructive: true,
+              onConfirm: () => onDelete(item),
+            },
+          ]
+        : []),
+    ];
+    return <ResponsiveActionMenu triggerClassName="h-9" items={items} />;
+  };
 
   return (
     <Collapsible
@@ -266,7 +305,10 @@ const ProviderSection = ({
               if (!item) return null;
               const title = getMetadataTitle(item.metadata) ?? "Untitled publish";
               const thumbnailUrl = getMetadataThumbnail(item.metadata);
-              const providerUrl = getProviderUrl(item.provider, item.providerAssetId);
+              const providerUrl = getProviderUrl(
+                item.provider,
+                item.providerAssetId
+              );
               const statusBadge = getPublishStatusBadge(item.status);
               const StatusIcon = statusBadge.icon;
               return (
@@ -301,7 +343,12 @@ const ProviderSection = ({
                             variant={statusBadge.variant}
                             className="mt-2"
                           >
-                            <StatusIcon className="h-3.5 w-3.5" />
+                            <StatusIcon
+                              className={cn(
+                                "size-4 h-4 w-4 flex shrink-0",
+                                statusBadge.iconClassName
+                              )}
+                            />
                             {statusBadge.label}
                           </Badge>
                         </div>
@@ -342,7 +389,10 @@ const ProviderSection = ({
                 if (!item) return null;
                 const title = getMetadataTitle(item.metadata) ?? "Untitled publish";
                 const thumbnailUrl = getMetadataThumbnail(item.metadata);
-                const providerUrl = getProviderUrl(item.provider, item.providerAssetId);
+                const providerUrl = getProviderUrl(
+                  item.provider,
+                  item.providerAssetId
+                );
                 const statusBadge = getPublishStatusBadge(item.status);
                 const StatusIcon = statusBadge.icon;
                 return (
@@ -376,7 +426,12 @@ const ProviderSection = ({
                     </td>
                     <td className="text-slate-600 dark:text-zinc-300">
                       <Badge variant={statusBadge.variant} className="text-md">
-                        <StatusIcon className="h-3.5 w-3.5" />
+                        <StatusIcon
+                          className={cn(
+                            "size-4 h-4 w-4 flex shrink-0",
+                            statusBadge.iconClassName
+                          )}
+                        />
                         {statusBadge.label}
                       </Badge>
                     </td>
@@ -426,6 +481,26 @@ export default function PublishesPage() {
 
   const publishQueryKey = useMemo(() => queryKeys.publishes(id), [id]);
 
+  const connectionsQuery = useQuery<ConnectionsResponse>({
+    queryKey: queryKeys.profileConnections,
+    staleTime: 60_000,
+    queryFn: async () => {
+      return fetchJson<ConnectionsResponse>(
+        "/api/user/profile/connections",
+        undefined,
+        "Failed to load connections."
+      );
+    },
+  });
+  const connectedAccountIds = useMemo(() => {
+    const connections = connectionsQuery.data?.connections ?? [];
+    return new Set(
+      connections
+        .map((connection) => connection.providerAccountId)
+        .filter((value): value is string => Boolean(value))
+    );
+  }, [connectionsQuery.data]);
+
   const { data, isLoading, isFetching, error } = useQuery<PublishListResponse, Error>({
     queryKey: publishQueryKey,
     queryFn: async () => {
@@ -449,6 +524,24 @@ export default function PublishesPage() {
           | { error?: string }
           | null;
         throw new Error(payload?.error ?? "Failed to delete publish.");
+      }
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: publishQueryKey });
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: async (publishId: string) => {
+      const response = await fetch(`/api/content/${id}/publishes/${publishId}`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Failed to retry publish.");
       }
       return response;
     },
@@ -538,7 +631,7 @@ export default function PublishesPage() {
       >
         <ResponsiveDrawerContent className="w-full sm:max-w-xl">
           <ResponsiveDrawerHeader>
-            <ResponsiveDrawerTitle>Publish error</ResponsiveDrawerTitle>
+            <ResponsiveDrawerTitle>Publish {errorPublish?.status === "failed" ? "Error" : "Warning"}</ResponsiveDrawerTitle>
             <ResponsiveDrawerDescription>
               {errorPublish?.metadata
                 ? getMetadataTitle(errorPublish.metadata) ?? "Publish error details"
@@ -595,6 +688,8 @@ export default function PublishesPage() {
                 items={group.items}
                 isMobile={isMobile}
                 contentId={id ?? ""}
+                connectedAccountIds={connectedAccountIds}
+                onRetry={(publishId) => retryMutation.mutate(publishId)}
                 onViewError={setErrorPublish}
                 onDelete={handleDelete}
               />

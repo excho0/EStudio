@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
-type ActionItem =
+export type ActionItem =
   | {
       type?: "item";
       label: string;

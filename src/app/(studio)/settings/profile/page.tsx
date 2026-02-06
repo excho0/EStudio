@@ -169,8 +169,16 @@ export default function ProfileSettingsPage() {
 
   useEffect(() => {
     if (!connectionsQuery.data) return;
-    setConnectedProviders(connectionsQuery.data.connected ?? []);
-    setProviderProfiles(connectionsQuery.data.profiles ?? {});
+    const connections = connectionsQuery.data.connections ?? [];
+    setConnectedProviders(connections.map((connection) => connection.provider));
+    setProviderProfiles(
+      Object.fromEntries(
+        connections.map((connection) => [
+          connection.provider,
+          connection.profile ?? { name: null, image: null },
+        ])
+      )
+    );
   }, [connectionsQuery.data]);
 
   useEffect(() => {

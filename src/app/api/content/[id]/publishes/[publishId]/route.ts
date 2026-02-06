@@ -7,6 +7,7 @@ import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
+import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 
 export const runtime = "nodejs";
 
@@ -95,7 +96,9 @@ export async function DELETE(
 
   const db = getDrizzleDb();
   const now = new Date();
-  const pendingAsset = publish.providerAssetId.startsWith("pending-");
+  const pendingAsset =
+    typeof publish.providerAssetId === "string" &&
+    publish.providerAssetId.startsWith("pending-");
 
   if (publish.status === "deleted") {
     if (isPostgres) {
@@ -137,10 +140,12 @@ export async function DELETE(
     }
 
     try {
-      await adapter.deleteAsset({
-        userId: user.id,
-        providerAssetId: publish.providerAssetId,
-      });
+      if (publish.providerAssetId) {
+        await adapter.deleteAsset({
+          userId: user.id,
+          providerAssetId: publish.providerAssetId,
+        });
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to delete publish.";
@@ -160,16 +165,73 @@ export async function DELETE(
   }
 
   if (isPostgres) {
+      await (db as PostgresDrizzleDb)
+        .update(schema.publishes)
+        .set({
+          status: "deleted",
+          deletedAt: now,
+          updatedAt: now,
+          error: null,
+          providerAssetId: null,
+        })
+        .where(eq(schema.publishes.id, publishId));
+  } else {
+      await (db as SqliteDrizzleDb)
+        .update(sqliteSchema.publishes)
+        .set({
+          status: "deleted",
+          deletedAt: now,
+          updatedAt: now,
+          error: null,
+          providerAssetId: null,
+        })
+        .where(eq(sqliteSchema.publishes.id, publishId));
+  }
+
+  return NextResponse.json({ deleted: true });
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string; publishId: string }> }
+) {
+  const params = await context.params;
+  const contentId = params.id;
+  const publishId = params.publishId;
+  const session = await auth();
+  const email = getSessionEmail(session);
+  if (!email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = await fetchUserByEmail(email);
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const publish = await fetchPublish(user.id, contentId, publishId);
+  if (!publish) {
+    return NextResponse.json({ error: "Publish not found" }, { status: 404 });
+  }
+
+  if (publish.status !== "failed") {
+    return NextResponse.json({ error: "Publish is not retryable." }, { status: 409 });
+  }
+
+  const db = getDrizzleDb();
+  const now = new Date();
+  if (isPostgres) {
     await (db as PostgresDrizzleDb)
       .update(schema.publishes)
-      .set({ status: "deleted", deletedAt: now, updatedAt: now, error: null })
+      .set({ status: "queued", error: null, updatedAt: now })
       .where(eq(schema.publishes.id, publishId));
   } else {
     await (db as SqliteDrizzleDb)
       .update(sqliteSchema.publishes)
-      .set({ status: "deleted", deletedAt: now, updatedAt: now, error: null })
+      .set({ status: "queued", error: null, updatedAt: now })
       .where(eq(sqliteSchema.publishes.id, publishId));
   }
 
-  return NextResponse.json({ deleted: true });
+  enqueuePublishJob(publishId);
+  return NextResponse.json({ queued: true });
 }

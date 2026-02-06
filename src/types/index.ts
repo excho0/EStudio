@@ -7,7 +7,12 @@ export type {
   PaletteMode,
 } from "./studio/edit";
 export type { ContentColumnMeta } from "./studio/library";
-export type { PublishListResponse, PublishRecord, ProviderSectionProps } from "./studio/publishes";
+export type {
+  PublishListResponse,
+  PublishRecord,
+  ProviderSectionProps,
+  PublishMetadata as StudioPublishMetadata,
+} from "./studio/publishes";
 export type { RenderItem, RenderListResponse } from "./studio/renders";
 export type { SettingsResponse } from "./studio/settings";
 export type { ProfilePayload, ConnectionsResponse } from "./user/profile";

@@ -39,6 +39,7 @@ const fetchAccounts = async (userId: string) => {
     return (db as PostgresDrizzleDb)
       .select({
         provider: schema.accounts.provider,
+        providerAccountId: schema.accounts.providerAccountId,
         access_token: schema.accounts.access_token,
       })
       .from(schema.accounts)
@@ -47,6 +48,7 @@ const fetchAccounts = async (userId: string) => {
   return (db as SqliteDrizzleDb)
     .select({
       provider: sqliteSchema.accounts.provider,
+      providerAccountId: sqliteSchema.accounts.providerAccountId,
       access_token: sqliteSchema.accounts.access_token,
     })
     .from(sqliteSchema.accounts)
@@ -187,7 +189,13 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ connected, profiles });
+  const connections = accounts.map((account) => ({
+    provider: account.provider,
+    providerAccountId: account.providerAccountId ?? null,
+    profile: profiles[account.provider] ?? null,
+  }));
+
+  return NextResponse.json({ connections });
 }
 
 export async function DELETE(request: Request) {

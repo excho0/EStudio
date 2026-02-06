@@ -6,6 +6,9 @@ export type ProfilePayload = {
 };
 
 export type ConnectionsResponse = {
-  connected: string[];
-  profiles?: Record<string, { image?: string | null; name?: string | null }>;
+  connections: Array<{
+    provider: string;
+    providerAccountId: string | null;
+    profile: { image?: string | null; name?: string | null } | null;
+  }>;
 };

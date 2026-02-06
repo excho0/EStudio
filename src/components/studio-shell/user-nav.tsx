@@ -45,21 +45,31 @@ export function UserNav() {
   const initials = getInitials(user?.name, user?.email);
 
   const connectionsQuery = useQuery<{
-    profiles?: Record<string, { image?: string | null }>;
+    connections?: Array<{
+      provider: string;
+      profile?: { image?: string | null };
+    }>;
   }>({
     queryKey: queryKeys.profileConnections,
     enabled: status === "authenticated",
     staleTime: 60_000,
     queryFn: async () => {
       return fetchJson<{
-        profiles?: Record<string, { image?: string | null }>;
+        connections?: Array<{
+          provider: string;
+          profile?: { image?: string | null };
+        }>;
       }>("/api/user/profile/connections", undefined, "Unable to load connections.");
     },
   });
 
   const avatarProvider = useMemo(() => {
-    const profiles = connectionsQuery.data?.profiles ?? {};
-    return providerOrder.find((id) => profiles[id]?.image) ?? null;
+    const connections = connectionsQuery.data?.connections ?? [];
+    return (
+      providerOrder.find((id) =>
+        connections.find((connection) => connection.provider === id)?.profile?.image
+      ) ?? null
+    );
   }, [connectionsQuery.data]);
 
   const avatarSrc = useMemo(() => {

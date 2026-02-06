@@ -248,7 +248,6 @@ export async function listContentItems(
       const rows = await db
         .select({
           ...columns,
-          publishesCount: sql<number>`(select count(*) from ${schema.publishes} where ${schema.publishes.contentId} = ${table.id} and ${schema.publishes.userId} = ${table.userId})`,
         })
         .from(table)
         .where(whereClause ?? sql`true`)
@@ -282,7 +281,7 @@ export async function listContentItems(
         items: rows.map((row) =>
           normalizeRow({
             ...row,
-            publishesCount: publishCountMap.get(row.id) ?? row.publishesCount ?? 0,
+            publishesCount: publishCountMap.get(row.id) ?? 0,
           })
         ),
         total: Number(totalRow[0]?.count ?? 0),
@@ -317,7 +316,6 @@ export async function listContentItems(
       const rows = await db
         .select({
           ...columns,
-          publishesCount: sql<number>`(select count(*) from ${sqliteSchema.publishes} where ${sqliteSchema.publishes.contentId} = ${table.id} and ${sqliteSchema.publishes.userId} = ${table.userId})`,
         })
         .from(table)
         .where(whereClause ?? sql`true`)
@@ -351,7 +349,7 @@ export async function listContentItems(
         items: rows.map((row) =>
           normalizeRow({
             ...row,
-            publishesCount: publishCountMap.get(row.id) ?? row.publishesCount ?? 0,
+            publishesCount: publishCountMap.get(row.id) ?? 0,
           })
         ),
         total: Number(totalRow[0]?.count ?? 0),

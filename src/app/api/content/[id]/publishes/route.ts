@@ -149,16 +149,16 @@ const fetchUserAccountPairs = async (userId: string) => {
   }));
 };
 
-const publishSchema = z.object({
-  renderId: z.string().trim().min(1),
-  provider: z.string().trim().min(1),
-  connectionId: z.string().trim().min(1),
-  providerAssetId: z.string().trim().min(1),
-  status: z
-    .enum(["draft", "queued", "publishing", "published", "failed"])
-    .optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+  const publishSchema = z.object({
+    renderId: z.string().trim().min(1),
+    provider: z.string().trim().min(1),
+    connectionId: z.string().trim().min(1),
+    providerAssetId: z.string().trim().min(1).nullable().optional(),
+    status: z
+      .enum(["draft", "queued", "publishing", "published", "failed"])
+      .optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  });
 
 const fetchPublishTargets = async (request: Request) => {
   try {
@@ -196,11 +196,6 @@ export async function GET(
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
 
-  const accountPairs = await fetchUserAccountPairs(user.id);
-  if (accountPairs.length === 0) {
-    return NextResponse.json({ publishes: [] });
-  }
-
   const db = getDrizzleDb();
   const publishes = isPostgres
     ? await (db as PostgresDrizzleDb)
@@ -209,15 +204,7 @@ export async function GET(
         .where(
           and(
             eq(schema.publishes.userId, user.id),
-            eq(schema.publishes.contentId, contentId),
-            or(
-              ...accountPairs.map((account) =>
-                and(
-                  eq(schema.publishes.provider, account.provider),
-                  eq(schema.publishes.providerAccountId, account.providerAccountId)
-                )
-              )
-            )
+            eq(schema.publishes.contentId, contentId)
           )
         )
     : await (db as SqliteDrizzleDb)
@@ -226,15 +213,7 @@ export async function GET(
         .where(
           and(
             eq(sqliteSchema.publishes.userId, user.id),
-            eq(sqliteSchema.publishes.contentId, contentId),
-            or(
-              ...accountPairs.map((account) =>
-                and(
-                  eq(sqliteSchema.publishes.provider, account.provider),
-                  eq(sqliteSchema.publishes.providerAccountId, account.providerAccountId)
-                )
-              )
-            )
+            eq(sqliteSchema.publishes.contentId, contentId)
           )
         );
 
@@ -347,7 +326,7 @@ export async function POST(
         provider: payload.data.provider,
         connectionId: payload.data.connectionId,
         providerAccountId: payload.data.connectionId,
-        providerAssetId: payload.data.providerAssetId,
+        providerAssetId: payload.data.providerAssetId ?? null,
         status,
         metadata,
         createdAt: now,
@@ -366,7 +345,7 @@ export async function POST(
     provider: payload.data.provider,
     connectionId: payload.data.connectionId,
     providerAccountId: payload.data.connectionId,
-    providerAssetId: payload.data.providerAssetId,
+    providerAssetId: payload.data.providerAssetId ?? null,
     status,
     metadata,
     createdAt: now,
