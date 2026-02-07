@@ -29,6 +29,20 @@
       "when": 1770209815596,
       "tag": "0003_superb_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1770466301229,
+      "tag": "0004_broken_freak",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1770478391379,
+      "tag": "0005_quiet_marvel_zombies",
+      "breakpoints": true
     }
   ]
 }
