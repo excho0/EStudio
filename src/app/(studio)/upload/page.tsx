@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { defineStepper } from "@stepperize/react";
 import {
   CheckCircle,
@@ -9,8 +9,6 @@ import {
   Image as ImageIcon,
   Music,
   Sparkles,
-  MoveHorizontal,
-  MoveVertical,
   Monitor,
   Repeat2,
   ZoomIn,
@@ -18,10 +16,9 @@ import {
   Timer,
   Type,
   FastForward,
-  Info,
   Settings2,
   CircleAlert,
-  Clapperboard,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,18 +26,13 @@ import CardUpload, {
   type FileUploadItem,
 } from "@/components/upload/card-upload";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { LabelWithTooltip } from "@/components/content-settings/label-with-tooltip";
+import { IconSelect } from "@/components/ui/icon-select";
 import { useContentList } from "@/components/studio/use-content-list";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -53,25 +45,42 @@ import {
   StepperShell,
 } from "@/components/controls/animated-stepper";
 import { motion } from "framer-motion";
+import {
+  getContentModeDefinition,
+  getContentModeUi,
+  contentModeUiRegistry,
+} from "@/lib/content-modes/ui-registry";
+import type { ContentModeField } from "@/lib/content-modes/ui-registry";
+import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
+import { SettingSliderRow, SettingToggleRow } from "@/components/content-settings/fields";
+import { normalizeSettingsMap, resolveContentSettings } from "@/lib/content-modes";
+import {
+  applyFieldValue,
+  buildFieldMap,
+  getFieldValue as getFieldValueFromSettings,
+} from "@/lib/content-modes/ui-helpers";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const initialForm = {
+type UploadFormValues = {
+  title: string;
+  mode: string;
+  settings: Record<string, Record<string, unknown>>;
+  songDurationSeconds: string;
+  fps: string;
+  width: string;
+  height: string;
+};
+
+const initialForm: UploadFormValues = {
   title: "",
+  mode: "video_loop",
+  settings: {
+    video_loop: resolveContentSettings("video_loop", {}).settings as Record<string, unknown>,
+  },
   songDurationSeconds: "",
-  segmentDurationSeconds: "",
-  videoDurationSeconds: "",
-  fadeDurationSeconds: "1",
-  introFadeSeconds: "0",
-  outroFadeSeconds: "0",
-  audioFadeInSeconds: "0",
-  audioFadeOutSeconds: "0",
-  audioFadeInOffsetSeconds: "0",
-  audioFadeOutOffsetSeconds: "0",
-  playbackRate: "1",
-  overlapPercent: 25,
   fps: "30",
   width: "1280",
   height: "720",
-  scalePercent: "100",
 };
 
 const stepper = defineStepper(
@@ -84,7 +93,7 @@ const stepper = defineStepper(
   {
     id: "media",
     label: "Media",
-    description: "Upload thumbnail, video, and song",
+    description: "Upload required media",
     icon: FileVideo,
   },
   {
@@ -99,44 +108,6 @@ const stepper = defineStepper(
     description: "Upload completed",
     icon: CheckCircle,
   }
-);
-
-const LabelWithTooltip = ({
-  htmlFor,
-  text,
-  tip,
-  invalid,
-}: {
-  htmlFor: string;
-  text: string;
-  tip: string;
-  invalid?: boolean;
-}) => (
-  <div className="flex items-center gap-2">
-    <Label
-      htmlFor={htmlFor}
-      className={cn(invalid && "text-rose-600 dark:text-rose-300")}
-    >
-      {text}
-    </Label>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300",
-            invalid && "text-rose-400 hover:text-rose-500 dark:text-rose-300"
-          )}
-          aria-label={`${text} info`}
-        >
-          <Info className="h-3.5 w-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6}>
-        {tip}
-      </TooltipContent>
-    </Tooltip>
-  </div>
 );
 
 const getMediaDuration = (file: File, kind: "audio" | "video") =>
@@ -160,7 +131,7 @@ export default function DashboardUploadPage() {
   const methods = stepper.useStepper();
   const { refresh } = useContentList();
   const [submitting, setSubmitting] = useState(false);
-  const [formValues, setFormValues] = useState(initialForm);
+  const [formValues, setFormValues] = useState<UploadFormValues>(initialForm);
   const [draftPaths, setDraftPaths] = useState<{
     thumbnailPath?: string;
     videoPath?: string;
@@ -173,16 +144,147 @@ export default function DashboardUploadPage() {
     {}
   );
   const [uploadKey, setUploadKey] = useState(0);
-  const isReadyToUpload =
-    !!draftPaths.thumbnailPath &&
-    !!draftPaths.videoPath &&
-    !!draftPaths.songPath &&
-    !!formValues.songDurationSeconds &&
-    !!formValues.segmentDurationSeconds;
   const isComplete = methods.current.id === "success";
   const thumbnailPreview = mediaFiles.find((file) =>
     file.file.type?.startsWith("image/")
   )?.preview;
+  const modeUi = getContentModeUi(formValues.mode || "video_loop");
+  const modeDefinition = getContentModeDefinition(formValues.mode || "video_loop");
+  const requiredAssets = modeDefinition.requiredAssets;
+  const requiresThumbnail = requiredAssets.includes("thumbnail");
+  const requiresVideo = requiredAssets.includes("video");
+  const requiresSong = requiredAssets.includes("song");
+  const fieldMap = useMemo(() => buildFieldMap(modeUi.sections), [modeUi.sections]);
+  const modeOptions = useMemo(() => {
+    return Object.keys(contentModeUiRegistry).map((id) => {
+      const def = getContentModeDefinition(id);
+      const ui = contentModeUiRegistry[id];
+      return {
+        value: id,
+        label: def.label,
+        icon: ui?.icon ?? SlidersHorizontal,
+      };
+    });
+  }, []);
+
+  const resolvedSettings = useMemo(() => {
+    try {
+      return resolveContentSettings(formValues.mode, formValues.settings)
+        .settings as Record<string, unknown>;
+    } catch {
+      const fallback = getContentModeDefinition(formValues.mode).defaults;
+      return fallback as Record<string, unknown>;
+    }
+  }, [formValues.mode, formValues.settings]);
+  const settingsMap = useMemo(
+    () => normalizeSettingsMap(formValues.mode, formValues.settings),
+    [formValues.mode, formValues.settings]
+  );
+  const currentSettings = useMemo(
+    () =>
+      (settingsMap[formValues.mode ?? "video_loop"] ?? {}) as Record<string, unknown>,
+    [settingsMap, formValues.mode]
+  );
+  const getFieldValue = (key: string) =>
+    getFieldValueFromSettings(fieldMap, currentSettings, key);
+  const updateFormValue = (key: string, value: string | number | boolean) => {
+    setFormValues((current) => {
+      const settingsMap = normalizeSettingsMap(current.mode, current.settings);
+      const currentSettings =
+        (settingsMap[current.mode] as Record<string, unknown>) ?? {};
+      const nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
+      return {
+        ...current,
+        settings: {
+          ...settingsMap,
+          [current.mode]: nextSettings,
+        },
+      };
+    });
+  };
+  const getSettingNumber = (key: string, fallback: number) => {
+    const value = resolvedSettings[key];
+    const parsed = typeof value === "string" ? Number(value) : Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const isReadyToUpload =
+    (!requiresThumbnail || !!draftPaths.thumbnailPath) &&
+    (!requiresVideo || !!draftPaths.videoPath) &&
+    (!requiresSong || !!draftPaths.songPath) &&
+    (!requiresSong || Number(formValues.songDurationSeconds || 0) > 0) &&
+    (!requiresVideo || getSettingNumber("segmentDurationSeconds", 0) > 0);
+  const reviewWidth = Math.round(Number(formValues.width || 1280));
+  const reviewHeight = Math.round(Number(formValues.height || 720));
+  const reviewScale = Math.round(getSettingNumber("scalePercent", 100));
+  const reviewFps = Math.round(Number(formValues.fps || 30));
+  const reviewOverlap = Math.round(Number(getFieldValue("overlapRatio")));
+  const reviewFade = getSettingNumber("fadeDurationSeconds", 0);
+  const reviewIntroFade = getSettingNumber("introFadeSeconds", 0);
+  const reviewOutroFade = getSettingNumber("outroFadeSeconds", 0);
+  const reviewPlaybackRate = getSettingNumber("playbackRate", 1);
+  const reviewAudioFadeIn = getSettingNumber("audioFadeInSeconds", 0);
+  const reviewAudioFadeOut = getSettingNumber("audioFadeOutSeconds", 0);
+  const reviewAudioFadeInOffset = getSettingNumber("audioFadeInOffsetSeconds", 0);
+  const reviewAudioFadeOutOffset = getSettingNumber("audioFadeOutOffsetSeconds", 0);
+
+  const renderModeField = (field: ContentModeField) => {
+    const disabled =
+      (field.key === "visualizationBars" &&
+        !Boolean(resolvedSettings.visualizationEnabled)) ||
+      ((field.key === "edgeRaysIntensity" ||
+        field.key === "edgeRaysVocalBalance") &&
+        !Boolean(resolvedSettings.edgeRaysEnabled));
+    if (field.input === "toggle") {
+      return (
+        <SettingToggleRow
+          key={field.key}
+          icon={Eye}
+          label={field.label}
+          tip={field.tooltip ?? ""}
+          checked={Boolean(resolvedSettings[field.key])}
+          onCheckedChange={(checked) => updateFormValue(field.key, checked)}
+        />
+      );
+    }
+    if (field.input === "slider") {
+      return (
+        <SettingSliderRow
+          key={field.key}
+          id={field.key}
+          label={field.label}
+          tip={field.tooltip ?? ""}
+          value={Number(getFieldValue(field.key))}
+          min={field.min ?? 0}
+          max={field.max ?? 100}
+          step={field.step ?? 1}
+          suffix={field.suffix}
+          disabled={disabled}
+          onValueChange={(value) => updateFormValue(field.key, value)}
+        />
+      );
+    }
+    return (
+      <div key={field.key} className="grid gap-2">
+        <LabelWithTooltip
+          htmlFor={field.key}
+          text={field.label}
+          tip={field.tooltip ?? ""}
+        />
+        <InputGroup className="bg-white dark:bg-white/5">
+          <InputGroupInput
+            id={field.key}
+            type="number"
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            value={String(getFieldValue(field.key) ?? "")}
+            onChange={(event) => updateFormValue(field.key, event.target.value)}
+          />
+        </InputGroup>
+      </div>
+    );
+  };
+
 
   const handleMediaFilesChange = (files: FileUploadItem[]) => {
     void (async () => {
@@ -201,48 +303,70 @@ export default function DashboardUploadPage() {
         realFiles.find((entry) => entry.file.type.startsWith("audio/"))?.file ??
         null;
 
-      if (!imageFile) {
+      if (!imageFile && requiresThumbnail) {
         setDraftPaths((current) => ({ ...current, thumbnailPath: undefined }));
       }
-      if (!videoFile) {
+      if (!videoFile && requiresVideo) {
         setDraftPaths((current) => ({ ...current, videoPath: undefined }));
       }
-      if (!audioFile) {
+      if (!audioFile && requiresSong) {
         setDraftPaths((current) => ({ ...current, songPath: undefined }));
       }
 
-      if (videoFile) {
+      if (videoFile && requiresVideo) {
         const duration = await getMediaDuration(videoFile, "video");
-        const segmentDurationSeconds = duration ? duration.toFixed(2) : "";
+        const segmentDurationSeconds = duration ? Number(duration.toFixed(2)) : 0;
         setFormValues((current) => {
-          const next = {
+          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
+          const currentSettings =
+            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
+          return {
             ...current,
-            segmentDurationSeconds,
-            videoDurationSeconds: segmentDurationSeconds,
+            settings: {
+              ...settingsMap,
+              [current.mode]: {
+                ...currentSettings,
+                segmentDurationSeconds: segmentDurationSeconds || undefined,
+                videoDurationSeconds: segmentDurationSeconds || undefined,
+              },
+            },
           };
-          return next;
         });
-      } else {
+      } else if (requiresVideo) {
         setFormValues((current) => {
-          const next = {
+          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
+          const currentSettings =
+            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
+          return {
             ...current,
-            segmentDurationSeconds: "",
-            videoDurationSeconds: "",
+            settings: {
+              ...settingsMap,
+              [current.mode]: {
+                ...currentSettings,
+                segmentDurationSeconds: undefined,
+                videoDurationSeconds: undefined,
+              },
+            },
           };
-          return next;
         });
       }
 
-      if (audioFile) {
+      if (audioFile && requiresSong) {
         const duration = await getMediaDuration(audioFile, "audio");
-        const songDurationSeconds = duration ? duration.toFixed(2) : "";
+        const songDurationSeconds = duration ? Number(duration.toFixed(2)) : 0;
         setFormValues((current) => {
-          const next = { ...current, songDurationSeconds };
+          const next = {
+            ...current,
+            songDurationSeconds: String(songDurationSeconds),
+          };
           return next;
         });
-      } else {
+      } else if (requiresSong) {
         setFormValues((current) => {
-          const next = { ...current, songDurationSeconds: "" };
+          const next = {
+            ...current,
+          songDurationSeconds: "",
+        };
           return next;
         });
       }
@@ -360,39 +484,58 @@ export default function DashboardUploadPage() {
       return;
     }
 
-    if (!draftPaths.thumbnailPath || !draftPaths.videoPath || !draftPaths.songPath) {
-      setError("Please select a thumbnail, video, and song file.");
-      toast.error("Please select a thumbnail, video, and song file.");
+    if (
+      (requiresThumbnail && !draftPaths.thumbnailPath) ||
+      (requiresVideo && !draftPaths.videoPath) ||
+      (requiresSong && !draftPaths.songPath)
+    ) {
+      const missing = [
+        requiresThumbnail ? "thumbnail" : null,
+        requiresVideo ? "video" : null,
+        requiresSong ? "song" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      setError(`Please select ${missing}.`);
+      toast.error(`Please select ${missing}.`);
       return;
     }
-    if (!formValues.songDurationSeconds || !formValues.segmentDurationSeconds) {
+    if (
+      (requiresSong && Number(formValues.songDurationSeconds || 0) <= 0) ||
+      (requiresVideo && getSettingNumber("segmentDurationSeconds", 0) <= 0)
+    ) {
       setError("Unable to detect media durations. Please reselect the files.");
       toast.error("Unable to detect media durations. Please reselect the files.");
       return;
     }
 
-    const payload = {
+    const resolved = resolveContentSettings(formValues.mode, formValues.settings);
+    const settingsMap = normalizeSettingsMap(formValues.mode, formValues.settings);
+    settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
+    const payload: Record<string, unknown> = {
       title: formValues.title || "Untitled",
       thumbnailPath: draftPaths.thumbnailPath,
       videoPath: draftPaths.videoPath,
       songPath: draftPaths.songPath,
-      songDurationSeconds: Number(formValues.songDurationSeconds),
-      segmentDurationSeconds: Number(formValues.segmentDurationSeconds),
-      videoDurationSeconds: Number(formValues.videoDurationSeconds),
-      fadeDurationSeconds: Number(formValues.fadeDurationSeconds),
-      introFadeSeconds: Number(formValues.introFadeSeconds),
-      outroFadeSeconds: Number(formValues.outroFadeSeconds),
-      audioFadeInSeconds: Number(formValues.audioFadeInSeconds),
-      audioFadeOutSeconds: Number(formValues.audioFadeOutSeconds),
-      audioFadeInOffsetSeconds: Number(formValues.audioFadeInOffsetSeconds),
-      audioFadeOutOffsetSeconds: Number(formValues.audioFadeOutOffsetSeconds),
-      playbackRate: Number(formValues.playbackRate),
-      overlapRatio: Number(formValues.overlapPercent / 100),
-      fps: Number(formValues.fps),
-      width: Number(formValues.width),
-      height: Number(formValues.height),
-      scalePercent: Number(formValues.scalePercent),
+      mode: resolved.mode,
+      settings: settingsMap,
     };
+    const toOptionalNumber = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const songDurationSeconds = toOptionalNumber(formValues.songDurationSeconds);
+    if (songDurationSeconds !== undefined) {
+      payload.songDurationSeconds = songDurationSeconds;
+    }
+    const fps = toOptionalNumber(formValues.fps);
+    if (fps !== undefined) payload.fps = fps;
+    const width = toOptionalNumber(formValues.width);
+    if (width !== undefined) payload.width = width;
+    const height = toOptionalNumber(formValues.height);
+    if (height !== undefined) payload.height = height;
 
     setSubmitting(true);
     const response = await fetch("/api/content", {
@@ -430,26 +573,30 @@ export default function DashboardUploadPage() {
       const hasImage = mediaFiles.some((file) =>
         file.file.type?.startsWith("image/")
       );
-      const hasVideo = mediaFiles.some((file) =>
-        file.file.type?.startsWith("video/")
-      );
-      const hasAudio = mediaFiles.some((file) =>
-        file.file.type?.startsWith("audio/")
-      );
+    const hasVideo = mediaFiles.some((file) =>
+      file.file.type?.startsWith("video/")
+    );
+    const hasAudio = mediaFiles.some((file) =>
+      file.file.type?.startsWith("audio/")
+    );
 
-      if (!hasImage || !hasVideo || !hasAudio) {
+      if (
+        (requiresThumbnail && !hasImage) ||
+        (requiresVideo && !hasVideo) ||
+        (requiresSong && !hasAudio)
+      ) {
         const missing = [
-          !hasImage ? "image" : null,
-          !hasVideo ? "video" : null,
-          !hasAudio ? "song" : null,
+          requiresThumbnail && !hasImage ? "image" : null,
+          requiresVideo && !hasVideo ? "video" : null,
+          requiresSong && !hasAudio ? "song" : null,
         ].filter(Boolean);
         errorMessage = `Missing ${missing.join(", ")}. Please add ${missing.join(
           " and "
         )}.`;
         nextErrors.media = errorMessage;
       } else if (
-        !formValues.songDurationSeconds ||
-        !formValues.segmentDurationSeconds
+        (requiresSong && Number(formValues.songDurationSeconds || 0) <= 0) ||
+        (requiresVideo && getSettingNumber("segmentDurationSeconds", 0) <= 0)
       ) {
         errorMessage = "We couldn't detect durations. Please reselect your media.";
         nextErrors.media = errorMessage;
@@ -532,277 +679,71 @@ export default function DashboardUploadPage() {
                     </InputGroupAddon>
                   </InputGroup>
                 </div>
+                <div className="grid gap-2 mt-4">
+                  <LabelWithTooltip
+                    htmlFor="mode"
+                    text="Mode"
+                    tip="Select which settings profile this content uses."
+                  />
+                  <IconSelect
+                    value={formValues.mode}
+                    onValueChange={(value) =>
+                      setFormValues((current) => {
+                        const settingsMap = normalizeSettingsMap(
+                          current.mode,
+                          current.settings
+                        );
+                        if (!settingsMap[value]) {
+                          const defaults = resolveContentSettings(value, {}).settings;
+                          return {
+                            ...current,
+                            mode: value,
+                            settings: {
+                              ...settingsMap,
+                              [value]: defaults,
+                            },
+                          };
+                        }
+                        return { ...current, mode: value, settings: settingsMap };
+                      })
+                    }
+                    id="mode"
+                    placeholder="Select mode"
+                    triggerClassName="w-full"
+                    options={modeOptions}
+                  />
+                </div>
+                <div className="my-4 space-y-3">
+                  <ModeSettingsRenderer
+                    sections={modeUi.sections}
+                    renderField={renderModeField}
+                  />
+                </div>
 
-                <div className="mt-4 space-y-3">
-
-
-                  <Collapsible
-                    className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                  >
-                    <CollapsibleTrigger
-                      title="Intro + Outro"
-                      description="Fade timing"
-                      icon={Clapperboard}
-                    />
-                    <CollapsibleContent className="sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="introFadeSeconds"
-                          text="Intro fade (sec)"
-                          tip="Video fade in at the start of the sequence."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="introFadeSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.introFadeSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                introFadeSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="outroFadeSeconds"
-                          text="Outro fade (sec)"
-                          tip="Video fade out at the end of the sequence."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="outroFadeSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.outroFadeSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                outroFadeSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="audioFadeInSeconds"
-                          text="Audio fade in (sec)"
-                          tip="How long the audio takes to reach full volume."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="audioFadeInSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.audioFadeInSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                audioFadeInSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="audioFadeOutSeconds"
-                          text="Audio fade out (sec)"
-                          tip="How long the audio takes to fade to silence."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="audioFadeOutSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.audioFadeOutSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                audioFadeOutSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="audioFadeInOffsetSeconds"
-                          text="Audio fade-in offset (sec)"
-                          tip="Delay the fade-in start by this many seconds."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="audioFadeInOffsetSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.audioFadeInOffsetSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                audioFadeInOffsetSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="audioFadeOutOffsetSeconds"
-                          text="Audio fade-out offset (sec)"
-                          tip="Start the fade-out this many seconds before the end."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="audioFadeOutOffsetSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.audioFadeOutOffsetSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                audioFadeOutOffsetSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                  >
-                    <CollapsibleTrigger
-                      title="Loop"
-                      description="Fade + overlap"
-                      icon={Repeat2}
-                    />
-                    <CollapsibleContent className="sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="fadeDurationSeconds"
-                          text="Fade (sec)"
-                          tip="How long the crossfade lasts when switching clips."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="fadeDurationSeconds"
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formValues.fadeDurationSeconds}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                fadeDurationSeconds: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2 sm:col-span-2">
-                        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                          <LabelWithTooltip
-                            htmlFor="overlapPercent"
-                            text="Overlap"
-                            tip="How much the next clip starts before the current ends."
-                          />
-                          <span>{formValues.overlapPercent}%</span>
-                        </div>
-                        <Slider
-                          id="overlapPercent"
-                          min={0}
-                          max={90}
-                          step={1}
-                          value={[formValues.overlapPercent]}
-                          onValueChange={(value) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              overlapPercent: value[0] ?? 0,
-                            }))
-                          }
-                        />
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                  >
-                    <CollapsibleTrigger
-                      title="Playback"
-                      description="Speed"
-                      icon={SlidersHorizontal}
-                    />
-                    <CollapsibleContent className="sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="playbackRate"
-                          text="Playback rate"
-                          tip="Speed of the video. 1 = normal, 0.5 = slow, 2 = fast."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="playbackRate"
-                            type="number"
-                            min="0.1"
-                            step="0.05"
-                            value={formValues.playbackRate}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                playbackRate: event.target.value,
-                              }))
-                            }
-                          />
-                          <InputGroupAddon>
-                            <FastForward />
-                          </InputGroupAddon>
-                        </InputGroup>
-                      </div>
+                <Collapsible
+                  // defaultOpen
+                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
+                >
+                  <CollapsibleTrigger
+                    title="Output"
+                    description="Frames per second and render size."
+                    icon={Monitor}
+                  />
+                  <CollapsibleContent>
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="fps"
                           text="FPS"
-                          tip="Frames per second. Higher is smoother but heavier."
+                          tip="Frames per second."
                         />
                         <InputGroup className="bg-white dark:bg-white/5">
                           <InputGroupInput
                             id="fps"
                             type="number"
-                            min="1"
+                            min={12}
+                            max={120}
+                            step={1}
                             value={formValues.fps}
                             onChange={(event) =>
                               setFormValues((current) => ({
@@ -811,34 +752,20 @@ export default function DashboardUploadPage() {
                               }))
                             }
                           />
-                          <InputGroupAddon>
-                            <Timer />
-                          </InputGroupAddon>
                         </InputGroup>
                       </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                  >
-                    <CollapsibleTrigger
-                      title="Output"
-                      description="Resolution"
-                      icon={Monitor}
-                    />
-                    <CollapsibleContent className="sm:grid-cols-2">
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="width"
                           text="Width"
-                          tip="Final video width (pixels)."
+                          tip="Output width in pixels."
                         />
                         <InputGroup className="bg-white dark:bg-white/5">
                           <InputGroupInput
                             id="width"
                             type="number"
-                            min="1"
+                            min={320}
+                            step={1}
                             value={formValues.width}
                             onChange={(event) =>
                               setFormValues((current) => ({
@@ -847,22 +774,20 @@ export default function DashboardUploadPage() {
                               }))
                             }
                           />
-                          <InputGroupAddon>
-                            <MoveHorizontal />
-                          </InputGroupAddon>
                         </InputGroup>
                       </div>
                       <div className="grid gap-2">
                         <LabelWithTooltip
                           htmlFor="height"
                           text="Height"
-                          tip="Final video height (pixels)."
+                          tip="Output height in pixels."
                         />
                         <InputGroup className="bg-white dark:bg-white/5">
                           <InputGroupInput
                             id="height"
                             type="number"
-                            min="1"
+                            min={240}
+                            step={1}
                             value={formValues.height}
                             onChange={(event) =>
                               setFormValues((current) => ({
@@ -871,39 +796,11 @@ export default function DashboardUploadPage() {
                               }))
                             }
                           />
-                          <InputGroupAddon>
-                            <MoveVertical />
-                          </InputGroupAddon>
                         </InputGroup>
                       </div>
-                      <div className="grid gap-2 sm:col-span-2">
-                        <div className="flex items-center justify-between">
-                          <LabelWithTooltip
-                            htmlFor="scalePercent"
-                            text="Scale (%)"
-                            tip="Zoom the video in or out. 100% keeps the original size."
-                          />
-                          <span className="text-xs text-slate-500 dark:text-zinc-400">
-                            {formValues.scalePercent || "100"}%
-                          </span>
-                        </div>
-                        <Slider
-                          id="scalePercent"
-                          min={0}
-                          max={200}
-                          step={1}
-                          value={[Number(formValues.scalePercent) || 100]}
-                          onValueChange={(value) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              scalePercent: String(value[0]),
-                            }))
-                          }
-                        />
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
                     </StepperMotion>
                   ))}
                   {methods.when("media", () => (
@@ -920,12 +817,22 @@ export default function DashboardUploadPage() {
                   </Label>
                   <CardUpload
                     key={`media-${uploadKey}`}
-                    maxFiles={3}
+                    maxFiles={requiredAssets.length}
                     maxSize={10 * 1024 * 1024 * 1024} // 10GB
-                    accept="image/*,video/*,audio/*"
+                    accept={[
+                      requiresThumbnail ? "image/*" : null,
+                      requiresVideo ? "video/*" : null,
+                      requiresSong ? "audio/*" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(",")}
                     multiple
                     simulateUpload={false}
-                    typeLimits={{ "image/": 1, "video/": 1, "audio/": 1 }}
+                    typeLimits={{
+                      ...(requiresThumbnail ? { "image/": 1 } : {}),
+                      ...(requiresVideo ? { "video/": 1 } : {}),
+                      ...(requiresSong ? { "audio/": 1 } : {}),
+                    }}
                     initialFiles={mediaFiles}
                     onFilesChange={handleMediaFilesChange}
                     uploadHandler={handleUploadFile}
@@ -971,32 +878,6 @@ export default function DashboardUploadPage() {
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-                            <Music className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-                              Song Length
-                            </div>
-                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.songDurationSeconds || "--"}s
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
-                            <Film className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-                              Segment
-                            </div>
-                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.segmentDurationSeconds || "--"}s
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
                           <span className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                             <Monitor className="h-4 w-4" />
                           </span>
@@ -1005,7 +886,7 @@ export default function DashboardUploadPage() {
                               Resolution
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.width} x {formValues.height}
+                              {reviewWidth} x {reviewHeight}
                             </div>
                           </div>
                         </div>
@@ -1018,7 +899,7 @@ export default function DashboardUploadPage() {
                               Scale
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.scalePercent || "100"}%
+                              {reviewScale}%
                             </div>
                           </div>
                         </div>
@@ -1031,7 +912,7 @@ export default function DashboardUploadPage() {
                               FPS
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.fps}
+                              {reviewFps}
                             </div>
                           </div>
                         </div>
@@ -1044,7 +925,7 @@ export default function DashboardUploadPage() {
                               Overlap
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.overlapPercent}%
+                              {reviewOverlap}%
                             </div>
                           </div>
                         </div>
@@ -1057,7 +938,7 @@ export default function DashboardUploadPage() {
                               Fade
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.fadeDurationSeconds || "--"}s
+                              {reviewFade || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1070,7 +951,7 @@ export default function DashboardUploadPage() {
                               Playback
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.playbackRate || "--"}x
+                              {reviewPlaybackRate || "--"}x
                             </div>
                           </div>
                         </div>
@@ -1083,7 +964,7 @@ export default function DashboardUploadPage() {
                               Intro Fade
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.introFadeSeconds || "--"}s
+                              {reviewIntroFade || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1096,7 +977,7 @@ export default function DashboardUploadPage() {
                               Outro Fade
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.outroFadeSeconds || "--"}s
+                              {reviewOutroFade || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1109,7 +990,7 @@ export default function DashboardUploadPage() {
                               Audio Fade In
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.audioFadeInSeconds || "--"}s
+                              {reviewAudioFadeIn || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1122,7 +1003,7 @@ export default function DashboardUploadPage() {
                               Audio Fade Out
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.audioFadeOutSeconds || "--"}s
+                              {reviewAudioFadeOut || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1135,7 +1016,7 @@ export default function DashboardUploadPage() {
                               Audio In Offset
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.audioFadeInOffsetSeconds || "--"}s
+                              {reviewAudioFadeInOffset || "--"}s
                             </div>
                           </div>
                         </div>
@@ -1148,7 +1029,7 @@ export default function DashboardUploadPage() {
                               Audio Out Offset
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {formValues.audioFadeOutOffsetSeconds || "--"}s
+                              {reviewAudioFadeOutOffset || "--"}s
                             </div>
                           </div>
                         </div>
