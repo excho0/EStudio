@@ -10,12 +10,21 @@ import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
+  contentCreateFormSchema,
   contentCreateSchema,
   contentQuerySchema,
   createContentItem,
   listContentItems,
+  parseContentSettingsString,
 } from "@/lib/data/content";
 import { getSessionUser } from "@/lib/auth-session";
+import {
+  DEFAULT_CONTENT_MODE,
+  legacyColumnsToSettings,
+  resolveContentSettings,
+  normalizeSettingsMap,
+  settingsToLegacyColumns,
+} from "@/lib/content-modes";
 
 export const runtime = "nodejs";
 
@@ -101,6 +110,8 @@ export async function POST(request: Request) {
           width?: number;
           height?: number;
           scalePercent?: number;
+          mode?: string;
+          settings?: Record<string, unknown>;
         }
       | null;
 
@@ -121,8 +132,15 @@ export async function POST(request: Request) {
       ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
       : null;
 
+    const mode = payload.mode ?? DEFAULT_CONTENT_MODE;
+    const settingsInput =
+      payload.settings ?? legacyColumnsToSettings(mode, payload as Record<string, unknown>);
+    const resolved = resolveContentSettings(mode, settingsInput);
+    const settingsMap = normalizeSettingsMap(mode, settingsInput);
+    settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
+    const legacySettings = settingsToLegacyColumns(resolved.mode, resolved.settings);
     const overlapRatioValue =
-      typeof payload.overlapRatio === "number" ? payload.overlapRatio : null;
+      typeof legacySettings.overlapRatio === "number" ? legacySettings.overlapRatio : null;
     const item = contentCreateSchema.parse({
       id,
       userId: user.id,
@@ -130,52 +148,13 @@ export async function POST(request: Request) {
       status: "uploaded",
       colorPalette,
       paletteMode: "auto",
-      songDurationSeconds: Number.isFinite(payload.songDurationSeconds)
-        ? payload.songDurationSeconds
-        : 0,
-      segmentDurationSeconds: Number.isFinite(payload.segmentDurationSeconds)
-        ? payload.segmentDurationSeconds
-        : 4,
-      videoDurationSeconds: Number.isFinite(payload.videoDurationSeconds)
-        ? payload.videoDurationSeconds
-        : Number.isFinite(payload.segmentDurationSeconds)
-          ? payload.segmentDurationSeconds
-          : 0,
-      fadeDurationSeconds: Number.isFinite(payload.fadeDurationSeconds)
-        ? payload.fadeDurationSeconds
-        : 1,
-      introFadeSeconds: Number.isFinite(payload.introFadeSeconds)
-        ? payload.introFadeSeconds
-        : 0,
-      outroFadeSeconds: Number.isFinite(payload.outroFadeSeconds)
-        ? payload.outroFadeSeconds
-        : 0,
-      audioFadeInSeconds: Number.isFinite(payload.audioFadeInSeconds)
-        ? payload.audioFadeInSeconds
-        : 0,
-      audioFadeOutSeconds: Number.isFinite(payload.audioFadeOutSeconds)
-        ? payload.audioFadeOutSeconds
-        : 0,
-      audioFadeInOffsetSeconds: Number.isFinite(payload.audioFadeInOffsetSeconds)
-        ? payload.audioFadeInOffsetSeconds
-        : 0,
-      audioFadeOutOffsetSeconds: Number.isFinite(payload.audioFadeOutOffsetSeconds)
-        ? payload.audioFadeOutOffsetSeconds
-        : 0,
+      mode: resolved.mode,
+      settings: settingsMap,
+      ...legacySettings,
       overlapRatio:
         overlapRatioValue !== null
           ? Math.min(0.9, Math.max(0, overlapRatioValue))
           : null,
-      playbackRate:
-        Number.isFinite(payload.playbackRate) && (payload.playbackRate ?? 0) > 0
-          ? payload.playbackRate ?? 1
-          : 1,
-      fps: Number.isFinite(payload.fps) ? payload.fps : 30,
-      width: Number.isFinite(payload.width) ? payload.width : 1280,
-      height: Number.isFinite(payload.height) ? payload.height : 720,
-      scalePercent: Number.isFinite(payload.scalePercent)
-        ? payload.scalePercent
-        : 100,
     });
 
     const created = await createContentItem(item);
@@ -193,7 +172,10 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
 
-  const title = String(formData.get("title") ?? "Untitled");
+  const rawEntries = Object.fromEntries(formData.entries());
+  const parsedForm = contentCreateFormSchema.parse(rawEntries);
+
+  const title = parsedForm.title;
   const thumbnail = formData.get("thumbnail");
   const video = formData.get("video");
   const song = formData.get("song");
@@ -205,25 +187,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const songDurationSeconds = Number(formData.get("songDurationSeconds") ?? 0);
-  const videoDurationSeconds = Number(formData.get("videoDurationSeconds") ?? 0);
-  const segmentDurationSeconds = Number(formData.get("segmentDurationSeconds") ?? 4);
-  const fadeDurationSeconds = Number(formData.get("fadeDurationSeconds") ?? 1);
-  const introFadeSeconds = Number(formData.get("introFadeSeconds") ?? 0);
-  const outroFadeSeconds = Number(formData.get("outroFadeSeconds") ?? 0);
-  const audioFadeInSeconds = Number(formData.get("audioFadeInSeconds") ?? 0);
-  const audioFadeOutSeconds = Number(formData.get("audioFadeOutSeconds") ?? 0);
-  const audioFadeInOffsetSeconds = Number(
-    formData.get("audioFadeInOffsetSeconds") ?? 0
-  );
-  const audioFadeOutOffsetSeconds = Number(
-    formData.get("audioFadeOutOffsetSeconds") ?? 0
-  );
-  const overlapRatio = Number(formData.get("overlapRatio") ?? NaN);
-  const playbackRate = Number(formData.get("playbackRate") ?? 1);
-  const fps = Number(formData.get("fps") ?? 30);
-  const width = Number(formData.get("width") ?? 1280);
-  const height = Number(formData.get("height") ?? 720);
+  const { songDurationSeconds, mode, settings: settingsRaw } = parsedForm;
 
   const id = randomUUID();
   const [thumbnailPath, videoPath, songPath] = await Promise.all([
@@ -236,6 +200,20 @@ export async function POST(request: Request) {
     ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
     : null;
 
+  const settingsInput = parseContentSettingsString(settingsRaw);
+  const legacyFallback = legacyColumnsToSettings(mode, {
+    songDurationSeconds,
+  });
+  const resolved = resolveContentSettings(
+    mode,
+    settingsInput ?? legacyFallback
+  );
+  const settingsMap = normalizeSettingsMap(mode, settingsInput ?? legacyFallback);
+  settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
+  const legacySettings = settingsToLegacyColumns(resolved.mode, resolved.settings);
+  const overlapRatioValue =
+    typeof legacySettings.overlapRatio === "number" ? legacySettings.overlapRatio : null;
+
   const item = contentCreateSchema.parse({
     id,
     userId: user.id,
@@ -243,46 +221,13 @@ export async function POST(request: Request) {
     status: "uploaded",
     colorPalette,
     paletteMode: "auto",
-    songDurationSeconds: Number.isFinite(songDurationSeconds)
-      ? songDurationSeconds
-      : 0,
-    segmentDurationSeconds: Number.isFinite(segmentDurationSeconds)
-      ? segmentDurationSeconds
-      : 4,
-    videoDurationSeconds: Number.isFinite(videoDurationSeconds)
-      ? videoDurationSeconds
-      : Number.isFinite(segmentDurationSeconds)
-        ? segmentDurationSeconds
-        : 0,
-    fadeDurationSeconds: Number.isFinite(fadeDurationSeconds)
-      ? fadeDurationSeconds
-      : 1,
-    introFadeSeconds: Number.isFinite(introFadeSeconds) ? introFadeSeconds : 0,
-    outroFadeSeconds: Number.isFinite(outroFadeSeconds) ? outroFadeSeconds : 0,
-    audioFadeInSeconds: Number.isFinite(audioFadeInSeconds)
-      ? audioFadeInSeconds
-      : 0,
-    audioFadeOutSeconds: Number.isFinite(audioFadeOutSeconds)
-      ? audioFadeOutSeconds
-      : 0,
-    audioFadeInOffsetSeconds: Number.isFinite(audioFadeInOffsetSeconds)
-      ? audioFadeInOffsetSeconds
-      : 0,
-    audioFadeOutOffsetSeconds: Number.isFinite(audioFadeOutOffsetSeconds)
-      ? audioFadeOutOffsetSeconds
-      : 0,
-    overlapRatio: Number.isFinite(overlapRatio)
-      ? Math.min(0.9, Math.max(0, overlapRatio))
-      : null,
-    playbackRate: Number.isFinite(playbackRate) && playbackRate > 0
-      ? playbackRate
-      : 1,
-    fps: Number.isFinite(fps) ? fps : 30,
-    width: Number.isFinite(width) ? width : 1280,
-    height: Number.isFinite(height) ? height : 720,
-    scalePercent: Number.isFinite(Number(formData.get("scalePercent") ?? 100))
-      ? Number(formData.get("scalePercent") ?? 100)
-      : 100,
+    mode: resolved.mode,
+    settings: settingsMap,
+    ...legacySettings,
+    overlapRatio:
+      overlapRatioValue !== null
+        ? Math.min(0.9, Math.max(0, overlapRatioValue))
+        : null,
   });
 
   const created = await createContentItem(item);

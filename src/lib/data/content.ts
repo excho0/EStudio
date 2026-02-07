@@ -52,25 +52,10 @@ export const contentItemSchema = z.object({
   updatedAt: z.string(),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: z.enum(["auto", "manual"]).default("auto"),
+  mode: z.string().default("video_loop"),
+  settings: z.record(z.string(), z.unknown()).optional().nullable(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
   songDurationSeconds: z.number().nonnegative(),
-  segmentDurationSeconds: z.number().nonnegative(),
-  fadeDurationSeconds: z.number().nonnegative(),
-  introFadeSeconds: z.number().nonnegative(),
-  outroFadeSeconds: z.number().nonnegative(),
-  audioFadeInSeconds: z.number().nonnegative(),
-  audioFadeOutSeconds: z.number().nonnegative(),
-  audioFadeInOffsetSeconds: z.number().nonnegative(),
-  audioFadeOutOffsetSeconds: z.number().nonnegative(),
-  scalePercent: z.number().nonnegative(),
-  visualizationEnabled: z.boolean().default(true),
-  visualizationBars: z.number().int().positive().default(128),
-  edgeRaysEnabled: z.boolean().default(true),
-  edgeRaysIntensity: z.number().min(0).max(1).default(0.85),
-  edgeRaysVocalBalance: z.number().min(0).max(1).default(0.6),
-  videoDurationSeconds: z.number().nonnegative().optional().nullable(),
-  overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
-  playbackRate: z.number().positive(),
   fps: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -94,24 +79,9 @@ export const contentCreateSchema = z.object({
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).default("uploaded"),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: z.enum(["auto", "manual"]).default("auto"),
+  mode: z.string().default("video_loop"),
+  settings: z.record(z.string(), z.unknown()).optional().nullable(),
   songDurationSeconds: z.number().nonnegative().default(0),
-  segmentDurationSeconds: z.number().nonnegative().default(4),
-  fadeDurationSeconds: z.number().nonnegative().default(1),
-  introFadeSeconds: z.number().nonnegative().default(0),
-  outroFadeSeconds: z.number().nonnegative().default(0),
-  audioFadeInSeconds: z.number().nonnegative().default(0),
-  audioFadeOutSeconds: z.number().nonnegative().default(0),
-  audioFadeInOffsetSeconds: z.number().nonnegative().default(0),
-  audioFadeOutOffsetSeconds: z.number().nonnegative().default(0),
-  scalePercent: z.number().nonnegative().default(100),
-  visualizationEnabled: z.boolean().default(true),
-  visualizationBars: z.number().int().positive().default(128),
-  edgeRaysEnabled: z.boolean().default(true),
-  edgeRaysIntensity: z.number().min(0).max(1).default(0.85),
-  edgeRaysVocalBalance: z.number().min(0).max(1).default(0.6),
-  videoDurationSeconds: z.number().nonnegative().default(0),
-  overlapRatio: z.number().min(0).max(0.9).optional().nullable().default(null),
-  playbackRate: z.number().positive().default(1),
   fps: z.number().int().positive().default(30),
   width: z.number().int().positive().default(1280),
   height: z.number().int().positive().default(720),
@@ -122,28 +92,43 @@ export const contentUpdateSchema = z.object({
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: z.enum(["auto", "manual"]).optional(),
+  mode: z.string().optional(),
+  settings: z.record(z.string(), z.unknown()).optional().nullable(),
   songDurationSeconds: z.number().nonnegative().optional(),
-  segmentDurationSeconds: z.number().nonnegative().optional(),
-  fadeDurationSeconds: z.number().nonnegative().optional(),
-  introFadeSeconds: z.number().nonnegative().optional(),
-  outroFadeSeconds: z.number().nonnegative().optional(),
-  audioFadeInSeconds: z.number().nonnegative().optional(),
-  audioFadeOutSeconds: z.number().nonnegative().optional(),
-  audioFadeInOffsetSeconds: z.number().nonnegative().optional(),
-  audioFadeOutOffsetSeconds: z.number().nonnegative().optional(),
-  scalePercent: z.number().nonnegative().optional(),
-  visualizationEnabled: z.boolean().optional(),
-  visualizationBars: z.number().int().positive().optional(),
-  edgeRaysEnabled: z.boolean().optional(),
-  edgeRaysIntensity: z.number().min(0).max(1).optional(),
-  edgeRaysVocalBalance: z.number().min(0).max(1).optional(),
-  videoDurationSeconds: z.number().nonnegative().optional(),
-  overlapRatio: z.number().min(0).max(0.9).optional().nullable(),
-  playbackRate: z.number().positive().optional(),
   fps: z.number().int().positive().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
 });
+
+export const contentCreateFormSchema = z.object({
+  title: z.string().default("Untitled"),
+  mode: z.string().default("video_loop"),
+  settings: z.string().optional(),
+  songDurationSeconds: z.coerce.number().nonnegative().default(0),
+  fps: z.coerce.number().int().positive().default(30),
+  width: z.coerce.number().int().positive().default(1280),
+  height: z.coerce.number().int().positive().default(720),
+});
+
+export const contentUpdateFormSchema = z.object({
+  title: z.string().optional(),
+  status: z.string().optional(),
+  paletteMode: z.enum(["auto", "manual"]).optional(),
+  fps: z.coerce.number().int().positive().optional(),
+  width: z.coerce.number().int().positive().optional(),
+  height: z.coerce.number().int().positive().optional(),
+  mode: z.string().optional(),
+  settings: z.string().optional(),
+});
+
+export const parseContentSettingsString = (value?: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
 
 const parseColorPalette = (value: unknown) => {
   if (!value) return null;
@@ -174,27 +159,11 @@ const normalizeRow = (row: unknown): ContentItem => {
     updatedAt: toIso(record.updatedAt),
     colorPalette: parseColorPalette(record.colorPalette),
     paletteMode: record.paletteMode ?? "auto",
-    videoDurationSeconds: record.videoDurationSeconds ?? null,
-    playbackRate: record.playbackRate ?? 1,
-    overlapRatio: record.overlapRatio ?? null,
-    introFadeSeconds: record.introFadeSeconds ?? 0,
-    outroFadeSeconds: record.outroFadeSeconds ?? 0,
-    audioFadeInSeconds: record.audioFadeInSeconds ?? 0,
-    audioFadeOutSeconds: record.audioFadeOutSeconds ?? 0,
-    audioFadeInOffsetSeconds: record.audioFadeInOffsetSeconds ?? 0,
-    audioFadeOutOffsetSeconds: record.audioFadeOutOffsetSeconds ?? 0,
-    scalePercent: record.scalePercent ?? 100,
-    visualizationEnabled:
-      typeof record.visualizationEnabled === "boolean"
-        ? record.visualizationEnabled
-        : Boolean(record.visualizationEnabled ?? true),
-    visualizationBars: record.visualizationBars ?? 128,
-    edgeRaysEnabled:
-      typeof record.edgeRaysEnabled === "boolean"
-        ? record.edgeRaysEnabled
-        : Boolean(record.edgeRaysEnabled ?? true),
-    edgeRaysIntensity: record.edgeRaysIntensity ?? 0.85,
-    edgeRaysVocalBalance: record.edgeRaysVocalBalance ?? 0.6,
+    mode: record.mode ?? "video_loop",
+    settings: record.settings ?? null,
+    fps: record.fps ?? 30,
+    width: record.width ?? 1280,
+    height: record.height ?? 720,
     publishesCount: Number.isFinite(Number(record.publishesCount))
       ? Number(record.publishesCount)
       : 0,
@@ -453,8 +422,6 @@ export async function createContentItem(input: z.infer<typeof contentCreateSchem
       const values: InferInsertModel<typeof sqliteSchema.contentItems> = {
         ...data,
         colorPalette: serializeColorPalette(data.colorPalette),
-        visualizationEnabled: data.visualizationEnabled ? 1 : 0,
-        edgeRaysEnabled: data.edgeRaysEnabled ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -499,19 +466,13 @@ export async function updateContentItem(
         .where(and(eq(table.id, id), eq(table.userId, userId)));
     },
     sqlite: async ({ db, table, now }) => {
-      const { colorPalette, visualizationEnabled, edgeRaysEnabled, ...rest } = cleaned;
+      const { colorPalette, ...rest } = cleaned;
       const values: Partial<InferInsertModel<typeof sqliteSchema.contentItems>> = {
         ...rest,
         updatedAt: now,
       };
       if (colorPalette !== undefined) {
         values.colorPalette = serializeColorPalette(colorPalette);
-      }
-      if (visualizationEnabled !== undefined) {
-        values.visualizationEnabled = visualizationEnabled ? 1 : 0;
-      }
-      if (edgeRaysEnabled !== undefined) {
-        values.edgeRaysEnabled = edgeRaysEnabled ? 1 : 0;
       }
       await db
         .update(table)

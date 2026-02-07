@@ -13,11 +13,20 @@ import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/color-palette";
 import { emitContentUpdate } from "@/lib/socket";
 import {
+  contentUpdateFormSchema,
   deleteContentItem,
   getContentItem,
+  parseContentSettingsString,
   updateContentItem,
 } from "@/lib/data/content";
 import { getSessionUser } from "@/lib/auth-session";
+import {
+  DEFAULT_CONTENT_MODE,
+  legacyColumnsToSettings,
+  mergeContentSettings,
+  normalizeSettingsMap,
+  settingsToLegacyColumns,
+} from "@/lib/content-modes";
 
 export const runtime = "nodejs";
 
@@ -78,101 +87,78 @@ export async function PATCH(
 
   if (isMultipart) {
     const formData = await request.formData();
-    const title = formData.get("title");
-    const status = formData.get("status");
-    const paletteMode = formData.get("paletteMode");
-    const fadeDurationSeconds = formData.get("fadeDurationSeconds");
-    const introFadeSeconds = formData.get("introFadeSeconds");
-    const outroFadeSeconds = formData.get("outroFadeSeconds");
-    const audioFadeInSeconds = formData.get("audioFadeInSeconds");
-    const audioFadeOutSeconds = formData.get("audioFadeOutSeconds");
-    const audioFadeInOffsetSeconds = formData.get("audioFadeInOffsetSeconds");
-    const audioFadeOutOffsetSeconds = formData.get("audioFadeOutOffsetSeconds");
-    const visualizationEnabled = formData.get("visualizationEnabled");
-    const visualizationBars = formData.get("visualizationBars");
-    const playbackRate = formData.get("playbackRate");
-    const fps = formData.get("fps");
-    const width = formData.get("width");
-    const height = formData.get("height");
-    const scalePercent = formData.get("scalePercent");
-    const overlapRatio = formData.get("overlapRatio");
+    const rawEntries = Object.fromEntries(formData.entries());
+    const parsedForm = contentUpdateFormSchema.parse(rawEntries);
+
+    if (parsedForm.title && parsedForm.title.trim()) {
+      payload.title = parsedForm.title.trim();
+    }
+    if (parsedForm.status && parsedForm.status.trim()) {
+      payload.status = parsedForm.status.trim();
+    }
+    if (parsedForm.paletteMode) {
+      payload.paletteMode = parsedForm.paletteMode;
+    }
+    if (parsedForm.fadeDurationSeconds !== undefined) {
+      payload.fadeDurationSeconds = parsedForm.fadeDurationSeconds;
+    }
+    if (parsedForm.introFadeSeconds !== undefined) {
+      payload.introFadeSeconds = parsedForm.introFadeSeconds;
+    }
+    if (parsedForm.outroFadeSeconds !== undefined) {
+      payload.outroFadeSeconds = parsedForm.outroFadeSeconds;
+    }
+    if (parsedForm.audioFadeInSeconds !== undefined) {
+      payload.audioFadeInSeconds = parsedForm.audioFadeInSeconds;
+    }
+    if (parsedForm.audioFadeOutSeconds !== undefined) {
+      payload.audioFadeOutSeconds = parsedForm.audioFadeOutSeconds;
+    }
+    if (parsedForm.audioFadeInOffsetSeconds !== undefined) {
+      payload.audioFadeInOffsetSeconds = parsedForm.audioFadeInOffsetSeconds;
+    }
+    if (parsedForm.audioFadeOutOffsetSeconds !== undefined) {
+      payload.audioFadeOutOffsetSeconds = parsedForm.audioFadeOutOffsetSeconds;
+    }
+    if (parsedForm.visualizationEnabled !== undefined) {
+      payload.visualizationEnabled = parsedForm.visualizationEnabled;
+    }
+    if (parsedForm.visualizationBars !== undefined) {
+      payload.visualizationBars = Math.max(
+        1,
+        Math.round(parsedForm.visualizationBars)
+      );
+    }
+    if (parsedForm.playbackRate !== undefined) {
+      payload.playbackRate = parsedForm.playbackRate;
+    }
+    if (parsedForm.fps !== undefined) {
+      payload.fps = parsedForm.fps;
+    }
+    if (parsedForm.width !== undefined) {
+      payload.width = parsedForm.width;
+    }
+    if (parsedForm.height !== undefined) {
+      payload.height = parsedForm.height;
+    }
+    if (parsedForm.scalePercent !== undefined) {
+      payload.scalePercent = parsedForm.scalePercent;
+    }
+    if (parsedForm.overlapRatio !== undefined) {
+      payload.overlapRatio = Math.min(
+        0.9,
+        Math.max(0, parsedForm.overlapRatio)
+      );
+    }
+    if (parsedForm.mode && parsedForm.mode.trim()) {
+      payload.mode = parsedForm.mode.trim();
+    }
+    const parsedSettings = parseContentSettingsString(parsedForm.settings);
+    if (parsedSettings) {
+      payload.settings = parsedSettings;
+    }
+
     const thumbnail = formData.get("thumbnail");
-
-    const toOptionalNumber = (value: FormDataEntryValue | null) => {
-      if (value === null) return undefined;
-      const parsed = Number(String(value));
-      return Number.isFinite(parsed) ? parsed : undefined;
-    };
-
-    if (typeof title === "string" && title.trim()) {
-      payload.title = title.trim();
-    }
-    if (typeof status === "string" && status.trim()) {
-      payload.status = status.trim();
-    }
-    if (paletteMode === "auto" || paletteMode === "manual") {
-      payload.paletteMode = paletteMode;
-    }
-    const fadeValue = toOptionalNumber(fadeDurationSeconds);
-    if (fadeValue !== undefined) {
-      payload.fadeDurationSeconds = fadeValue;
-    }
-    const introFadeValue = toOptionalNumber(introFadeSeconds);
-    if (introFadeValue !== undefined) {
-      payload.introFadeSeconds = introFadeValue;
-    }
-    const outroFadeValue = toOptionalNumber(outroFadeSeconds);
-    if (outroFadeValue !== undefined) {
-      payload.outroFadeSeconds = outroFadeValue;
-    }
-    const audioFadeInValue = toOptionalNumber(audioFadeInSeconds);
-    if (audioFadeInValue !== undefined) {
-      payload.audioFadeInSeconds = audioFadeInValue;
-    }
-    const audioFadeOutValue = toOptionalNumber(audioFadeOutSeconds);
-    if (audioFadeOutValue !== undefined) {
-      payload.audioFadeOutSeconds = audioFadeOutValue;
-    }
-    const audioFadeInOffsetValue = toOptionalNumber(audioFadeInOffsetSeconds);
-    if (audioFadeInOffsetValue !== undefined) {
-      payload.audioFadeInOffsetSeconds = audioFadeInOffsetValue;
-    }
-    const audioFadeOutOffsetValue = toOptionalNumber(audioFadeOutOffsetSeconds);
-    if (audioFadeOutOffsetValue !== undefined) {
-      payload.audioFadeOutOffsetSeconds = audioFadeOutOffsetValue;
-    }
-    if (typeof visualizationEnabled === "string") {
-      payload.visualizationEnabled =
-        visualizationEnabled === "true" || visualizationEnabled === "1";
-    }
-    const visualizationBarsValue = toOptionalNumber(visualizationBars);
-    if (visualizationBarsValue !== undefined) {
-      payload.visualizationBars = Math.max(1, Math.round(visualizationBarsValue));
-    }
-    const playbackValue = toOptionalNumber(playbackRate);
-    if (playbackValue !== undefined) {
-      payload.playbackRate = playbackValue;
-    }
-    const fpsValue = toOptionalNumber(fps);
-    if (fpsValue !== undefined) {
-      payload.fps = fpsValue;
-    }
-    const widthValue = toOptionalNumber(width);
-    if (widthValue !== undefined) {
-      payload.width = widthValue;
-    }
-    const heightValue = toOptionalNumber(height);
-    if (heightValue !== undefined) {
-      payload.height = heightValue;
-    }
-    const scalePercentValue = toOptionalNumber(scalePercent);
-    if (scalePercentValue !== undefined) {
-      payload.scalePercent = scalePercentValue;
-    }
-    const overlapValue = toOptionalNumber(overlapRatio);
-    if (overlapValue !== undefined) {
-      payload.overlapRatio = Math.min(0.9, Math.max(0, overlapValue));
-    }
 
     if (thumbnail instanceof File) {
       const thumbnailPath = await writeUpload(
@@ -190,6 +176,59 @@ export async function PATCH(
     }
   } else {
     payload = await request.json();
+  }
+
+  const legacySettingKeys = [
+    "songDurationSeconds",
+    "segmentDurationSeconds",
+    "videoDurationSeconds",
+    "fadeDurationSeconds",
+    "introFadeSeconds",
+    "outroFadeSeconds",
+    "audioFadeInSeconds",
+    "audioFadeOutSeconds",
+    "audioFadeInOffsetSeconds",
+    "audioFadeOutOffsetSeconds",
+    "scalePercent",
+    "visualizationEnabled",
+    "visualizationBars",
+    "edgeRaysEnabled",
+    "edgeRaysIntensity",
+    "edgeRaysVocalBalance",
+    "overlapRatio",
+    "playbackRate",
+    "fps",
+    "width",
+    "height",
+  ];
+  const hasLegacyPatch = legacySettingKeys.some((key) => key in payload);
+  const shouldUpdateSettings =
+    "settings" in payload || "mode" in payload || hasLegacyPatch;
+
+  if (shouldUpdateSettings) {
+    const mode =
+      typeof payload.mode === "string"
+        ? payload.mode
+        : item.mode ?? DEFAULT_CONTENT_MODE;
+    const baseSettings =
+      (item.settings as Record<string, unknown> | null | undefined) ??
+      legacyColumnsToSettings(mode, item as Record<string, unknown>);
+    const patchInput =
+      payload.settings ??
+      (hasLegacyPatch
+        ? legacyColumnsToSettings(mode, payload as Record<string, unknown>)
+        : {});
+    const baseMap = normalizeSettingsMap(mode, baseSettings);
+    const patchMap = normalizeSettingsMap(mode, patchInput);
+    const merged = mergeContentSettings(mode, baseMap, patchMap);
+    const nextMap = {
+      ...baseMap,
+      ...patchMap,
+      [merged.mode]: merged.settings,
+    };
+    payload.mode = merged.mode;
+    payload.settings = nextMap;
+    Object.assign(payload, settingsToLegacyColumns(merged.mode, merged.settings));
   }
 
   const resolvedPaletteMode =

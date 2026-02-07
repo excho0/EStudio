@@ -61,52 +61,107 @@ type ContentLoopItemLike = {
   fps?: number | null;
   width?: number | null;
   height?: number | null;
+  settings?: Record<string, unknown> | null;
 };
 
 export const buildContentLoopPropsFromItem = (
   item: ContentLoopItemLike,
   overrides: Partial<ContentLoopProps> = {}
-): ContentLoopProps =>
-  buildContentLoopProps({
+): ContentLoopProps => {
+  const settings = (item.settings ?? {}) as Record<string, unknown>;
+  const getSetting = <T>(key: string, fallback?: T) =>
+    (settings[key] as T | undefined) ?? fallback;
+
+  return buildContentLoopProps({
     title: item.title ?? CONTENT_LOOP_DEFAULTS.title,
     segmentDurationSeconds:
-      item.segmentDurationSeconds ?? CONTENT_LOOP_DEFAULTS.segmentDurationSeconds,
+      getSetting<number>("segmentDurationSeconds") ??
+      item.segmentDurationSeconds ??
+      CONTENT_LOOP_DEFAULTS.segmentDurationSeconds,
     fadeDurationSeconds:
-      item.fadeDurationSeconds ?? CONTENT_LOOP_DEFAULTS.fadeDurationSeconds,
-    introFadeSeconds: item.introFadeSeconds ?? CONTENT_LOOP_DEFAULTS.introFadeSeconds,
-    outroFadeSeconds: item.outroFadeSeconds ?? CONTENT_LOOP_DEFAULTS.outroFadeSeconds,
+      getSetting<number>("fadeDurationSeconds") ??
+      item.fadeDurationSeconds ??
+      CONTENT_LOOP_DEFAULTS.fadeDurationSeconds,
+    introFadeSeconds:
+      getSetting<number>("introFadeSeconds") ??
+      item.introFadeSeconds ??
+      CONTENT_LOOP_DEFAULTS.introFadeSeconds,
+    outroFadeSeconds:
+      getSetting<number>("outroFadeSeconds") ??
+      item.outroFadeSeconds ??
+      CONTENT_LOOP_DEFAULTS.outroFadeSeconds,
     audioFadeInSeconds:
-      item.audioFadeInSeconds ?? CONTENT_LOOP_DEFAULTS.audioFadeInSeconds,
+      getSetting<number>("audioFadeInSeconds") ??
+      item.audioFadeInSeconds ??
+      CONTENT_LOOP_DEFAULTS.audioFadeInSeconds,
     audioFadeOutSeconds:
-      item.audioFadeOutSeconds ?? CONTENT_LOOP_DEFAULTS.audioFadeOutSeconds,
+      getSetting<number>("audioFadeOutSeconds") ??
+      item.audioFadeOutSeconds ??
+      CONTENT_LOOP_DEFAULTS.audioFadeOutSeconds,
     audioFadeInOffsetSeconds:
+      getSetting<number>("audioFadeInOffsetSeconds") ??
       item.audioFadeInOffsetSeconds ??
       CONTENT_LOOP_DEFAULTS.audioFadeInOffsetSeconds,
     audioFadeOutOffsetSeconds:
+      getSetting<number>("audioFadeOutOffsetSeconds") ??
       item.audioFadeOutOffsetSeconds ??
       CONTENT_LOOP_DEFAULTS.audioFadeOutOffsetSeconds,
     visualizationEnabled:
-      item.visualizationEnabled ?? CONTENT_LOOP_DEFAULTS.visualizationEnabled,
+      getSetting<boolean>("visualizationEnabled") ??
+      item.visualizationEnabled ??
+      CONTENT_LOOP_DEFAULTS.visualizationEnabled,
     visualizationBars:
-      item.visualizationBars ?? CONTENT_LOOP_DEFAULTS.visualizationBars,
-    edgeRaysEnabled: item.edgeRaysEnabled ?? CONTENT_LOOP_DEFAULTS.edgeRaysEnabled,
+      getSetting<number>("visualizationBars") ??
+      item.visualizationBars ??
+      CONTENT_LOOP_DEFAULTS.visualizationBars,
+    edgeRaysEnabled:
+      getSetting<boolean>("edgeRaysEnabled") ??
+      item.edgeRaysEnabled ??
+      CONTENT_LOOP_DEFAULTS.edgeRaysEnabled,
     edgeRaysIntensity:
-      item.edgeRaysIntensity ?? CONTENT_LOOP_DEFAULTS.edgeRaysIntensity,
+      getSetting<number>("edgeRaysIntensity") ??
+      item.edgeRaysIntensity ??
+      CONTENT_LOOP_DEFAULTS.edgeRaysIntensity,
     edgeRaysVocalBalance:
-      item.edgeRaysVocalBalance ?? CONTENT_LOOP_DEFAULTS.edgeRaysVocalBalance,
+      getSetting<number>("edgeRaysVocalBalance") ??
+      item.edgeRaysVocalBalance ??
+      CONTENT_LOOP_DEFAULTS.edgeRaysVocalBalance,
     videoDurationSeconds:
-      item.videoDurationSeconds ?? CONTENT_LOOP_DEFAULTS.videoDurationSeconds,
-    overlapRatio: item.overlapRatio ?? CONTENT_LOOP_DEFAULTS.overlapRatio,
-    playbackRate: item.playbackRate ?? CONTENT_LOOP_DEFAULTS.playbackRate,
-    scalePercent: item.scalePercent ?? CONTENT_LOOP_DEFAULTS.scalePercent,
+      getSetting<number>("videoDurationSeconds") ??
+      item.videoDurationSeconds ??
+      CONTENT_LOOP_DEFAULTS.videoDurationSeconds,
+    overlapRatio:
+      getSetting<number>("overlapRatio") ??
+      item.overlapRatio ??
+      CONTENT_LOOP_DEFAULTS.overlapRatio,
+    playbackRate:
+      getSetting<number>("playbackRate") ??
+      item.playbackRate ??
+      CONTENT_LOOP_DEFAULTS.playbackRate,
+    scalePercent:
+      getSetting<number>("scalePercent") ??
+      item.scalePercent ??
+      CONTENT_LOOP_DEFAULTS.scalePercent,
     colorPalette: item.colorPalette ?? CONTENT_LOOP_DEFAULTS.colorPalette,
     songDurationSeconds:
-      item.songDurationSeconds ?? CONTENT_LOOP_DEFAULTS.songDurationSeconds,
-    fps: item.fps ?? CONTENT_LOOP_DEFAULTS.fps,
-    width: item.width ?? CONTENT_LOOP_DEFAULTS.width,
-    height: item.height ?? CONTENT_LOOP_DEFAULTS.height,
+      getSetting<number>("songDurationSeconds") ??
+      item.songDurationSeconds ??
+      CONTENT_LOOP_DEFAULTS.songDurationSeconds,
+    fps:
+      getSetting<number>("fps") ??
+      item.fps ??
+      CONTENT_LOOP_DEFAULTS.fps,
+    width:
+      getSetting<number>("width") ??
+      item.width ??
+      CONTENT_LOOP_DEFAULTS.width,
+    height:
+      getSetting<number>("height") ??
+      item.height ??
+      CONTENT_LOOP_DEFAULTS.height,
     ...overrides,
   });
+};
 
 export const resolveContentLoopMetadata = (props: ContentLoopProps) => {
   const fps = Number.isFinite(props.fps ?? NaN)

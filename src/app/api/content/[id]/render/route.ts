@@ -18,7 +18,7 @@ import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/helpers";
 import { getSessionUser } from "@/lib/auth-session";
 import { createContentAssetToken } from "@/lib/content-asset-token";
-import { buildContentLoopPropsFromItem } from "@/remotion/content-loop-props";
+import { getContentMode, resolveContentSettings } from "@/lib/content-modes";
 import type {
   BundleFn,
   BrowserInstance,
@@ -659,7 +659,8 @@ export async function POST(
   const outputPath = resolveContentPath(renderPath);
 
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
-  const compositionId = "ContentLoop";
+  const modeDefinition = getContentMode(item.mode);
+  const compositionId = modeDefinition.compositionId;
 
   const serveUrl = await getServeUrl(entryPoint);
 
@@ -670,17 +671,17 @@ export async function POST(
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
 
-  const props: InputProps = buildContentLoopPropsFromItem(item, {
-    thumbnailSrc: withAssetToken(
-      `${origin}/api/content/${id}/asset?type=thumbnail`
-    ),
-    videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
-    audioSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=song`),
-    videoDurationSeconds: item.videoDurationSeconds ?? item.segmentDurationSeconds,
-    overlapRatio: item.overlapRatio ?? null,
-    playbackRate: item.playbackRate ?? 1,
-    scalePercent: item.scalePercent ?? 100,
-    colorPalette: item.colorPalette ?? undefined,
+  const resolved = resolveContentSettings(item.mode, item.settings ?? {});
+  const props: InputProps = modeDefinition.buildProps({
+    item,
+    settings: resolved.settings,
+    assets: {
+      thumbnailSrc: withAssetToken(
+        `${origin}/api/content/${id}/asset?type=thumbnail`
+      ),
+      videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
+      audioSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=song`),
+    },
   }) as unknown as InputProps;
 
   const browserLabel = resolvedBrowser ?? "auto";
