@@ -5,6 +5,7 @@ import {
   Activity,
   Cpu,
   Flame,
+  Gpu,
   MemoryStick,
   MonitorDot,
   Thermometer,
@@ -224,7 +225,7 @@ export function MetricsPanel({ metrics }: { metrics: MetricsPayload | null }) {
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <CardHeaderRow
             label="GPUs Online"
-            icon={<MonitorDot className="h-4 w-4" />}
+            icon={<Gpu className="h-4 w-4" />}
           />
           <ValueWithSkeleton
             loading={!metricsReady}
@@ -292,7 +293,7 @@ export function MetricsPanel({ metrics }: { metrics: MetricsPayload | null }) {
                   />
                   <Progress value={gpu.vramUsagePct ?? 0} variant="violet" className="mt-2" />
                   {gpu.vramUsedMB !== null && gpu.vramTotalMB !== null ? (
-                    <div className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                    <div className="mt-1 text-xs text-slate-500 dark:text-zinc-400 flex justify-end">
                       {gpu.vramUsedMB}MB / {gpu.vramTotalMB}MB
                     </div>
                   ) : null}
