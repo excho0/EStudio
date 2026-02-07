@@ -103,7 +103,6 @@ export default function LibraryPage() {
   const publishCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const [error, setError] = useState<string | null>(null);
   const renderProgress = useRenderProgress();
 
   const totalPages = useMemo(
@@ -167,7 +166,6 @@ export default function LibraryPage() {
     onError: (error) => {
       const message =
         error instanceof Error ? error.message : "Render failed. Please check server logs.";
-      setError(message);
       toast.error(message);
     },
     onSettled: () => {
@@ -177,7 +175,6 @@ export default function LibraryPage() {
 
   const handleRender = useCallback(async (id: string) => {
     setRenderingId(id);
-    setError(null);
     await renderMutation.mutateAsync(id);
   }, [renderMutation]);
 
@@ -226,13 +223,11 @@ export default function LibraryPage() {
     onError: (error) => {
       const message =
         error instanceof Error ? error.message : "Delete failed. Please try again.";
-      setError(message);
       toast.error(message);
     },
   });
 
   const handleDelete = useCallback(async (id: string, keepRenders?: boolean) => {
-    setError(null);
     await deleteMutation.mutateAsync({ id, keepRenders });
   }, [deleteMutation]);
 

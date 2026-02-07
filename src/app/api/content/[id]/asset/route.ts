@@ -130,6 +130,12 @@ const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
         safeClose();
       };
 
+      const typedStream = nodeStream as NodeJS.ReadableStream & {
+        destroy?: () => void;
+        pause?: () => void;
+        resume?: () => void;
+      };
+
       const onData = (chunk: string | Buffer) => {
         if (closed) return;
 
@@ -139,14 +145,14 @@ const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
           controller.enqueue(new Uint8Array(buf));
         } catch {
           try {
-            (nodeStream as any).destroy?.();
+            typedStream.destroy?.();
           } catch {}
           safeClose();
           return;
         }
 
         if (controller.desiredSize !== null && controller.desiredSize <= 0) {
-          (nodeStream as any).pause?.();
+          typedStream.pause?.();
         }
       };
 
@@ -164,7 +170,7 @@ const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
     },
     pull() {
       try {
-        (nodeStream as any).resume?.();
+        typedStream.resume?.();
       } catch {}
     },
 

@@ -188,7 +188,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     frame: number | null;
   }>({ src: null, frame: null });
   const thumbnailRenderHandle = useRef<number | null>(null);
-  const audioRenderHandle = useRef<number | null>(null);
   const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
   const thumbnailLoaded = Boolean(thumbnailSrc && loadedThumbnailSrc === thumbnailSrc);
   const fadeStartFrame =

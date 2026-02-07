@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Session } from "next-auth";
 
@@ -121,35 +121,7 @@ const fetchAccountByProviderAccountId = async (
   return account ?? null;
 };
 
-const fetchUserAccountPairs = async (userId: string) => {
-  const db = getDrizzleDb();
-  if (isPostgres) {
-    const rows = await (db as PostgresDrizzleDb)
-      .select({
-        provider: schema.accounts.provider,
-        providerAccountId: schema.accounts.providerAccountId,
-      })
-      .from(schema.accounts)
-      .where(eq(schema.accounts.userId, userId));
-    return rows.map((row) => ({
-      ...row,
-      provider: resolveProviderKey(row.provider),
-    }));
-  }
-  const rows = await (db as SqliteDrizzleDb)
-    .select({
-      provider: sqliteSchema.accounts.provider,
-      providerAccountId: sqliteSchema.accounts.providerAccountId,
-    })
-    .from(sqliteSchema.accounts)
-    .where(eq(sqliteSchema.accounts.userId, userId));
-  return rows.map((row) => ({
-    ...row,
-    provider: resolveProviderKey(row.provider),
-  }));
-};
-
-  const publishSchema = z.object({
+const publishSchema = z.object({
     renderId: z.string().trim().min(1),
     provider: z.string().trim().min(1),
     connectionId: z.string().trim().min(1),
