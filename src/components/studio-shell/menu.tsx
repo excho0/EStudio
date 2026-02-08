@@ -5,8 +5,8 @@ import { Ellipsis } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-import { cn } from "@/lib/utils";
-import { getMenuList } from "@/lib/menu-list";
+import { cn } from "@/lib/shared/utils";
+import { getMenuList } from "@/lib/navigation/menu-list";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CollapseMenuButton } from "@/components/studio-shell/collapse-menu-button";

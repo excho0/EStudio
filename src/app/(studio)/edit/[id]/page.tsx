@@ -45,8 +45,8 @@ import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { EditFormValues, PaletteMode } from "@/types";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 import { ContentItem } from "@/types";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
@@ -78,7 +78,7 @@ import {
 import StickyBox from "@/components/ui/sticky-box";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { is } from "drizzle-orm";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },

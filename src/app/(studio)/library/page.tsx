@@ -70,10 +70,10 @@ import {
   Activity,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import React from "react";
-import { queryKeys } from "@/lib/query-keys";
-import { throwForNonOkResponse } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { throwForNonOkResponse } from "@/lib/http/fetch-json";
 import type { ContentColumnMeta } from "@/types";
 
 export default function LibraryPage() {

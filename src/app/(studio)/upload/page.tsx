@@ -35,8 +35,8 @@ import { LabelWithTooltip } from "@/components/content-settings/label-with-toolt
 import { IconSelect } from "@/components/ui/icon-select";
 import { useContentList } from "@/components/studio/use-content-list";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { isFieldInvalid } from "@/lib/validation";
+import { cn } from "@/lib/shared/utils";
+import { isFieldInvalid } from "@/lib/shared/validation";
 import {
   StepperContent,
   StepperFooter,

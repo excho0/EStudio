@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

@@ -24,7 +24,7 @@ import {
   VideoIcon,
   XIcon,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/shared/utils';
 import { Separator } from '../ui/separator';
 
 // Extend FileWithPreview to include upload status and progress

@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AuthPage, authProviderIcons } from "@/components/auth/auth-page";
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 
 const allProviders = [
   {

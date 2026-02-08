@@ -1,9 +1,9 @@
 import path from "path";
 import { NextResponse } from "next/server";
-import { getContentRenderDir } from "@/lib/content-store";
+import { getContentRenderDir } from "@/lib/content/store";
 import { getContentItem } from "@/lib/data/content";
 import { getStorage, storageKey } from "@/lib/storage";
-import { getSessionUser } from "@/lib/auth-session";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 

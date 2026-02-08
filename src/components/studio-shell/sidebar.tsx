@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import { Link } from "@/components/navigation/route-transition";
 import { Logo } from "@/components/branding/logo";
 

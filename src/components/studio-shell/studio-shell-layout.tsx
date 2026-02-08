@@ -3,7 +3,7 @@
 import { Sidebar } from "@/components/studio-shell/sidebar";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import { SheetMenu } from "@/components/studio-shell/sheet-menu";
 import { SidebarToggle } from "./sidebar-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";

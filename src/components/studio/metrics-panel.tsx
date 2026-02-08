@@ -19,7 +19,7 @@ import { StatRow } from "@/components/ui/stat-row";
 import NvidiaIcon from "@/components/icons/nvidia";
 import AmdIcon from "@/components/icons/amd";
 import IntelIcon from "@/components/icons/intel";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import type { MetricsPayload } from "@/types";
 
 const TEMP_THRESHOLDS = {

@@ -6,24 +6,26 @@ import {
   ensureContentStore,
   getContentAssetPath,
   writeContentManifest,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
-import { getPaletteFromPath } from "@/lib/color-palette";
-import { emitContentUpdate } from "@/lib/socket";
+import { getPaletteFromPath } from "@/lib/content/color-palette";
+import { emitContentUpdate } from "@/lib/socket/manager";
 import {
   contentCreateFormSchema,
   contentCreateSchema,
   contentQuerySchema,
   createContentItem,
+  failStaleRenderingItems,
   listContentItems,
   parseContentSettingsString,
 } from "@/lib/data/content";
-import { getSessionUser } from "@/lib/auth-session";
+import { getSessionUser } from "@/lib/auth/session";
 import {
   DEFAULT_CONTENT_MODE,
   resolveContentSettings,
   normalizeSettingsMap,
 } from "@/lib/content-modes";
+import { getRenderProgressSnapshot } from "@/lib/socket/manager";
 
 export const runtime = "nodejs";
 
@@ -132,6 +134,25 @@ export async function GET(request: Request) {
     page: searchParams.get("page") ?? "1",
     limit: searchParams.get("limit") ?? "50",
   });
+  const activeProgress = await getRenderProgressSnapshot(user.id);
+  const staleTimeoutMs = Math.max(
+    10_000,
+    Number(process.env.RENDER_STALE_TIMEOUT_MS ?? "120000")
+  );
+  const recoveredIds = await failStaleRenderingItems(user.id, {
+    activeIds: Object.keys(activeProgress),
+    staleBefore: new Date(Date.now() - staleTimeoutMs),
+  });
+  if (recoveredIds.length > 0) {
+    for (const recoveredId of recoveredIds) {
+      emitContentUpdate({
+        userId: user.id,
+        type: "content:status",
+        id: recoveredId,
+        status: "failed",
+      });
+    }
+  }
   const result = await listContentItems(user.id, params);
   return NextResponse.json(result);
 }

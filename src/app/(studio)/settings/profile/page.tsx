@@ -25,8 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 import type { ConnectionsResponse, ProfilePayload } from "@/types";
 
 const allProviders = [

@@ -7,18 +7,20 @@ import {
   getContentRenderDir,
   getContentRenderPath,
   resolveContentPath,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import { createTempDir, getStorage, removePath, writeFilePath } from "@/lib/storage";
 import {
+  clearRenderProgressSnapshot,
   emitContentUpdate,
   emitRenderComplete,
   emitRenderProgress,
-} from "@/lib/socket";
+} from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
-import { getSlug } from "@/lib/helpers";
-import { getSessionUser } from "@/lib/auth-session";
-import { createContentAssetToken } from "@/lib/content-asset-token";
+import { getSlug } from "@/lib/shared/helpers";
+import { getSessionUser } from "@/lib/auth/session";
+import { createContentAssetToken } from "@/lib/content/asset-token";
 import { getContentMode, resolveContentSettings } from "@/lib/content-modes";
+import { enqueueRenderJob, isRenderQueueEnabled } from "@/lib/queue/render-queue";
 import type {
   BundleFn,
   BrowserInstance,
@@ -819,6 +821,7 @@ const startRenderJob = async ({
     emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
     emitRenderComplete({ userId, id, durationSeconds: elapsedSeconds, avgFps });
   } catch (error) {
+    void clearRenderProgressSnapshot({ userId, id });
     await updateContentItem(userId, id, { status: "failed" });
     emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
     const message = error instanceof Error ? error.message : "Render failed";
@@ -834,9 +837,27 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const workerSecret = process.env.RENDER_WORKER_SECRET?.trim() || "";
+  const providedWorkerSecret =
+    request.headers.get("x-render-worker-secret")?.trim() || "";
+  const isWorkerExecution =
+    workerSecret.length > 0 && providedWorkerSecret === workerSecret;
+  const body = (await request.json().catch(() => null)) as
+    | { userId?: string; executeNow?: boolean }
+    | null;
+
+  let userId: string | null = null;
+  if (isWorkerExecution) {
+    userId = body?.userId?.trim() || null;
+    if (!userId) {
+      return NextResponse.json({ error: "Missing userId for worker execution" }, { status: 400 });
+    }
+  } else {
+    const user = await getSessionUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    userId = user.id;
   }
 
   const resolvedBrowser =
@@ -849,7 +870,7 @@ export async function POST(
       ? "headless-shell"
       : "chrome-for-testing";
 
-  const item = await getContentItem(user.id, id);
+  const item = await getContentItem(userId, id);
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -888,11 +909,24 @@ export async function POST(
     }
   }
 
-  await ensureContentStore(user.id);
-  await updateContentItem(user.id, id, { status: "rendering" });
-  emitContentUpdate({ userId: user.id, type: "content:status", id, status: "rendering" });
+  await ensureContentStore(userId);
+  await updateContentItem(userId, id, { status: "rendering" });
+  emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
-  const renderDirKey = getContentRenderDir(user.id, id);
+  const shouldUseQueue = !isWorkerExecution && isRenderQueueEnabled();
+  if (shouldUseQueue) {
+    try {
+      await enqueueRenderJob({ id, userId });
+      return NextResponse.json(
+        { ok: true, status: "queued", id },
+        { status: 202 }
+      );
+    } catch (error) {
+      console.warn("[render] queue enqueue failed, falling back to inline", error);
+    }
+  }
+
+  const renderDirKey = getContentRenderDir(userId, id);
   await storage.ensureDir(renderDirKey);
 
   let nextIndex = 1;
@@ -907,7 +941,7 @@ export async function POST(
 
   const slug = getSlug(item.title) || "untitled";
   const fileName = `${slug}_${nextIndex}.mp4`;
-  const renderPath = getContentRenderPath(user.id, id, fileName);
+  const renderPath = getContentRenderPath(userId, id, fileName);
   const outputPath = resolveContentPath(renderPath);
 
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
@@ -917,7 +951,7 @@ export async function POST(
   const serveUrl = await getServeUrl(entryPoint);
 
   const origin = new URL(request.url).origin;
-  const assetToken = createContentAssetToken(user.id, id, 2 * 60 * 60);
+  const assetToken = createContentAssetToken(userId, id, 2 * 60 * 60);
   const withAssetToken = (url: string) =>
     assetToken
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
@@ -954,8 +988,42 @@ export async function POST(
     console.log(`[render] shaderDebugMode=${shaderDebugMode}`);
   }
 
+  if (isWorkerExecution || body?.executeNow === true) {
+    await startRenderJob({
+      userId,
+      id,
+      browserLabel,
+      chromeMode,
+      serveUrl,
+      compositionId,
+      outputPath,
+      inputProps: props,
+    });
+    const latest = await getContentItem(userId, id);
+    if (latest?.status === "failed") {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "failed",
+          id,
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json(
+      {
+        ok: true,
+        status: "done",
+        id,
+        browser: browserLabel,
+        chromeMode,
+      },
+      { status: 200 }
+    );
+  }
+
   void startRenderJob({
-    userId: user.id,
+    userId,
     id,
     browserLabel,
     chromeMode,

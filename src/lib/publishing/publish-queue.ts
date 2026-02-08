@@ -5,11 +5,15 @@ import {
   getContentRenderPath,
   findContentAssetPath,
   resolveContentPath,
-} from "@/lib/content-store";
-import { emitPublishProgress, emitPublishUpdate } from "@/lib/socket";
+} from "@/lib/content/store";
+import { emitPublishProgress, emitPublishUpdate } from "@/lib/socket/manager";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getStorage, storageKey } from "@/lib/storage";
+import {
+  enqueuePublishQueueJob,
+  isPublishQueueEnabled,
+} from "@/lib/queue/publish-queue";
 
 
 type PublishJob = {
@@ -236,6 +240,10 @@ const runPublishJob = async (job: PublishJob) => {
   }
 };
 
+export const processPublishJob = async (publishId: string) => {
+  await runPublishJob({ publishId, attempt: 1 });
+};
+
 class PublishQueue {
   private running = false;
   private queue: PublishJob[] = [];
@@ -342,6 +350,12 @@ export const getPublishQueue = () => {
 };
 
 export const enqueuePublishJob = (publishId: string) => {
+  if (isPublishQueueEnabled()) {
+    void enqueuePublishQueueJob({ publishId }).catch(() => {
+      getPublishQueue().enqueue({ publishId, attempt: 1 });
+    });
+    return;
+  }
   getPublishQueue().enqueue({ publishId, attempt: 1 });
 };
 

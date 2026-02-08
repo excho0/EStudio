@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react"
 import { motion, type Transition } from "framer-motion"
 import * as React from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/shared/utils"
 
 export const COLLAPSIBLE_ANIMATION_TRANSITION = {
   duration: 0.25,

@@ -4,7 +4,7 @@ import { Link } from "@/components/navigation/route-transition";
 import { useState } from "react";
 import { ChevronDown, Dot, LucideIcon } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuArrow } from "@radix-ui/react-dropdown-menu";
 import {

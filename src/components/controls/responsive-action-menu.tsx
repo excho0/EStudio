@@ -5,7 +5,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import { Button } from "@/components/ui/button";
 import { useRouteTransition } from "@/components/navigation/route-transition";
 import {

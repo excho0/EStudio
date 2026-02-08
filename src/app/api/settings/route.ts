@@ -5,10 +5,10 @@ import {
   getUserManifestsDir,
   getUserRendersRootDir,
   getUserVideosDir,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import { getContentStats } from "@/lib/data/content";
 import { getStorage } from "@/lib/storage";
-import { getSessionUser } from "@/lib/auth-session";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 

@@ -1,0 +1,1 @@
+export { getRedisClient } from "./client";

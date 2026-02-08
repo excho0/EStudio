@@ -6,8 +6,8 @@ import { signOut, useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

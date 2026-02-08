@@ -45,8 +45,8 @@ import {
 } from "@/components/controls/animated-stepper";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { Link } from "@/components/navigation/route-transition";

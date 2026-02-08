@@ -4,11 +4,11 @@ import {
   findContentAssetPath,
   findLatestRenderPath,
   getContentRenderDir,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import { getContentItem, getContentItemById } from "@/lib/data/content";
 import { getStorage } from "@/lib/storage";
-import { getSessionUser } from "@/lib/auth-session";
-import { verifyContentAssetToken } from "@/lib/content-asset-token";
+import { getSessionUser } from "@/lib/auth/session";
+import { verifyContentAssetToken } from "@/lib/content/asset-token";
 import type { AssetCacheEntry } from "@/types";
 import type { ReadStream } from "fs";
 

@@ -3,14 +3,14 @@ import {
   ensureContentStore,
   findContentAssetPath,
   getUserManifestsDir,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import {
   contentCreateSchema,
   createContentItem,
   getContentItem,
 } from "@/lib/data/content";
 import { getStorage, storageKey } from "@/lib/storage";
-import { getSessionUser } from "@/lib/auth-session";
+import { getSessionUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 

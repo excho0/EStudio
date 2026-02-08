@@ -8,7 +8,7 @@ import { auth } from "@/auth";
 import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
-import { sendEmailChangeVerification } from "@/lib/email";
+import { sendEmailChangeVerification } from "@/lib/auth/email";
 
 export const runtime = "nodejs";
 

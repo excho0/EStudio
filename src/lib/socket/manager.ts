@@ -1,14 +1,18 @@
 import type { Server as SocketIOServer } from "socket.io";
+import { eventBus } from "@/lib/event-bus";
+import {
+  clearRenderProgressSnapshot,
+  getRenderProgressSnapshot,
+  setRenderProgressSnapshot,
+} from "@/lib/render-progress/store";
 
 type GlobalWithSocket = typeof globalThis & {
   io?: SocketIOServer;
 };
 
-export const getSocketServer = () =>
-  (globalThis as GlobalWithSocket).io ?? null;
+const resolveRoom = (userId?: string | null) => (userId ? `user:${userId}` : null);
 
-const resolveRoom = (userId?: string | null) =>
-  userId ? `user:${userId}` : null;
+export const getSocketServer = () => (globalThis as GlobalWithSocket).io ?? null;
 
 export const emitContentUpdate = (payload: {
   userId?: string | null;
@@ -17,6 +21,7 @@ export const emitContentUpdate = (payload: {
   status?: string;
   item?: unknown;
 }) => {
+  void eventBus.emit("content:update", payload as Record<string, unknown>);
   const io = getSocketServer();
   if (!io) return;
   const room = resolveRoom(payload.userId);
@@ -35,6 +40,8 @@ export const emitRenderProgress = (payload: {
   progress: number;
   eta?: string;
 }) => {
+  void setRenderProgressSnapshot(payload);
+  void eventBus.emit("render:progress", payload as Record<string, unknown>);
   const io = getSocketServer();
   if (!io) return;
   const room = resolveRoom(payload.userId);
@@ -51,6 +58,8 @@ export const emitRenderComplete = (payload: {
   durationSeconds?: number;
   avgFps?: number;
 }) => {
+  void clearRenderProgressSnapshot({ userId: payload.userId, id: payload.id });
+  void eventBus.emit("render:complete", payload as Record<string, unknown>);
   const io = getSocketServer();
   if (!io) return;
   const room = resolveRoom(payload.userId);
@@ -68,6 +77,7 @@ export const emitPublishUpdate = (payload: {
   providerAssetId?: string;
   error?: string;
 }) => {
+  void eventBus.emit("publish:update", payload as Record<string, unknown>);
   const io = getSocketServer();
   if (!io) return;
   const room = resolveRoom(payload.userId);
@@ -86,6 +96,7 @@ export const emitPublishProgress = (payload: {
   bytesUploaded?: number;
   bytesTotal?: number;
 }) => {
+  void eventBus.emit("publish:progress", payload as Record<string, unknown>);
   const io = getSocketServer();
   if (!io) return;
   const room = resolveRoom(payload.userId);
@@ -102,3 +113,5 @@ export const emitPublishProgress = (payload: {
   }
   io.emit("publish:progress", eventPayload);
 };
+
+export { clearRenderProgressSnapshot, getRenderProgressSnapshot };

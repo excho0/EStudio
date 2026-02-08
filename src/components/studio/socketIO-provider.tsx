@@ -10,7 +10,7 @@ import {
 } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys } from "@/lib/http/query-keys";
 import type { MetricsPayload } from "@/types";
 
 type SocketIOContextValue = {

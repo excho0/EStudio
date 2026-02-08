@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, getTableColumns, inArray, like, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  like,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { InferInsertModel, SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -326,6 +337,74 @@ export async function listContentItems(
       };
     },
   });
+}
+
+export async function failStaleRenderingItems(
+  userId: string,
+  options?: {
+    activeIds?: string[];
+    staleBefore?: Date;
+  }
+): Promise<string[]> {
+  const activeIds = (options?.activeIds ?? []).filter(Boolean);
+  const staleBefore = options?.staleBefore ?? new Date(Date.now() - 2 * 60 * 1000);
+  const recoveredIds: string[] = [];
+
+  await withContentDb({
+    pg: async ({ db, table }) => {
+      const whereParts: Array<SQL> = [
+        eq(table.userId, userId),
+        eq(table.status, "rendering"),
+        sql`${table.updatedAt} <= ${staleBefore}`,
+      ];
+      if (activeIds.length > 0) {
+        whereParts.push(notInArray(table.id, activeIds));
+      }
+      const staleRows = await db
+        .select({ id: table.id })
+        .from(table)
+        .where(and(...whereParts));
+      const staleIds = staleRows.map((row) => row.id);
+      if (staleIds.length === 0) return;
+      recoveredIds.push(...staleIds);
+      await db
+        .update(table)
+        .set({ status: "failed", updatedAt: new Date() })
+        .where(
+          and(
+            eq(table.userId, userId),
+            inArray(table.id, staleIds)
+          )
+        );
+    },
+    sqlite: async ({ db, table, now }) => {
+      const whereParts: Array<SQL> = [
+        eq(table.userId, userId),
+        eq(table.status, "rendering"),
+        sql`${table.updatedAt} <= ${staleBefore.toISOString()}`,
+      ];
+      if (activeIds.length > 0) {
+        whereParts.push(notInArray(table.id, activeIds));
+      }
+      const staleRows = await db
+        .select({ id: table.id })
+        .from(table)
+        .where(and(...whereParts));
+      const staleIds = staleRows.map((row) => row.id);
+      if (staleIds.length === 0) return;
+      recoveredIds.push(...staleIds);
+      await db
+        .update(table)
+        .set({ status: "failed", updatedAt: now })
+        .where(
+          and(
+            eq(table.userId, userId),
+            inArray(table.id, staleIds)
+          )
+        );
+    },
+  });
+  return recoveredIds;
 }
 
 export async function getContentStats(userId: string) {

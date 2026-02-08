@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocketIO } from "./socketIO-provider";
 import type { ContentListResponse } from "@/types";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 
 type UseContentListOptions = {
   query?: string;

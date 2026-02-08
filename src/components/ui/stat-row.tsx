@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion, type MotionProps } from "framer-motion";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 
 type StatRowProps = Omit<React.HTMLAttributes<HTMLDivElement>, "onDrag"> &
   MotionProps & {

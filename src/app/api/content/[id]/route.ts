@@ -8,10 +8,10 @@ import {
   deleteContentManifest,
   writeContentManifest,
   getContentRenderDir,
-} from "@/lib/content-store";
+} from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
-import { getPaletteFromPath } from "@/lib/color-palette";
-import { emitContentUpdate } from "@/lib/socket";
+import { getPaletteFromPath } from "@/lib/content/color-palette";
+import { emitContentUpdate } from "@/lib/socket/manager";
 import {
   contentUpdateFormSchema,
   deleteContentItem,
@@ -19,7 +19,7 @@ import {
   parseContentSettingsString,
   updateContentItem,
 } from "@/lib/data/content";
-import { getSessionUser } from "@/lib/auth-session";
+import { getSessionUser } from "@/lib/auth/session";
 import {
   DEFAULT_CONTENT_MODE,
   legacyColumnsToSettings,

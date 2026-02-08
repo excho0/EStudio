@@ -3,6 +3,8 @@ import { createServer } from "http";
 import { execFile } from "child_process";
 import next from "next";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
 import si from "systeminformation";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -14,7 +16,7 @@ let mockFanDir = 1;
 
 app
   .prepare()
-  .then(() => {
+  .then(async () => {
     const httpServer = createServer((req, res) => {
       handle(req, res);
     });
@@ -23,6 +25,31 @@ app
       path: "/api/socket",
       addTrailingSlash: false,
     });
+
+    const socketRedisUrl =
+      process.env.SOCKET_IO_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+    if (socketRedisUrl) {
+      try {
+        const pubClient = createClient({
+          url: socketRedisUrl,
+          socket: { reconnectStrategy: (retries) => Math.min(1000 * retries, 10_000) },
+        });
+        const subClient = pubClient.duplicate();
+        pubClient.on("error", (error) => {
+          console.warn("[socket.io] redis pub error", error);
+        });
+        subClient.on("error", (error) => {
+          console.warn("[socket.io] redis sub error", error);
+        });
+        await Promise.all([pubClient.connect(), subClient.connect()]);
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log("[socket.io] redis adapter enabled");
+      } catch (error) {
+        console.warn("[socket.io] redis adapter disabled, falling back to in-memory", error);
+      }
+    } else {
+      console.log("[socket.io] redis adapter skipped (no REDIS_URL/SOCKET_IO_REDIS_URL)");
+    }
 
     globalThis.io = io;
 

@@ -43,11 +43,11 @@ import {
 } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchJson } from "@/lib/fetch-json";
+import { queryKeys } from "@/lib/http/query-keys";
+import { fetchJson } from "@/lib/http/fetch-json";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ConnectionsResponse } from "@/types";

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { SelectableCard } from "@/components/ui/selectable-card";
 
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 
 const ThemeSkeleton = ({ variant }: { variant: "light" | "dark" | "system" }) => {
   if (variant === "system") {
