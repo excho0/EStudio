@@ -9,6 +9,7 @@ import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { sendEmailChangeVerification } from "@/lib/auth/email";
+import { eventBus } from "@/lib/event-bus";
 
 export const runtime = "nodejs";
 
@@ -315,10 +316,19 @@ export async function PUT(request: Request) {
     }
   }
 
-  return NextResponse.json({
+  const response = {
     name: updated.name ?? "",
     email: updated.email ?? "",
     image: updated.image ?? null,
     pendingEmail,
+  };
+
+  void eventBus.emit("user.profile.updated", {
+    userId: user.id,
+    name: response.name,
+    email: response.email,
+    pendingEmail: response.pendingEmail,
   });
+
+  return NextResponse.json(response);
 }

@@ -8,6 +8,7 @@ import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
+import { eventBus } from "@/lib/event-bus";
 
 export const runtime = "nodejs";
 
@@ -233,5 +234,11 @@ export async function POST(
   }
 
   enqueuePublishJob(publishId);
+  void eventBus.emit("publish.queued", {
+    userId: user.id,
+    id: publishId,
+    contentId,
+    provider: publish.provider,
+  });
   return NextResponse.json({ queued: true });
 }

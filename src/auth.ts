@@ -7,6 +7,7 @@ import type { Provider } from "next-auth/providers";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 
 import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
+import { eventBus } from "@/lib/event-bus";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import {
   accounts,
@@ -117,6 +118,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "database" },
   pages: {
     signIn: "/login",
+  },
+  events: {
+    linkAccount: async ({ user, account }) => {
+      if (!user?.id || !account?.provider) return;
+      void eventBus.emit("provider.connection.created", {
+        userId: user.id,
+        provider: account.provider,
+        providerAccountId: account.providerAccountId ?? null,
+      });
+    },
   },
   secret: process.env.AUTH_SECRET,
   trustHost: true,

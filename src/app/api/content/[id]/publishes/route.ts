@@ -11,6 +11,7 @@ import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
+import { eventBus } from "@/lib/event-bus";
 
 export const runtime = "nodejs";
 
@@ -306,6 +307,12 @@ export async function POST(
       })
       .returning();
     enqueuePublishJob(record.id);
+    void eventBus.emit("publish.queued", {
+      userId: user.id,
+      id: record.id,
+      contentId,
+      provider: payload.data.provider,
+    });
     return NextResponse.json({ publish: record });
   }
 
@@ -325,5 +332,11 @@ export async function POST(
   });
 
   enqueuePublishJob(id);
+  void eventBus.emit("publish.queued", {
+    userId: user.id,
+    id,
+    contentId,
+    provider: payload.data.provider,
+  });
   return NextResponse.json({ publish: { id, status } });
 }

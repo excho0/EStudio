@@ -7,6 +7,7 @@ import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getStorage, storageKey } from "@/lib/storage";
+import { eventBus } from "@/lib/event-bus";
 
 export const runtime = "nodejs";
 
@@ -294,6 +295,11 @@ export async function DELETE(request: Request) {
       }
     })
   );
+
+  void eventBus.emit("provider.connection.deleted", {
+    userId: user.id,
+    provider,
+  });
 
   return NextResponse.json({ ok: true });
 }

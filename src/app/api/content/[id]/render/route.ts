@@ -21,6 +21,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { createContentAssetToken } from "@/lib/content/asset-token";
 import { getContentMode, resolveContentSettings } from "@/lib/content-modes";
 import { enqueueRenderJob, isRenderQueueEnabled } from "@/lib/queue/render-queue";
+import { eventBus } from "@/lib/event-bus";
 import type {
   BundleFn,
   BrowserInstance,
@@ -917,6 +918,7 @@ export async function POST(
   if (shouldUseQueue) {
     try {
       await enqueueRenderJob({ id, userId });
+      void eventBus.emit("render.queued", { userId, id });
       return NextResponse.json(
         { ok: true, status: "queued", id },
         { status: 202 }

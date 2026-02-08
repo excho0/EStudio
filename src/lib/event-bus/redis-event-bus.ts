@@ -1,23 +1,29 @@
 import { getRedisClient } from "@/lib/redis/client-manager";
+import type { AppEventMap } from "@/types";
 
 export type EventPayload = Record<string, unknown>;
+export type EventTopic = keyof AppEventMap;
 
-export type EventEnvelope<T extends EventPayload = EventPayload> = {
-  topic: string;
-  payload: T;
+export type EventEnvelope<
+  TTopic extends EventTopic = EventTopic,
+  TPayload extends EventPayload = AppEventMap[TTopic]
+> = {
+  topic: TTopic;
+  payload: TPayload;
   at: string;
 };
 
-const channelFor = (topic: string) => `event-bus:${topic}`;
+const channelFor = (topic: EventTopic) => `event-bus:${topic}`;
 
-export const publishEvent = async <T extends EventPayload>(
-  topic: string,
-  payload: T
+export const publishEvent = async <TTopic extends EventTopic>(
+  topic: TTopic,
+  payload: AppEventMap[TTopic]
 ) => {
-  const client = await getRedisClient("event-bus");
+  const client: Awaited<ReturnType<typeof getRedisClient>> =
+    await getRedisClient("event-bus");
   if (!client) return false;
   try {
-    const envelope: EventEnvelope<T> = {
+    const envelope: EventEnvelope<TTopic, AppEventMap[TTopic]> = {
       topic,
       payload,
       at: new Date().toISOString(),
@@ -29,18 +35,19 @@ export const publishEvent = async <T extends EventPayload>(
   }
 };
 
-export const subscribeToEvent = async <T extends EventPayload>(
-  topic: string,
-  handler: (event: EventEnvelope<T>) => void | Promise<void>
+export const subscribeToEvent = async <TTopic extends EventTopic>(
+  topic: TTopic,
+  handler: (event: EventEnvelope<TTopic, AppEventMap[TTopic]>) => void | Promise<void>
 ) => {
-  const base = await getRedisClient("event-bus");
+  const base: Awaited<ReturnType<typeof getRedisClient>> =
+    await getRedisClient("event-bus");
   if (!base) return async () => {};
 
   const subscriber = base.duplicate();
   await subscriber.connect();
   await subscriber.subscribe(channelFor(topic), async (message) => {
     try {
-      const parsed = JSON.parse(message) as EventEnvelope<T>;
+      const parsed = JSON.parse(message) as EventEnvelope<TTopic, AppEventMap[TTopic]>;
       await handler(parsed);
     } catch {
       // ignore malformed event
@@ -57,10 +64,13 @@ export const subscribeToEvent = async <T extends EventPayload>(
 };
 
 export type EventBus = {
-  emit: <T extends EventPayload>(topic: string, payload: T) => Promise<boolean>;
-  on: <T extends EventPayload>(
-    topic: string,
-    handler: (event: EventEnvelope<T>) => void | Promise<void>
+  emit: <TTopic extends EventTopic>(
+    topic: TTopic,
+    payload: AppEventMap[TTopic]
+  ) => Promise<boolean>;
+  on: <TTopic extends EventTopic>(
+    topic: TTopic,
+    handler: (event: EventEnvelope<TTopic, AppEventMap[TTopic]>) => void | Promise<void>
   ) => Promise<() => Promise<void>>;
 };
 

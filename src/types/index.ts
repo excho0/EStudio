@@ -47,4 +47,15 @@ export type {
   TemplateVideoProps,
 } from "./remotion";
 export type { RenderProgress } from "./render";
+export type {
+  AppEventMap,
+  ContentUpdatePayload,
+  RenderProgressPayload,
+  RenderCompletePayload,
+  PublishUpdatePayload,
+  PublishProgressPayload,
+  PublishQueuedPayload,
+  ProviderConnectionPayload,
+  UserProfileUpdatedPayload,
+} from "./events";
 export type { StorageAdapter, StorageStat } from "./storage";
