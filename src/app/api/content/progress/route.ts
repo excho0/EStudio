@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { getRenderProgressSnapshot } from "@/lib/socket/manager";
+import { handleGetRenderProgress } from "@/lib/api/content/progress";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,5 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({
-    items: await getRenderProgressSnapshot(user.id),
-  });
+  return handleGetRenderProgress(user.id);
 }
