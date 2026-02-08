@@ -58,6 +58,7 @@ import {
   applyFieldValue,
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
+  isFieldDisabled,
 } from "@/lib/content-modes/ui-helpers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -65,7 +66,6 @@ type UploadFormValues = {
   title: string;
   mode: string;
   settings: Record<string, Record<string, unknown>>;
-  songDurationSeconds: string;
   fps: string;
   width: string;
   height: string;
@@ -77,7 +77,6 @@ const initialForm: UploadFormValues = {
   settings: {
     video_loop: resolveContentSettings("video_loop", {}).settings as Record<string, unknown>,
   },
-  songDurationSeconds: "",
   fps: "30",
   width: "1280",
   height: "720",
@@ -211,7 +210,6 @@ export default function DashboardUploadPage() {
     (!requiresThumbnail || !!draftPaths.thumbnailPath) &&
     (!requiresVideo || !!draftPaths.videoPath) &&
     (!requiresSong || !!draftPaths.songPath) &&
-    (!requiresSong || Number(formValues.songDurationSeconds || 0) > 0) &&
     (!requiresVideo || getSettingNumber("segmentDurationSeconds", 0) > 0);
   const reviewWidth = Math.round(Number(formValues.width || 1280));
   const reviewHeight = Math.round(Number(formValues.height || 720));
@@ -228,12 +226,7 @@ export default function DashboardUploadPage() {
   const reviewAudioFadeOutOffset = getSettingNumber("audioFadeOutOffsetSeconds", 0);
 
   const renderModeField = (field: ContentModeField) => {
-    const disabled =
-      (field.key === "visualizationBars" &&
-        !Boolean(resolvedSettings.visualizationEnabled)) ||
-      ((field.key === "edgeRaysIntensity" ||
-        field.key === "edgeRaysVocalBalance") &&
-        !Boolean(resolvedSettings.edgeRaysEnabled));
+    const disabled = isFieldDisabled(fieldMap, currentSettings, field);
     if (field.input === "toggle") {
       return (
         <SettingToggleRow
@@ -242,6 +235,7 @@ export default function DashboardUploadPage() {
           label={field.label}
           tip={field.tooltip ?? ""}
           checked={Boolean(resolvedSettings[field.key])}
+          disabled={disabled}
           onCheckedChange={(checked) => updateFormValue(field.key, checked)}
         />
       );
@@ -352,23 +346,7 @@ export default function DashboardUploadPage() {
       }
 
       if (audioFile && requiresSong) {
-        const duration = await getMediaDuration(audioFile, "audio");
-        const songDurationSeconds = duration ? Number(duration.toFixed(2)) : 0;
-        setFormValues((current) => {
-          const next = {
-            ...current,
-            songDurationSeconds: String(songDurationSeconds),
-          };
-          return next;
-        });
-      } else if (requiresSong) {
-        setFormValues((current) => {
-          const next = {
-            ...current,
-          songDurationSeconds: "",
-        };
-          return next;
-        });
+        await getMediaDuration(audioFile, "audio");
       }
 
     })();
@@ -500,10 +478,7 @@ export default function DashboardUploadPage() {
       toast.error(`Please select ${missing}.`);
       return;
     }
-    if (
-      (requiresSong && Number(formValues.songDurationSeconds || 0) <= 0) ||
-      (requiresVideo && getSettingNumber("segmentDurationSeconds", 0) <= 0)
-    ) {
+    if (requiresVideo && getSettingNumber("segmentDurationSeconds", 0) <= 0) {
       setError("Unable to detect media durations. Please reselect the files.");
       toast.error("Unable to detect media durations. Please reselect the files.");
       return;
@@ -526,10 +501,6 @@ export default function DashboardUploadPage() {
       const parsed = Number(trimmed);
       return Number.isFinite(parsed) ? parsed : undefined;
     };
-    const songDurationSeconds = toOptionalNumber(formValues.songDurationSeconds);
-    if (songDurationSeconds !== undefined) {
-      payload.songDurationSeconds = songDurationSeconds;
-    }
     const fps = toOptionalNumber(formValues.fps);
     if (fps !== undefined) payload.fps = fps;
     const width = toOptionalNumber(formValues.width);
@@ -595,7 +566,6 @@ export default function DashboardUploadPage() {
         )}.`;
         nextErrors.media = errorMessage;
       } else if (
-        (requiresSong && Number(formValues.songDurationSeconds || 0) <= 0) ||
         (requiresVideo && getSettingNumber("segmentDurationSeconds", 0) <= 0)
       ) {
         errorMessage = "We couldn't detect durations. Please reselect your media.";

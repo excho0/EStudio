@@ -65,6 +65,7 @@ import {
   applyFieldValue,
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
+  isFieldDisabled,
 } from "@/lib/content-modes/ui-helpers";
 import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
 import {
@@ -74,6 +75,10 @@ import {
   SettingSliderRow,
   SettingToggleRow,
 } from "@/components/content-settings/fields";
+import StickyBox from "@/components/ui/sticky-box";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { is } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -209,6 +214,9 @@ const ColorCopyButton = ({
 
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
+  const isMobile = useIsMobile();
+  const isTablet = useMediaQuery("(max-width: 1024px)");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [item, setItem] = useState<ContentItem | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
@@ -302,7 +310,6 @@ export default function EditContentPage() {
     },
   });
   const saving = saveMutation.isPending;
-  const isTablet = useMediaQuery("(max-width: 1024px)");
   const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
   const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
   const thumbnailUrl = item
@@ -423,12 +430,7 @@ export default function EditContentPage() {
   };
 
   const renderModeField = (field: ContentModeField) => {
-    const disabled =
-      (field.key === "visualizationBars" &&
-        !Boolean(resolvedSettings.visualizationEnabled)) ||
-      ((field.key === "edgeRaysIntensity" ||
-        field.key === "edgeRaysVocalBalance") &&
-        !Boolean(resolvedSettings.edgeRaysEnabled));
+    const disabled = isFieldDisabled(fieldMap, currentSettings, field);
     if (field.input === "toggle") {
       return (
         <SettingToggleRow
@@ -437,6 +439,7 @@ export default function EditContentPage() {
           label={field.label}
           tip={field.tooltip ?? ""}
           checked={Boolean(resolvedSettings[field.key])}
+          disabled={disabled}
           onCheckedChange={(checked) => updateFormValue(field.key, checked)}
         />
       );
@@ -552,26 +555,36 @@ export default function EditContentPage() {
           </p>
         </div>
       </div>
-      <div className="flex items-center justify-end gap-3">
-        <Button
-          onClick={handleSave}
-          loading={saving}
-          disabled={!isDirty || saving}
-          className="gap-2"
-        >
-          <Save className="size-5" />
-          <span className="hidden sm:inline">Save</span>
-        </Button>
-        <Button
-          variant="outline"
-          className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-          onClick={handleRevert}
-          disabled={!isDirty}
-        >
-          <RotateCw className="size-5" />
-          <span className="hidden sm:inline">Revert changes</span>
-        </Button>
-      </div>
+      <StickyBox top={isMobile || isTablet ? 80 : 80} fullWidth={isMobile || isTablet}>
+        {(isSticky) => (
+          <div
+            className={cn(
+              "flex items-center gap-3",
+              isSticky && isMobile || isTablet ? "justify-center" : "justify-end"
+            )}
+          >
+
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            disabled={!isDirty || saving}
+            className="gap-2"
+          >
+            <Save className="size-5" />
+            <span className="hidden sm:inline">Save</span>
+          </Button>
+          <Button
+            variant="outline"
+            className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+            onClick={handleRevert}
+            disabled={!isDirty}
+          >
+            <RotateCw className="size-5" />
+            <span className="hidden sm:inline">Revert changes</span>
+          </Button>
+          </div>
+        )}
+      </StickyBox>
     </div>
 
       <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)]">
@@ -923,36 +936,42 @@ export default function EditContentPage() {
           </div>
         ) : null}
         <div>
-          <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
-            {loading || videoLoading || audioLoading || !previewProps || !canRenderPreview ? (
-              <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
-            ) : item ? (
-              <Player
-                acknowledgeRemotionLicense
-                component={previewComponent}
-                inputProps={previewProps ?? {}}
-                durationInFrames={safeDurationInFrames}
-                fps={resolvedFps}
-                compositionWidth={resolvedWidth}
-                compositionHeight={resolvedHeight}
-                controls
-                style={{ width: "100%" }}
-              />
-            ) : (
-              <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
-            )}
-            
-            {isTablet ? (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
-                aria-label="Edit thumbnail"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
+          <StickyBox
+            top={isMobile || isTablet ? 120 : 140}
+            fullWidth={isMobile || isTablet}
+            className="self-start"
+          >
+            <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
+              {loading || videoLoading || audioLoading || !previewProps || !canRenderPreview ? (
+                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+              ) : item ? (
+                <Player
+                  acknowledgeRemotionLicense
+                  component={previewComponent}
+                  inputProps={previewProps ?? {}}
+                  durationInFrames={safeDurationInFrames}
+                  fps={resolvedFps}
+                  compositionWidth={resolvedWidth}
+                  compositionHeight={resolvedHeight}
+                  controls
+                  style={{ width: "100%" }}
+                />
+              ) : (
+                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+              )}
+              
+              {isTablet ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
+                  aria-label="Edit thumbnail"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </StickyBox>
           <div className="p-2 py-4">
             {loading ? (
               <>

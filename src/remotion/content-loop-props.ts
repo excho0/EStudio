@@ -8,8 +8,20 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   visualizationEnabled: true,
   visualizationBars: 128,
   edgeRaysEnabled: true,
-  edgeRaysIntensity: 0.85,
+  edgeRaysIntensity: 0.3,
   edgeRaysVocalBalance: 0.6,
+  motionEnabled: false,
+  motionAmountPx: 4,
+  motionSpeed: 0.6,
+  motionAttack: 0.9,
+  motionRelease: 0.32,
+  sharpenEnabled: false,
+  sharpenAmount: 0.4,
+  sharpenUseMaster: true,
+  sharpenMaster: 0.4,
+  sharpenContrastWeight: 0.45,
+  sharpenSaturationWeight: 0.2,
+  sharpenBrightnessWeight: 0.03,
   colorPalette: undefined,
   scalePercent: 100,
   segmentDurationSeconds: 4,
@@ -23,6 +35,8 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   videoDurationSeconds: 4,
   playbackRate: 1,
   overlapRatio: 0.25,
+  renderShaderEnabled: false,
+  renderShaderDebugMode: "none",
   songDurationSeconds: 30,
   fps: 30,
   width: 1280,
@@ -51,6 +65,18 @@ type ContentLoopItemLike = {
   edgeRaysEnabled?: boolean | null;
   edgeRaysIntensity?: number | null;
   edgeRaysVocalBalance?: number | null;
+  motionEnabled?: boolean | null;
+  motionAmountPx?: number | null;
+  motionSpeed?: number | null;
+  motionAttack?: number | null;
+  motionRelease?: number | null;
+  sharpenEnabled?: boolean | null;
+  sharpenAmount?: number | null;
+  sharpenUseMaster?: boolean | null;
+  sharpenMaster?: number | null;
+  sharpenContrastWeight?: number | null;
+  sharpenSaturationWeight?: number | null;
+  sharpenBrightnessWeight?: number | null;
   videoDurationSeconds?: number | null;
   overlapRatio?: number | null;
   playbackRate?: number | null;
@@ -126,6 +152,56 @@ export const buildContentLoopPropsFromItem = (
       getSetting<number>("edgeRaysVocalBalance") ??
       item.edgeRaysVocalBalance ??
       CONTENT_LOOP_DEFAULTS.edgeRaysVocalBalance,
+    motionEnabled:
+      getSetting<boolean>("motionEnabled") ??
+      item.motionEnabled ??
+      CONTENT_LOOP_DEFAULTS.motionEnabled,
+    motionAmountPx:
+      getSetting<number>("motionAmountPx") ??
+      item.motionAmountPx ??
+      CONTENT_LOOP_DEFAULTS.motionAmountPx,
+    motionSpeed:
+      getSetting<number>("motionSpeed") ??
+      item.motionSpeed ??
+      CONTENT_LOOP_DEFAULTS.motionSpeed,
+    motionAttack:
+      getSetting<number>("motionAttack") ??
+      item.motionAttack ??
+      CONTENT_LOOP_DEFAULTS.motionAttack,
+    motionRelease:
+      getSetting<number>("motionRelease") ??
+      item.motionRelease ??
+      CONTENT_LOOP_DEFAULTS.motionRelease,
+    sharpenEnabled:
+      getSetting<boolean>("sharpenEnabled") ??
+      item.sharpenEnabled ??
+      CONTENT_LOOP_DEFAULTS.sharpenEnabled,
+    sharpenAmount:
+      getSetting<number>("sharpenAmount") ??
+      item.sharpenAmount ??
+      CONTENT_LOOP_DEFAULTS.sharpenAmount,
+    sharpenUseMaster:
+      getSetting<boolean>("sharpenUseMaster") ??
+      item.sharpenUseMaster ??
+      CONTENT_LOOP_DEFAULTS.sharpenUseMaster,
+    sharpenMaster:
+      getSetting<number>("sharpenMaster") ??
+      getSetting<number>("sharpenAmount") ??
+      item.sharpenMaster ??
+      item.sharpenAmount ??
+      CONTENT_LOOP_DEFAULTS.sharpenMaster,
+    sharpenContrastWeight:
+      getSetting<number>("sharpenContrastWeight") ??
+      item.sharpenContrastWeight ??
+      CONTENT_LOOP_DEFAULTS.sharpenContrastWeight,
+    sharpenSaturationWeight:
+      getSetting<number>("sharpenSaturationWeight") ??
+      item.sharpenSaturationWeight ??
+      CONTENT_LOOP_DEFAULTS.sharpenSaturationWeight,
+    sharpenBrightnessWeight:
+      getSetting<number>("sharpenBrightnessWeight") ??
+      item.sharpenBrightnessWeight ??
+      CONTENT_LOOP_DEFAULTS.sharpenBrightnessWeight,
     videoDurationSeconds:
       getSetting<number>("videoDurationSeconds") ??
       item.videoDurationSeconds ??

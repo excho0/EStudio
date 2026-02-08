@@ -79,6 +79,8 @@ const mixHex = (first: string, second: string, amount: number) => {
     .padStart(2, "0")}${b2.toString(16).padStart(2, "0")}`;
 };
 
+const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
+
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
   const { isRendering } = useRemotionEnvironment();
 
@@ -124,9 +126,58 @@ const SegmentLayer: React.FC<{
   videoFrames: number;
   startFrom: number;
   playbackRate?: number;
+  sharpenEnabled?: boolean;
+  sharpenAmount?: number;
+  sharpenUseMaster?: boolean;
+  sharpenMaster?: number;
+  sharpenContrastWeight?: number;
+  sharpenSaturationWeight?: number;
+  sharpenBrightnessWeight?: number;
+  glowEnabled?: boolean;
+  glowIntensity?: number;
+  glowColor?: string;
   scale: number;
-}> = ({ duration, videoSrc, videoFrames, startFrom, playbackRate, scale }) => {
+}> = ({
+  duration,
+  videoSrc,
+  videoFrames,
+  startFrom,
+  playbackRate,
+  sharpenEnabled = false,
+  sharpenAmount = 0.4,
+  sharpenUseMaster = true,
+  sharpenMaster = 0.4,
+  sharpenContrastWeight = 0.45,
+  sharpenSaturationWeight = 0.2,
+  sharpenBrightnessWeight = 0.03,
+  glowEnabled = false,
+  glowIntensity = 0,
+  glowColor,
+  scale,
+}) => {
+  const { width, height, fps } = useVideoConfig();
   const slices = buildVideoSlices(startFrom, duration, videoFrames);
+  const masterStrength = Math.max(
+    0,
+    Math.min(1, Number.isFinite(sharpenMaster) ? sharpenMaster : sharpenAmount)
+  );
+  const contrastWeight = Math.max(0, Math.min(1, sharpenContrastWeight));
+  const saturationWeight = Math.max(0, Math.min(1, sharpenSaturationWeight));
+  const brightnessWeight = Math.max(0, Math.min(0.5, sharpenBrightnessWeight));
+  const contrastBoost = sharpenUseMaster
+    ? masterStrength * contrastWeight
+    : contrastWeight;
+  const saturationBoost = sharpenUseMaster
+    ? masterStrength * saturationWeight
+    : saturationWeight;
+  const brightnessBoost = sharpenUseMaster
+    ? masterStrength * brightnessWeight
+    : brightnessWeight;
+  const baseVideoFilter = sharpenEnabled
+    ? `contrast(${(1 + contrastBoost).toFixed(3)}) saturate(${(
+        1 + saturationBoost
+      ).toFixed(3)}) brightness(${(1 + brightnessBoost).toFixed(3)})`
+    : undefined;
 
   return (
     <AbsoluteFill
@@ -148,6 +199,7 @@ const SegmentLayer: React.FC<{
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              filter: baseVideoFilter,
             }}
           />
         </Sequence>
@@ -163,8 +215,20 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   visualizationEnabled = true,
   visualizationBars = 128,
   edgeRaysEnabled = true,
-  edgeRaysIntensity = 0.85,
+  edgeRaysIntensity = 0.3,
   edgeRaysVocalBalance = 0.6,
+  motionEnabled = false,
+  motionAmountPx = 4,
+  motionSpeed = 0.6,
+  motionAttack = 0.9,
+  motionRelease = 0.32,
+  sharpenEnabled = false,
+  sharpenAmount = 0.4,
+  sharpenUseMaster = true,
+  sharpenMaster = 0.4,
+  sharpenContrastWeight = 0.45,
+  sharpenSaturationWeight = 0.2,
+  sharpenBrightnessWeight = 0.03,
   colorPalette,
   scalePercent = 100,
   segmentDurationSeconds,
@@ -486,6 +550,20 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     return Math.pow(normalized, 0.6);
   }, [audioData, edgeRaysVocalBalance, smoothBars]);
 
+  const bassMotionEnergy = useMemo(() => {
+    const currentBars = smoothBars?.currentBars;
+    if (!currentBars || currentBars.length === 0) return 0;
+    const total = currentBars.length;
+    const bassEnd = Math.max(1, Math.floor(total * 0.14));
+    let bassSum = 0;
+    for (let i = 0; i < bassEnd; i += 1) {
+      bassSum += currentBars[i] ?? 0;
+    }
+    const bassAvg = bassSum / bassEnd;
+    const normalized = Math.max(0, Math.min(1, (bassAvg - 0.006) / 0.35));
+    return Math.pow(normalized, 0.7);
+  }, [smoothBars]);
+
   const glowRef = useRef(0);
   const lastEnergyRef = useRef(0);
   const transientRef = useRef(0);
@@ -493,10 +571,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const glowIntensity = useMemo(() => {
     const intensityScale = 0.35 + edgeRaysIntensity * 1.35;
     const target = Math.min(1, edgeEnergy * intensityScale);
-    if (isRendering) {
-      lastEnergyRef.current = target;
-      return Math.max(0, target);
-    }
     if (frame === 0) {
       glowRef.current = target;
       lastEnergyRef.current = target;
@@ -507,28 +581,80 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const rise = Math.max(0, target - lastEnergy);
     lastEnergyRef.current = target;
 
-    const transient = transientRef.current + (rise - transientRef.current) * 0.35;
+    const transient = lerp(transientRef.current, rise, 0.35);
     transientRef.current = transient;
 
     const gateTarget = rise > 0.03 ? 1 : 0;
-    const gate = gateRef.current + (gateTarget - gateRef.current) * 0.2;
+    const gate = lerp(gateRef.current, gateTarget, 0.2);
     gateRef.current = gate;
 
     const current = glowRef.current;
     const attack = 0.8;
     const release = 0.18;
     const smoothed = target > current
-      ? current + (target - current) * attack
-      : current + (target - current) * release;
+      ? lerp(current, target, attack)
+      : lerp(current, target, release);
     glowRef.current = smoothed;
 
     const kick = transient * 1.4 * gate;
     return Math.min(1, smoothed + kick);
-  }, [edgeEnergy, edgeRaysIntensity, frame, isRendering]);
+  }, [edgeEnergy, edgeRaysIntensity, frame]);
 
-  const renderGlowIntensity = isRendering
-    ? Math.max(glowIntensity, edgeRaysEnabled ? 0.1 : 0)
-    : glowIntensity;
+  const motionEnvelopeRef = useRef(0);
+  const motionLastEnergyRef = useRef(0);
+  const motionTransientRef = useRef(0);
+  const motionKickRef = useRef(0);
+  const motionEnergy = useMemo(() => {
+    const target = Math.max(0, Math.min(1, bassMotionEnergy));
+    if (frame === 0) {
+      motionEnvelopeRef.current = target;
+      motionLastEnergyRef.current = target;
+      motionTransientRef.current = 0;
+      motionKickRef.current = 0;
+      return target;
+    }
+    const attack = Math.max(0.22, Math.min(0.995, motionAttack));
+    const release = Math.max(0.06, Math.min(0.95, motionRelease));
+    const current = motionEnvelopeRef.current;
+    const smoothed =
+      target > current
+        ? lerp(current, target, attack)
+        : lerp(current, target, release);
+    motionEnvelopeRef.current = smoothed;
+
+    const rise = Math.max(0, target - motionLastEnergyRef.current);
+    motionLastEnergyRef.current = target;
+    const transient = lerp(motionTransientRef.current, rise, 0.75);
+    motionTransientRef.current = transient;
+    const kickTarget = rise > 0.016 ? 1 : 0;
+    const kick = lerp(motionKickRef.current, kickTarget, 0.78);
+    motionKickRef.current = kick;
+    return Math.min(1, smoothed * 0.78 + transient * 3.8 * kick);
+  }, [bassMotionEnergy, frame, motionAttack, motionRelease]);
+
+  const motionTime = (frame / fps) * Math.PI * 2 * Math.max(0, motionSpeed);
+  const motionBase = Math.max(0, Math.min(1, motionEnergy * 1.55 + 0.08));
+  const motionAmp = Math.max(0, motionAmountPx) * motionBase;
+  const motionXRaw = motionEnabled ? Math.sin(motionTime) * motionAmp : 0;
+  const motionYRaw = motionEnabled
+    ? (Math.cos(motionTime * 0.9) * motionAmp * 0.45 + motionAmp * 0.25)
+    : 0;
+  const motionXRef = useRef(0);
+  const motionYRef = useRef(0);
+  const motionLerpAlpha = 0.52;
+  if (frame === 0) {
+    motionXRef.current = motionXRaw;
+    motionYRef.current = motionYRaw;
+  } else {
+    motionXRef.current = lerp(motionXRef.current, motionXRaw, motionLerpAlpha);
+    motionYRef.current = lerp(motionYRef.current, motionYRaw, motionLerpAlpha);
+  }
+  const motionX = motionXRef.current;
+  const motionY = motionYRef.current;
+  const motionTransform = motionEnabled
+    ? `translate(${motionX.toFixed(2)}px, ${motionY.toFixed(2)}px)`
+    : undefined;
+
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const segmentCount = useMemo(() => {
@@ -558,6 +684,16 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 maxStart === 0 ? 0 : (index * step) % (maxStart + 1)
               }
               playbackRate={resolvedPlaybackRate}
+              sharpenEnabled={sharpenEnabled}
+              sharpenAmount={sharpenAmount}
+              sharpenUseMaster={sharpenUseMaster}
+              sharpenMaster={sharpenMaster}
+              sharpenContrastWeight={sharpenContrastWeight}
+              sharpenSaturationWeight={sharpenSaturationWeight}
+              sharpenBrightnessWeight={sharpenBrightnessWeight}
+              glowEnabled={edgeRaysEnabled}
+              glowIntensity={glowIntensity * visualizationOpacity * introOutroOpacity}
+              glowColor={glowColor}
               scale={scaleFactor}
             />
           </TransitionSeries.Sequence>,
@@ -586,6 +722,18 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoSrc,
       maxStart,
       resolvedPlaybackRate,
+      glowIntensity,
+      sharpenAmount,
+      sharpenUseMaster,
+      sharpenMaster,
+      sharpenContrastWeight,
+      sharpenSaturationWeight,
+      sharpenBrightnessWeight,
+      sharpenEnabled,
+      introOutroOpacity,
+      visualizationOpacity,
+      edgeRaysEnabled,
+      glowColor,
       scaleFactor,
     ]
   );
@@ -610,13 +758,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     <AbsoluteFill style={{ backgroundColor: "#050505", color: "white" }}>
       {videoSrc ? (
         <>
-          <AbsoluteFill style={{ opacity: videoOpacity }}>
+          <AbsoluteFill
+            style={{
+              opacity: videoOpacity,
+              transform: motionTransform,
+            }}
+          >
             <TransitionSeries>{series}</TransitionSeries>
           </AbsoluteFill>
           {thumbnailSrc && !isRendering ? (
             <AbsoluteFill
               style={{
                 opacity: thumbnailOpacity,
+                transform: motionTransform,
               }}
             >
               <Img
@@ -654,47 +808,87 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       )}
-      {edgeRaysEnabled && renderGlowIntensity > 0 ? (
-        <AbsoluteFill 
+      {edgeRaysEnabled && glowIntensity > 0 && (
+        <AbsoluteFill
           style={{
             pointerEvents: "none",
             opacity: visualizationOpacity * introOutroOpacity,
             zIndex: 2,
-          }
-        }
-          
+          }}
         >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              mixBlendMode: "screen", // TODO: check normal  as well!!
+            }}
+          />
           {[
-            { top: 0, left: 0, transform: "translate(-50%, -50%)" },
-            { top: 0, right: 0, transform: "translate(50%, -50%)" },
-            { bottom: 0, left: 0, transform: "translate(-50%, 50%)" },
-            { bottom: 0, right: 0, transform: "translate(50%, 50%)" },
-          ].map((position, index) => (
+            {
+              key: "top",
+              style: {
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 140,
+                background: `linear-gradient(180deg, ${hexToRgba(
+                  glowColor,
+                  glowIntensity * 0.9
+                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+              },
+            },
+            {
+              key: "bottom",
+              style: {
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 140,
+                background: `linear-gradient(0deg, ${hexToRgba(
+                  glowColor,
+                  glowIntensity * 0.9
+                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+              },
+            },
+            {
+              key: "left",
+              style: {
+                top: 0,
+                bottom: 0,
+                left: 0,
+                width: 140,
+                background: `linear-gradient(90deg, ${hexToRgba(
+                  glowColor,
+                  glowIntensity * 0.9
+                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+              },
+            },
+            {
+              key: "right",
+              style: {
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: 140,
+                background: `linear-gradient(270deg, ${hexToRgba(
+                  glowColor,
+                  glowIntensity * 0.9
+                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+              },
+            },
+          ].map((edge) => (
             <div
-              key={`glow-${index}`}
+              key={edge.key}
               style={{
                 position: "absolute",
-                width: 420,
-                height: 420,
-                ...position,
-                background: `radial-gradient(circle at 30% 30%, ${hexToRgba(
-                  glowColor,
-                  renderGlowIntensity
-                )} 0%, ${hexToRgba(glowColor, 0)} 70%)`,
-                filter: `blur(${isRendering ? 90 : 140 + renderGlowIntensity * 180}px)`,
+                filter: `blur(${110 + glowIntensity * 140}px)`,
                 opacity: 1,
-                mixBlendMode: isRendering ? "normal" : "screen",
-                boxShadow: isRendering
-                  ? `0 0 ${120 + renderGlowIntensity * 160}px ${hexToRgba(
-                      glowColor,
-                      renderGlowIntensity * 0.7
-                    )}`
-                  : undefined,
+                ...edge.style,
               }}
             />
           ))}
         </AbsoluteFill>
-      ) : null}
+      )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
       {visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill

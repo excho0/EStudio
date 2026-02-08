@@ -8,6 +8,18 @@ export type ContentLoopProps = {
   edgeRaysEnabled?: boolean;
   edgeRaysIntensity?: number;
   edgeRaysVocalBalance?: number;
+  motionEnabled?: boolean;
+  motionAmountPx?: number;
+  motionSpeed?: number;
+  motionAttack?: number;
+  motionRelease?: number;
+  sharpenEnabled?: boolean;
+  sharpenAmount?: number;
+  sharpenUseMaster?: boolean;
+  sharpenMaster?: number;
+  sharpenContrastWeight?: number;
+  sharpenSaturationWeight?: number;
+  sharpenBrightnessWeight?: number;
   colorPalette?: string[];
   scalePercent?: number;
   segmentDurationSeconds: number;
@@ -21,6 +33,8 @@ export type ContentLoopProps = {
   videoDurationSeconds?: number;
   playbackRate?: number;
   overlapRatio?: number | null;
+  renderShaderEnabled?: boolean;
+  renderShaderDebugMode?: "none" | "passthrough" | "uv" | "solid";
   songDurationSeconds?: number;
   fps?: number;
   width?: number;

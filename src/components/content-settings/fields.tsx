@@ -11,12 +11,14 @@ export const SettingToggleRow = ({
   label,
   tip,
   checked,
+  disabled,
   onCheckedChange,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   tip: string;
   checked: boolean;
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) => (
   <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
@@ -38,7 +40,7 @@ export const SettingToggleRow = ({
         </TooltipContent>
       </Tooltip>
     </div>
-    <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
   </div>
 );
 
