@@ -54,19 +54,19 @@ import {
   resolveContentSettings,
   legacyColumnsToSettings,
   normalizeSettingsMap,
-} from "@/lib/content-modes";
+} from "@/lib/content/modes";
 import {
   getContentModeDefinition,
   getContentModeUi,
   contentModeUiRegistry,
   type ContentModeField,
-} from "@/lib/content-modes/ui-registry";
+} from "@/lib/content/modes/ui-registry";
 import {
   applyFieldValue,
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
-} from "@/lib/content-modes/ui-helpers";
+} from "@/lib/content/modes/ui-helpers";
 import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
 import {
   LabelWithTooltip,

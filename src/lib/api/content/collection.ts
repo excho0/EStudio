@@ -23,7 +23,7 @@ import {
   DEFAULT_CONTENT_MODE,
   resolveContentSettings,
   normalizeSettingsMap,
-} from "@/lib/content-modes";
+} from "@/lib/content/modes";
 import { getRenderProgressSnapshot } from "@/lib/socket/manager";
 
 const storage = getStorage();

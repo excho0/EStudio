@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
-import { normalizeSettingsMap } from "../src/lib/content-modes";
+import { normalizeSettingsMap } from "../src/lib/content/modes";
 
 type JsonValue =
   | string

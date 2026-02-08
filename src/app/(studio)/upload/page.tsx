@@ -49,17 +49,17 @@ import {
   getContentModeDefinition,
   getContentModeUi,
   contentModeUiRegistry,
-} from "@/lib/content-modes/ui-registry";
-import type { ContentModeField } from "@/lib/content-modes/ui-registry";
+} from "@/lib/content/modes/ui-registry";
+import type { ContentModeField } from "@/lib/content/modes/ui-registry";
 import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
 import { SettingSliderRow, SettingToggleRow } from "@/components/content-settings/fields";
-import { normalizeSettingsMap, resolveContentSettings } from "@/lib/content-modes";
+import { normalizeSettingsMap, resolveContentSettings } from "@/lib/content/modes";
 import {
   applyFieldValue,
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
-} from "@/lib/content-modes/ui-helpers";
+} from "@/lib/content/modes/ui-helpers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { sdk } from "@/lib/sdk";
 

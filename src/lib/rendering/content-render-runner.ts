@@ -10,7 +10,7 @@ import { emitContentUpdate } from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/shared/helpers";
 import { createContentAssetToken } from "@/lib/content/asset-token";
-import { getContentMode, resolveContentSettings } from "@/lib/content-modes";
+import { getContentMode, resolveContentSettings } from "@/lib/content/modes";
 import {
   getServeUrl,
   loadRenderer,

@@ -25,7 +25,7 @@ import {
   mergeContentSettings,
   normalizeSettingsMap,
   settingsToLegacyColumns,
-} from "@/lib/content-modes";
+} from "@/lib/content/modes";
 
 const storage = getStorage();
 

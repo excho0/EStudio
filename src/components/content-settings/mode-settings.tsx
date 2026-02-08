@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { ContentModeSection } from "@/lib/content-modes/ui-registry";
+import type { ContentModeSection } from "@/lib/content/modes/ui-registry";
 import {
   Collapsible,
   CollapsibleContent,
