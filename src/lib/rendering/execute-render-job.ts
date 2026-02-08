@@ -645,10 +645,10 @@ export const startRenderJob = async ({
           }
 
         } finally {
-          const b: BrowserInstance | null = browser;
-          browser = null;
-          if (b) {
-            await b.close({ silent: true });
+          const activeBrowser = browser as BrowserInstance | null;
+          if (activeBrowser) {
+            await activeBrowser.close({ silent: true });
+            browser = null;
           }
         }
       };

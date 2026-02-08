@@ -124,6 +124,11 @@ export const handleDebugYoutubeProvider = async (request: Request) => {
       "https://www.googleapis.com/youtube/v3/channels"
     );
     const authorizationValue = authHeader.get?.("authorization") ?? null;
+    type AuthHeaderDebug = {
+      hasAuthorization: boolean;
+      authorizationPrefix: string | null;
+      headerKeys: string[];
+    };
     let tokenInfo: Record<string, string> | null = null;
     if (authorizationValue) {
       try {
@@ -241,7 +246,7 @@ export const handleDebugYoutubeProvider = async (request: Request) => {
         hasAuthorization: Boolean(authorizationValue),
         authorizationPrefix: authorizationValue?.split(" ")[0] ?? null,
         headerKeys: authHeader.keys ? Array.from(authHeader.keys()) : [],
-      },
+      } satisfies AuthHeaderDebug,
       tokenInfo,
       rawApi,
       channel,
@@ -266,7 +271,12 @@ export const handleDebugYoutubeProvider = async (request: Request) => {
             errors: (error as { errors?: unknown }).errors ?? null,
           }
         : null;
-    let authHeader: { hasAuthorization: boolean; authorizationPrefix: string | null } | null =
+    type AuthHeaderDebug = {
+      hasAuthorization: boolean;
+      authorizationPrefix: string | null;
+      headerKeys: string[];
+    };
+    let authHeader: AuthHeaderDebug | null =
       null;
     try {
       const { oauth2Client } = await getGoogleYoutubeClient(user.id);

@@ -450,7 +450,14 @@ export const ShaderVideoLayer: React.FC<ShaderVideoLayerProps> = ({
       return true;
     };
 
-      if (isRendering && sampleVideo) {
+    if (isRendering && sampleVideo) {
+      const renderingVideo = video;
+      if (!renderingVideo) {
+        setRuntimeFallback(true);
+        return () => {
+          cancelled = true;
+        };
+      }
       const frameHandle = delayRender("Shader frame seek");
       let finished = false;
       let retries = 0;
@@ -477,16 +484,16 @@ export const ShaderVideoLayer: React.FC<ShaderVideoLayerProps> = ({
       };
 
       try {
-        video.pause();
+        renderingVideo.pause();
         const seekAndDraw = () => {
           if (cancelled) return;
           const duration =
-            Number.isFinite(video.duration) && video.duration > 0
-              ? video.duration
+            Number.isFinite(renderingVideo.duration) && renderingVideo.duration > 0
+              ? renderingVideo.duration
               : Infinity;
           const clampedTarget = Math.max(0, Math.min(targetTime, duration - 1 / Math.max(1, fps)));
           if (
-            Math.abs(video.currentTime - clampedTarget) <
+            Math.abs(renderingVideo.currentTime - clampedTarget) <
             1 / Math.max(1, fps * 4)
           ) {
             drawAfterSeek();
@@ -495,31 +502,31 @@ export const ShaderVideoLayer: React.FC<ShaderVideoLayerProps> = ({
           let seekTimeout: ReturnType<typeof setTimeout> | null = null;
           const onSeeked = () => {
             if (seekTimeout) clearTimeout(seekTimeout);
-            video.removeEventListener("seeked", onSeeked);
+            renderingVideo.removeEventListener("seeked", onSeeked);
             drawAfterSeek();
           };
-          video.addEventListener("seeked", onSeeked);
+          renderingVideo.addEventListener("seeked", onSeeked);
           seekTimeout = setTimeout(() => {
-            video.removeEventListener("seeked", onSeeked);
+            renderingVideo.removeEventListener("seeked", onSeeked);
             // Some headless runs intermittently miss seeked; proceed with best effort.
             drawAfterSeek();
           }, 300);
           try {
-            video.currentTime = clampedTarget;
+            renderingVideo.currentTime = clampedTarget;
           } catch {
             if (seekTimeout) clearTimeout(seekTimeout);
-            video.removeEventListener("seeked", onSeeked);
+            renderingVideo.removeEventListener("seeked", onSeeked);
             finish();
           }
         };
-        if (!videoReadyRef.current || video.readyState < 2) {
+        if (!videoReadyRef.current || renderingVideo.readyState < 2) {
           const onLoaded = () => {
-            video.removeEventListener("loadeddata", onLoaded);
+            renderingVideo.removeEventListener("loadeddata", onLoaded);
             seekAndDraw();
           };
-          video.addEventListener("loadeddata", onLoaded, { once: true });
+          renderingVideo.addEventListener("loadeddata", onLoaded, { once: true });
           const safety = setTimeout(() => {
-            video.removeEventListener("loadeddata", onLoaded);
+            renderingVideo.removeEventListener("loadeddata", onLoaded);
             finish();
           }, 2000);
           return () => {
