@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import path from "path";
+import { spawn } from "child_process";
 import { NextResponse } from "next/server";
 import {
   ensureContentStore,
@@ -20,15 +21,72 @@ import {
 import { getSessionUser } from "@/lib/auth-session";
 import {
   DEFAULT_CONTENT_MODE,
-  legacyColumnsToSettings,
   resolveContentSettings,
   normalizeSettingsMap,
-  settingsToLegacyColumns,
 } from "@/lib/content-modes";
 
 export const runtime = "nodejs";
 
 const storage = getStorage();
+
+const parseDurationFromFfmpegOutput = (output: string) => {
+  const match = output.match(/Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (![hours, minutes, seconds].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  return hours * 3600 + minutes * 60 + seconds;
+};
+
+const getAudioDurationSeconds = (absolutePath: string) =>
+  new Promise<number | null>((resolve) => {
+    const tryFfprobe = () => {
+      const proc = spawn("ffprobe", [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=nw=1:nk=1",
+        absolutePath,
+      ]);
+      let stdout = "";
+      let stderr = "";
+      proc.stdout.on("data", (chunk) => {
+        stdout += String(chunk);
+      });
+      proc.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      proc.on("close", (code) => {
+        if (code === 0) {
+          const parsed = Number(stdout.trim());
+          if (Number.isFinite(parsed) && parsed > 0) {
+            resolve(parsed);
+            return;
+          }
+        }
+        tryFfmpeg(stderr);
+      });
+    };
+
+    const tryFfmpeg = (stderrSeed = "") => {
+      const proc = spawn("ffmpeg", ["-i", absolutePath, "-f", "null", "-"]);
+      let stderr = stderrSeed;
+      proc.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      proc.on("close", () => {
+        const parsed = parseDurationFromFfmpegOutput(stderr);
+        resolve(parsed && parsed > 0 ? parsed : null);
+      });
+    };
+
+    tryFfprobe();
+  });
 
 const writeUpload = async (
   userId: string,
@@ -94,22 +152,9 @@ export async function POST(request: Request) {
           thumbnailPath?: string;
           videoPath?: string;
           songPath?: string;
-          songDurationSeconds?: number;
-          segmentDurationSeconds?: number;
-          videoDurationSeconds?: number;
-          fadeDurationSeconds?: number;
-          introFadeSeconds?: number;
-          outroFadeSeconds?: number;
-          audioFadeInSeconds?: number;
-          audioFadeOutSeconds?: number;
-          audioFadeInOffsetSeconds?: number;
-          audioFadeOutOffsetSeconds?: number;
-          playbackRate?: number;
-          overlapRatio?: number;
           fps?: number;
           width?: number;
           height?: number;
-          scalePercent?: number;
           mode?: string;
           settings?: Record<string, unknown>;
         }
@@ -131,16 +176,18 @@ export async function POST(request: Request) {
     const colorPalette = thumbnailPath
       ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
       : null;
+    const songAbsolutePath = storage.resolvePath(songPath);
+    const serverSongDuration = await getAudioDurationSeconds(songAbsolutePath);
 
     const mode = payload.mode ?? DEFAULT_CONTENT_MODE;
-    const settingsInput =
-      payload.settings ?? legacyColumnsToSettings(mode, payload as Record<string, unknown>);
+    const settingsInput = payload.settings ?? {};
     const resolved = resolveContentSettings(mode, settingsInput);
     const settingsMap = normalizeSettingsMap(mode, settingsInput);
     settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
-    const legacySettings = settingsToLegacyColumns(resolved.mode, resolved.settings);
-    const overlapRatioValue =
-      typeof legacySettings.overlapRatio === "number" ? legacySettings.overlapRatio : null;
+    const songDurationSeconds = serverSongDuration ?? 0;
+    const fps = typeof payload.fps === "number" ? payload.fps : undefined;
+    const width = typeof payload.width === "number" ? payload.width : undefined;
+    const height = typeof payload.height === "number" ? payload.height : undefined;
     const item = contentCreateSchema.parse({
       id,
       userId: user.id,
@@ -150,11 +197,10 @@ export async function POST(request: Request) {
       paletteMode: "auto",
       mode: resolved.mode,
       settings: settingsMap,
-      ...legacySettings,
-      overlapRatio:
-        overlapRatioValue !== null
-          ? Math.min(0.9, Math.max(0, overlapRatioValue))
-          : null,
+      songDurationSeconds,
+      fps,
+      width,
+      height,
     });
 
     const created = await createContentItem(item);
@@ -187,7 +233,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { songDurationSeconds, mode, settings: settingsRaw } = parsedForm;
+  const { fps, width, height, mode, settings: settingsRaw } = parsedForm;
 
   const id = randomUUID();
   const [thumbnailPath, videoPath, songPath] = await Promise.all([
@@ -199,20 +245,13 @@ export async function POST(request: Request) {
   const colorPalette = thumbnailPath
     ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
     : null;
+  const songAbsolutePath = storage.resolvePath(songPath);
+  const serverSongDuration = await getAudioDurationSeconds(songAbsolutePath);
 
   const settingsInput = parseContentSettingsString(settingsRaw);
-  const legacyFallback = legacyColumnsToSettings(mode, {
-    songDurationSeconds,
-  });
-  const resolved = resolveContentSettings(
-    mode,
-    settingsInput ?? legacyFallback
-  );
-  const settingsMap = normalizeSettingsMap(mode, settingsInput ?? legacyFallback);
+  const resolved = resolveContentSettings(mode, settingsInput ?? {});
+  const settingsMap = normalizeSettingsMap(mode, settingsInput ?? {});
   settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
-  const legacySettings = settingsToLegacyColumns(resolved.mode, resolved.settings);
-  const overlapRatioValue =
-    typeof legacySettings.overlapRatio === "number" ? legacySettings.overlapRatio : null;
 
   const item = contentCreateSchema.parse({
     id,
@@ -223,11 +262,10 @@ export async function POST(request: Request) {
     paletteMode: "auto",
     mode: resolved.mode,
     settings: settingsMap,
-    ...legacySettings,
-    overlapRatio:
-      overlapRatioValue !== null
-        ? Math.min(0.9, Math.max(0, overlapRatioValue))
-        : null,
+    songDurationSeconds: serverSongDuration ?? 0,
+    fps,
+    width,
+    height,
   });
 
   const created = await createContentItem(item);

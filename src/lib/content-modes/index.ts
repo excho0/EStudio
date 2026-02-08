@@ -25,6 +25,31 @@ export const normalizeSettingsMap = (mode: string | undefined, settings: unknown
   return { [definition.id]: base };
 };
 
+const parseModeSettings = (
+  schema: (typeof contentModeRegistry)[ContentModeId]["schema"],
+  input: Record<string, unknown>
+) => {
+  const candidate: Record<string, unknown> = { ...input };
+  for (let i = 0; i < 4; i += 1) {
+    const parsed = schema.safeParse(candidate);
+    if (parsed.success) {
+      return parsed;
+    }
+    const unknownKeys = parsed.error.issues
+      .filter((issue) => issue.code === "unrecognized_keys")
+      .flatMap((issue) =>
+        "keys" in issue && Array.isArray(issue.keys) ? issue.keys : []
+      );
+    if (unknownKeys.length === 0) {
+      return parsed;
+    }
+    for (const key of unknownKeys) {
+      delete candidate[key];
+    }
+  }
+  return schema.safeParse(candidate);
+};
+
 export const resolveContentSettings = (mode: string | undefined, settings: unknown) => {
   const definition = getContentMode(mode);
   const settingsMap = normalizeSettingsMap(definition.id, settings);
@@ -39,7 +64,10 @@ export const resolveContentSettings = (mode: string | undefined, settings: unkno
   delete cleaned.fps;
   delete cleaned.width;
   delete cleaned.height;
-  const parsed = definition.schema.safeParse(cleaned ?? {});
+  const parsed = parseModeSettings(
+    definition.schema,
+    (cleaned ?? {}) as Record<string, unknown>
+  );
   if (!parsed.success) {
     throw new Error(parsed.error.message);
   }
@@ -65,7 +93,7 @@ export const mergeContentSettings = (
   delete merged.fps;
   delete merged.width;
   delete merged.height;
-  const parsed = definition.schema.safeParse(merged);
+  const parsed = parseModeSettings(definition.schema, merged);
   if (!parsed.success) {
     throw new Error(parsed.error.message);
   }
@@ -81,7 +109,6 @@ export const settingsToLegacyColumns = (mode: string, settings: unknown) => {
   if (!parsed.success) return {};
   const value = parsed.data;
   return {
-    songDurationSeconds: value.songDurationSeconds,
     segmentDurationSeconds: value.segmentDurationSeconds,
     videoDurationSeconds: value.videoDurationSeconds,
     fadeDurationSeconds: value.fadeDurationSeconds,
@@ -97,6 +124,8 @@ export const settingsToLegacyColumns = (mode: string, settings: unknown) => {
     edgeRaysEnabled: value.edgeRaysEnabled,
     edgeRaysIntensity: value.edgeRaysIntensity,
     edgeRaysVocalBalance: value.edgeRaysVocalBalance,
+    sharpenEnabled: value.sharpenEnabled,
+    sharpenAmount: value.sharpenAmount,
     overlapRatio: value.overlapRatio,
     playbackRate: value.playbackRate,
   };
@@ -105,7 +134,6 @@ export const settingsToLegacyColumns = (mode: string, settings: unknown) => {
 export const legacyColumnsToSettings = (mode: string, legacy: Record<string, unknown>) => {
   if (mode !== "video_loop") return {};
   const value: Record<string, unknown> = {
-    songDurationSeconds: legacy.songDurationSeconds,
     segmentDurationSeconds: legacy.segmentDurationSeconds,
     videoDurationSeconds: legacy.videoDurationSeconds,
     fadeDurationSeconds: legacy.fadeDurationSeconds,
@@ -121,6 +149,8 @@ export const legacyColumnsToSettings = (mode: string, legacy: Record<string, unk
     edgeRaysEnabled: legacy.edgeRaysEnabled,
     edgeRaysIntensity: legacy.edgeRaysIntensity,
     edgeRaysVocalBalance: legacy.edgeRaysVocalBalance,
+    sharpenEnabled: legacy.sharpenEnabled,
+    sharpenAmount: legacy.sharpenAmount,
     overlapRatio: legacy.overlapRatio,
     playbackRate: legacy.playbackRate,
   };

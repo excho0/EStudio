@@ -104,7 +104,6 @@ export const contentCreateFormSchema = z.object({
   title: z.string().default("Untitled"),
   mode: z.string().default("video_loop"),
   settings: z.string().optional(),
-  songDurationSeconds: z.coerce.number().nonnegative().default(0),
   fps: z.coerce.number().int().positive().default(30),
   width: z.coerce.number().int().positive().default(1280),
   height: z.coerce.number().int().positive().default(720),
