@@ -8,7 +8,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +47,8 @@ const hashString = (value: string) => {
   return hash;
 };
 
+type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
+
 export default function ConnectionsSettingsPage() {
   const { status } = useSession();
   const providers = useMemo(
@@ -70,13 +72,7 @@ export default function ConnectionsSettingsPage() {
   const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
     queryKey: queryKeys.metaProviders,
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      return fetchJson<{ oauthProviders?: string[] }>(
-        "/api/meta/providers",
-        undefined,
-        "Failed to load providers."
-      );
-    },
+    queryFn: async () => sdk.meta.providers(),
   });
 
   const enabledProviders = metaProvidersQuery.data?.oauthProviders ?? allProviders;
@@ -86,17 +82,7 @@ export default function ConnectionsSettingsPage() {
       queryKey: queryKeys.publishProvider(provider.id),
       enabled: status === "authenticated",
       staleTime: 60_000,
-      queryFn: async () => {
-        return fetchJson<{
-          connected: boolean;
-          needsReconnect?: boolean;
-          channel?: { title: string | null; thumbnail: string | null };
-        }>(
-          `/api/publish/providers/${provider.id}`,
-          undefined,
-          `Unable to load ${provider.label} connection.`
-        );
-      },
+      queryFn: async () => sdk.publish.provider(provider.id),
     })),
   });
 
@@ -104,13 +90,19 @@ export default function ConnectionsSettingsPage() {
     const next = buildProviderState(providers);
     providers.forEach((provider, index) => {
       const query = connectionQueries[index];
-      const data = query?.data;
+      const data = query?.data as PublishProviderPayload | undefined;
       const providerKey = provider.oauthProviderName ?? provider.id;
+      const normalizedChannel = data?.channel
+        ? {
+            title: data.channel.title ?? null,
+            thumbnail: data.channel.thumbnail ?? null,
+          }
+        : null;
       next[provider.id] = {
         ...next[provider.id],
         connected: Boolean(data?.connected),
         needsReconnect: Boolean(data?.needsReconnect),
-        channel: data?.channel ?? null,
+        channel: normalizedChannel,
         enabled: enabledProviders.includes(providerKey),
         loading: query?.isLoading || query?.isFetching,
       };
@@ -141,13 +133,7 @@ export default function ConnectionsSettingsPage() {
 
   const unlinkMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      const response = await fetch(`/api/publish/providers/${providerId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload?.error ?? `Unable to unlink ${providerId}.`);
-      }
+      await sdk.publish.unlinkProvider(providerId);
     },
     onSuccess: async (_data, providerId) => {
       await queryClient.invalidateQueries({

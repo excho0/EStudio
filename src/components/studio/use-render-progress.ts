@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSocketIO } from "./socketIO-provider";
 import type { RenderProgress } from "@/types";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 
 export type { RenderProgress } from "@/types";
 
@@ -15,13 +15,9 @@ export const useRenderProgress = () => {
     let cancelled = false;
     const hydrate = async () => {
       try {
-        const response = await fetchJson<{ items?: Record<string, RenderProgress> }>(
-          "/api/content/progress",
-          undefined,
-          "Failed to load render progress."
-        );
+        const response = await sdk.content.progress();
         if (cancelled) return;
-        setProgressMap(response.items ?? {});
+        setProgressMap((response.items ?? {}) as Record<string, RenderProgress>);
       } catch {
         // Keep local socket-driven state if snapshot fetch fails.
       }

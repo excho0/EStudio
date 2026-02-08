@@ -61,6 +61,7 @@ import {
   isFieldDisabled,
 } from "@/lib/content-modes/ui-helpers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { sdk } from "@/lib/sdk";
 
 type UploadFormValues = {
   title: string;
@@ -433,11 +434,7 @@ export default function DashboardUploadPage() {
           ? draftPaths.videoPath
           : draftPaths.songPath;
     if (!path) return;
-    await fetch("/api/uploads", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
+    await sdk.uploads.deleteDraft(path);
     setDraftPaths((current) => ({
       ...current,
       ...(kind === "thumbnail" ? { thumbnailPath: undefined } : {}),
@@ -509,24 +506,21 @@ export default function DashboardUploadPage() {
     if (height !== undefined) payload.height = height;
 
     setSubmitting(true);
-    const response = await fetch("/api/content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
+    try {
+      await sdk.content.create(payload);
+    } catch {
       setError("Upload failed. Please check the files and try again.");
       toast.error("Upload failed. Please check the files and try again.");
-    } else {
-      setFormValues(initialForm);
-      setDraftPaths({});
-      setMediaFiles([]);
-      setUploadKey((current) => current + 1);
-      await refresh();
-      toast.success("Upload saved.");
-      methods.goTo("success");
+      setSubmitting(false);
+      return;
     }
+    setFormValues(initialForm);
+    setDraftPaths({});
+    setMediaFiles([]);
+    setUploadKey((current) => current + 1);
+    await refresh();
+    toast.success("Upload saved.");
+    methods.goTo("success");
 
     setSubmitting(false);
   };

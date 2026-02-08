@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocketIO } from "./socketIO-provider";
 import type { ContentListResponse } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 
 type UseContentListOptions = {
   query?: string;
@@ -53,11 +53,14 @@ export const useContentList = (options: UseContentListOptions = {}) => {
   const { data, isLoading, isFetching, refetch } = useQuery<LocalContentListResponse>({
     queryKey,
     queryFn: async () => {
-      return fetchJson<ContentListResponse>(
-        `/api/content?${searchParams.toString()}`,
-        undefined,
-        "Failed to load content list"
-      );
+      return sdk.content.list({
+        q: searchParams.get("q") ?? undefined,
+        status: searchParams.get("status") ?? undefined,
+        sortBy: searchParams.get("sortBy") ?? undefined,
+        sortDir: searchParams.get("sortDir") ?? undefined,
+        page,
+        limit,
+      });
     },
     placeholderData: (previous) => previous,
   });

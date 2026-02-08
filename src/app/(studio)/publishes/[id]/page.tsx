@@ -47,7 +47,7 @@ import { cn } from "@/lib/shared/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ConnectionsResponse } from "@/types";
@@ -480,35 +480,30 @@ export default function PublishesPage() {
   const queryClient = useQueryClient();
 
   const publishQueryKey = useMemo(() => queryKeys.publishes(id), [id]);
+  type ConnectionsPayload = Awaited<ReturnType<typeof sdk.user.connections>>;
 
   const connectionsQuery = useQuery<ConnectionsResponse>({
     queryKey: queryKeys.profileConnections,
     staleTime: 60_000,
-    queryFn: async () => {
-      return fetchJson<ConnectionsResponse>(
-        "/api/user/profile/connections",
-        undefined,
-        "Failed to load connections."
-      );
-    },
+    queryFn: async () => (await sdk.user.connections()) as ConnectionsPayload,
   });
   const connectedAccountIds = useMemo(() => {
-    const connections = connectionsQuery.data?.connections ?? [];
-    return new Set(
+    const connections = (connectionsQuery.data?.connections ?? []) as ConnectionsPayload["connections"];
+    return new Set<string>(
       connections
-        .map((connection) => connection.providerAccountId)
-        .filter((value): value is string => Boolean(value))
+        .map((connection: ConnectionsPayload["connections"][number]) => connection.providerAccountId)
+        .filter((value: string | null): value is string => Boolean(value))
     );
   }, [connectionsQuery.data]);
 
   const { data, isLoading, isFetching, error } = useQuery<PublishListResponse, Error>({
     queryKey: publishQueryKey,
     queryFn: async () => {
-      return fetchJson<PublishListResponse>(
-        `/api/content/${id}/publishes`,
-        undefined,
-        "Failed to load publishes."
-      );
+      if (!id) {
+        return { publishes: [] };
+      }
+      const payload = await sdk.content.listPublishes(id);
+      return { publishes: payload.publishes as PublishRecord[] };
     },
     enabled: Boolean(id),
     placeholderData: (previous) => previous,
@@ -516,16 +511,8 @@ export default function PublishesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (publishId: string) => {
-      const response = await fetch(`/api/content/${id}/publishes/${publishId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? "Failed to delete publish.");
-      }
-      return response;
+      if (!id) return;
+      await sdk.content.deletePublish(id, publishId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: publishQueryKey });
@@ -534,16 +521,8 @@ export default function PublishesPage() {
 
   const retryMutation = useMutation({
     mutationFn: async (publishId: string) => {
-      const response = await fetch(`/api/content/${id}/publishes/${publishId}`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? "Failed to retry publish.");
-      }
-      return response;
+      if (!id) return;
+      await sdk.content.retryPublish(id, publishId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: publishQueryKey });

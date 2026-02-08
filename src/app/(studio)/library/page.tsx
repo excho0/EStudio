@@ -73,7 +73,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
 import React from "react";
 import { queryKeys } from "@/lib/http/query-keys";
-import { throwForNonOkResponse } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import type { ContentColumnMeta } from "@/types";
 
 export default function LibraryPage() {
@@ -155,8 +155,7 @@ export default function LibraryPage() {
   });
   const renderMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
-      await throwForNonOkResponse(response, "Render failed. Please check server logs.");
+      await sdk.content.triggerRender(id);
     },
     onSuccess: () => {
       toast.message("Render started.");
@@ -204,16 +203,7 @@ export default function LibraryPage() {
       if (keepRenders) {
         params.set("keepRenders", "1");
       }
-      const query = params.toString();
-      const response = await fetch(
-        `/api/content/${id}${query ? `?${query}` : ""}`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (!response.ok) {
-        throw new Error("Delete failed. Please try again.");
-      }
+      await sdk.content.remove(id, keepRenders);
     },
     onSuccess: () => {
       toast.success("Item deleted.");

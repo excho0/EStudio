@@ -46,7 +46,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { Link } from "@/components/navigation/route-transition";
@@ -80,6 +80,10 @@ type ProviderState = {
     supportsCategories?: boolean;
   };
 };
+
+type PublishProvidersPayload = Awaited<ReturnType<typeof sdk.publish.providers>>;
+type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
+type ContentRendersPayload = Awaited<ReturnType<typeof sdk.content.renders>>;
 
 type PublishDrawerProps = {
   contentId: string;
@@ -193,16 +197,16 @@ export function PublishDrawer({
     enabled: canLoadData,
     staleTime: 60_000,
     queryFn: async () => {
-      const payload = await fetchJson<{
-        publishTargets?: Array<
-          PublishTarget & { connected?: boolean; channel?: ProviderState["channel"] }
-        >;
-      }>("/api/publish/providers", undefined, "Unable to load publish targets.");
+      const payload = (await sdk.publish.providers()) as PublishProvidersPayload;
       const publishTargets = payload.publishTargets ?? [];
-      return publishTargets.map((target) => ({
-        ...target,
+      return publishTargets.map((target: PublishProvidersPayload["publishTargets"][number]) => ({
+        ...(target as PublishTarget & {
+          connected?: boolean;
+          channel?: ProviderState["channel"];
+        }),
         connected: Boolean(target.connected),
-        channel: target.channel ?? null,
+        channel:
+          (target as { channel?: ProviderState["channel"] }).channel ?? null,
         connectionId: target.connectionId ?? null,
       }));
     },
@@ -218,10 +222,7 @@ export function PublishDrawer({
         staleTime: 60_000,
         queryFn: async () => {
           if (!endpoint) return null;
-          return fetchJson<{
-            connected: boolean;
-            channel?: { title: string | null; thumbnail: string | null };
-          }>(endpoint, undefined, "Unable to load provider connection.");
+          return sdk.publish.provider(target.id);
         },
       };
     }),
@@ -231,7 +232,10 @@ export function PublishDrawer({
     const base = publishTargetsQuery.data ?? [];
     if (providerDetailQueries.length === 0) return base;
     return base.map((target, index) => {
-      const detail = providerDetailQueries[index]?.data;
+      const detail = providerDetailQueries[index]?.data as
+        | PublishProviderPayload
+        | null
+        | undefined;
       if (!detail) return target;
       return {
         ...target,
@@ -256,14 +260,10 @@ export function PublishDrawer({
     enabled: canLoadData,
     staleTime: 30_000,
     queryFn: async () => {
-      const payload = await fetchJson<{ title?: string }>(
-        `/api/content/${contentId}`,
-        undefined,
-        "Unable to load content summary."
-      );
+      const payload = await sdk.content.get(contentId);
       return {
         title: payload.title,
-        thumbnailUrl: `/api/content/${contentId}/asset?type=thumbnail`,
+        thumbnailUrl: sdk.content.assetUrl(contentId, "thumbnail"),
       };
     },
   });
@@ -273,12 +273,12 @@ export function PublishDrawer({
     enabled: canLoadData,
     staleTime: 15_000,
     queryFn: async () => {
-      const payload = await fetchJson<{ items?: RenderItem[] }>(
-        `/api/content/${contentId}/renders?limit=50`,
-        undefined,
-        "Unable to load renders."
-      );
-      return payload.items ?? [];
+      const payload = (await sdk.content.renders(
+        contentId,
+        1,
+        50
+      )) as ContentRendersPayload;
+      return payload.items as RenderItem[];
     },
   });
 
@@ -336,31 +336,23 @@ export function PublishDrawer({
       if (!connectionId) {
         throw new Error("Missing provider connection.");
       }
-      const payload = await fetchJson<{ publish?: { id?: string } }>(
-        `/api/content/${contentId}/publishes`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider: selectedProvider,
-            renderId: selectedRender,
-            connectionId,
-            status: "draft",
-            metadata: {
-              title: title.trim(),
-              description: description.trim(),
-              options: {
-                privacy: selectedProviderData?.capabilities?.supportsPrivacy
-                  ? privacyValue
-                  : undefined,
-                scheduleAt: scheduleValue || undefined,
-              },
-              thumbnailUrl: thumbnailUrl ?? undefined,
-            },
-          }),
+      const payload = await sdk.content.createPublish(contentId, {
+        provider: selectedProvider,
+        renderId: selectedRender,
+        connectionId,
+        status: "draft",
+        metadata: {
+          title: title.trim(),
+          description: description.trim(),
+          options: {
+            privacy: selectedProviderData?.capabilities?.supportsPrivacy
+              ? privacyValue
+              : undefined,
+            scheduleAt: scheduleValue || undefined,
+          },
+          thumbnailUrl: thumbnailUrl ?? undefined,
         },
-        "Unable to create publish."
-      );
+      });
       return payload.publish?.id ?? null;
     },
   });

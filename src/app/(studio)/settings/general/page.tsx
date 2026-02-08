@@ -18,7 +18,7 @@ import {
   setNotificationEnabled,
 } from "@/lib/notifications";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import type { SettingsResponse } from "@/types";
 
 export default function DashboardSettingsPage() {
@@ -26,26 +26,10 @@ export default function DashboardSettingsPage() {
   const settingsQuery = useQuery<SettingsResponse>({
     queryKey: queryKeys.settings,
     staleTime: 30_000,
-    queryFn: async () => {
-      return fetchJson<SettingsResponse>(
-        "/api/settings",
-        undefined,
-        "Failed to load settings."
-      );
-    },
+    queryFn: async () => sdk.settings.get(),
   });
   const rescanMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/content/rescan", { method: "POST" });
-      if (!response.ok) {
-        throw new Error("Failed to rescan content storage.");
-      }
-      return (await response.json()) as {
-        created: number;
-        skipped: number;
-        errors: string[];
-      };
-    },
+    mutationFn: async () => sdk.content.rescan(),
     onSuccess: async (result) => {
       if (result.errors?.length) {
         toast.error(result.errors[0] ?? "Rescan completed with warnings.");

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { AuthPage, authProviderIcons } from "@/components/auth/auth-page";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 
 const allProviders = [
   {
@@ -44,12 +44,7 @@ export default function LoginPage() {
   }>({
     queryKey: queryKeys.metaProviders,
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      return fetchJson<{
-        oauthProviders?: string[];
-        emailEnabled?: boolean;
-      }>("/api/meta/providers", undefined, "Failed to load providers.");
-    },
+    queryFn: async () => sdk.meta.providers(),
   });
 
   const enabledProviders =

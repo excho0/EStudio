@@ -24,7 +24,7 @@ import { cn } from "@/lib/shared/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import type { RenderListResponse } from "@/types";
 
 const DesktopSkeletonRows = () => (
@@ -125,11 +125,10 @@ export default function RendersPage() {
     enabled: Boolean(id),
     staleTime: 15_000,
     queryFn: async () => {
-      return fetchJson<RenderListResponse>(
-        `/api/content/${id}/renders?page=${page}&limit=${limit}`,
-        undefined,
-        "Failed to load renders."
-      );
+      if (!id) {
+        return { page, limit, total: 0, items: [] };
+      }
+      return sdk.content.renders(id, page, limit);
     },
   });
   const items = rendersQuery.data?.items ?? [];
@@ -186,13 +185,7 @@ export default function RendersPage() {
   const deleteRenderMutation = useMutation({
     mutationFn: async (name: string) => {
       if (!id) return;
-      const response = await fetch(
-        `/api/content/${id}/renders/${encodeURIComponent(name)}`,
-        { method: "DELETE" }
-      );
-      if (!response.ok) {
-        throw new Error("Failed to delete render.");
-      }
+      await sdk.content.deleteRender(id, name);
       return name;
     },
     onSuccess: (name) => {

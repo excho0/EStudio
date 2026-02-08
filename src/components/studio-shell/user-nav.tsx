@@ -7,7 +7,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
+import type { ConnectionsResponse } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -44,23 +45,11 @@ export function UserNav() {
   const queryClient = useQueryClient();
   const initials = getInitials(user?.name, user?.email);
 
-  const connectionsQuery = useQuery<{
-    connections?: Array<{
-      provider: string;
-      profile?: { image?: string | null };
-    }>;
-  }>({
+  const connectionsQuery = useQuery<ConnectionsResponse>({
     queryKey: queryKeys.profileConnections,
     enabled: status === "authenticated",
     staleTime: 60_000,
-    queryFn: async () => {
-      return fetchJson<{
-        connections?: Array<{
-          provider: string;
-          profile?: { image?: string | null };
-        }>;
-      }>("/api/user/profile/connections", undefined, "Unable to load connections.");
-    },
+    queryFn: async () => sdk.user.connections(),
   });
 
   const avatarProvider = useMemo(() => {
@@ -75,7 +64,7 @@ export function UserNav() {
   const avatarSrc = useMemo(() => {
     if (avatarProvider) {
       const bust = connectionsQuery.dataUpdatedAt || 0;
-      return `/api/user/profile/avatar?provider=${avatarProvider}&v=${bust}`;
+      return sdk.user.avatarUrl(avatarProvider, String(bust));
     }
     return user?.image ?? undefined;
   }, [avatarProvider, connectionsQuery.dataUpdatedAt, user?.image]);

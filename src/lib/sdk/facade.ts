@@ -1,0 +1,17 @@
+import { contentSdk } from "@/lib/sdk/domains/content";
+import { metaSdk } from "@/lib/sdk/domains/meta";
+import { publishSdk } from "@/lib/sdk/domains/publish";
+import { settingsSdk } from "@/lib/sdk/domains/settings";
+import { uploadsSdk } from "@/lib/sdk/domains/uploads";
+import { userSdk } from "@/lib/sdk/domains/user";
+
+export class Sdk {
+  readonly content = contentSdk;
+  readonly uploads = uploadsSdk;
+  readonly user = userSdk;
+  readonly publish = publishSdk;
+  readonly settings = settingsSdk;
+  readonly meta = metaSdk;
+}
+
+export const sdk = new Sdk();

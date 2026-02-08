@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
+import type { ContentLoopProps } from "@/types";
 
 import { contentModeRegistry } from "./registry";
 
@@ -71,14 +72,14 @@ export type ContentModeSection = {
 
 export type ContentModeUiDefinition = {
   icon: LucideIcon;
-  previewComponent?: ComponentType<unknown>;
+  previewComponent?: ComponentType<ContentLoopProps>;
   sections: ContentModeSection[];
 };
 
 export const contentModeUiRegistry: Record<string, ContentModeUiDefinition> = {
   video_loop: {
     icon: Video,
-    previewComponent: ContentLoopComposition as ComponentType<unknown>,
+    previewComponent: ContentLoopComposition,
     sections: [
       {
         id: "timing",

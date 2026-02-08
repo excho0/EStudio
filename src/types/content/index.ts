@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { contentItemSchema } from "@/lib/data/content";
+import { contentItemSchema } from "@/lib/data/content/schemas";
 
 export type ContentItem = z.infer<typeof contentItemSchema>;
 

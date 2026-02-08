@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import type { ConnectionsResponse, ProfilePayload } from "@/types";
 
 const allProviders = [
@@ -94,7 +94,7 @@ export default function ProfileSettingsPage() {
     [connectedProviders.length]
   );
   const avatarSrc = avatarProvider
-    ? `/api/user/profile/avatar?provider=${avatarProvider}&v=${avatarCacheBust}`
+    ? sdk.user.avatarUrl(avatarProvider, String(avatarCacheBust))
     : draft.image ?? undefined;
   const connectedSet = useMemo(
     () => new Set(connectedProviders),
@@ -109,38 +109,20 @@ export default function ProfileSettingsPage() {
     queryKey: queryKeys.profile,
     enabled: status === "authenticated",
     staleTime: 60_000,
-    queryFn: async () => {
-      return fetchJson<ProfilePayload>(
-        "/api/user/profile",
-        undefined,
-        "Unable to load profile."
-      );
-    },
+    queryFn: async () => sdk.user.profile(),
   });
 
   const connectionsQuery = useQuery<ConnectionsResponse>({
     queryKey: queryKeys.profileConnections,
     enabled: status === "authenticated",
     staleTime: 60_000,
-    queryFn: async () => {
-      return fetchJson<ConnectionsResponse>(
-        "/api/user/profile/connections",
-        undefined,
-        "Unable to load connected accounts."
-      );
-    },
+    queryFn: async () => sdk.user.connections(),
   });
 
   const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
     queryKey: queryKeys.metaProviders,
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      return fetchJson<{ oauthProviders?: string[] }>(
-        "/api/meta/providers",
-        undefined,
-        "Failed to load providers."
-      );
-    },
+    queryFn: async () => sdk.meta.providers(),
   });
 
   const loading = profileQuery.isLoading || profileQuery.isFetching;
@@ -202,23 +184,10 @@ export default function ProfileSettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/user/profile", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: draft.name,
-          email: draft.email,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Unable to update profile.");
-      }
-
-      return (await response.json()) as ProfilePayload;
+      return (await sdk.user.updateProfile({
+        name: draft.name,
+        email: draft.email,
+      })) as ProfilePayload;
     },
     onSuccess: async (payload) => {
       const nextDraft = {
@@ -463,7 +432,7 @@ export default function ProfileSettingsPage() {
                     <span className="inline-flex shrink-0 h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white">
                       {providerProfiles[provider.id]?.image ? (
                         <ImageWithSkeleton
-                          src={`/api/user/profile/avatar?provider=${provider.id}&v=${avatarCacheBust}`}
+                          src={sdk.user.avatarUrl(provider.id, String(avatarCacheBust))}
                           alt={`${provider.label} account`}
                           className="h-full w-full object-cover"
                           wrapperClassName="h-full w-full"
@@ -592,15 +561,7 @@ export default function ProfileSettingsPage() {
               onClick={async () => {
                 if (!pendingUnlink) return;
                 try {
-                  await fetchJson(
-                    "/api/user/profile/connections",
-                    {
-                      method: "DELETE",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ provider: pendingUnlink.id }),
-                    },
-                    "Unable to unlink provider."
-                  );
+                  await sdk.user.unlinkProvider(pendingUnlink.id);
                   await queryClient.invalidateQueries({
                     queryKey: queryKeys.profileConnections,
                   });

@@ -11,6 +11,7 @@ import {
 import { io, type Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
+import { sdk } from "@/lib/sdk";
 import type { MetricsPayload } from "@/types";
 
 type SocketIOContextValue = {
@@ -48,13 +49,8 @@ export function SocketIOProvider({
 
     const registerUser = async () => {
       try {
-        const response = await fetch("/api/user/profile");
-        if (!response.ok) return;
-        const payload = (await response.json()) as {
-          id?: string;
-          user?: { id?: string };
-        };
-        const userId = payload.user?.id ?? payload.id;
+        const payload = await sdk.user.profile();
+        const userId = payload.id;
         if (!userId) return;
         registeredUserRef.current = userId;
         if (

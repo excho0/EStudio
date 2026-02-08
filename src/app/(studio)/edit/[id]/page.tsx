@@ -46,7 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { EditFormValues, PaletteMode } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
-import { fetchJson } from "@/lib/http/fetch-json";
+import { sdk } from "@/lib/sdk";
 import { ContentItem } from "@/types";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
@@ -236,11 +236,7 @@ export default function EditContentPage() {
     queryKey: queryKeys.contentItem(params.id),
     enabled: Boolean(params.id),
     queryFn: async () => {
-      return fetchJson<ContentItem>(
-        `/api/content/${params.id}`,
-        undefined,
-        "Failed to load content item."
-      );
+      return sdk.content.get(params.id);
     },
   });
   const loading = contentQuery.isLoading || contentQuery.isFetching;
