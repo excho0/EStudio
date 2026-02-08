@@ -52,7 +52,6 @@ import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
   DEFAULT_CONTENT_MODE,
   resolveContentSettings,
-  legacyColumnsToSettings,
   normalizeSettingsMap,
 } from "@/lib/content/modes";
 import {
@@ -101,13 +100,9 @@ const defaultFormValues = {
 type FormValues = EditFormValues;
 
 const buildFormValuesFromItem = (item: ContentItem): FormValues => {
-  const fallbackSettings = legacyColumnsToSettings(
-    item.mode ?? DEFAULT_CONTENT_MODE,
-    item as unknown as Record<string, unknown>
-  );
   const settingsMap = normalizeSettingsMap(
     item.mode ?? DEFAULT_CONTENT_MODE,
-    item.settings ?? fallbackSettings
+    item.settings ?? {}
   );
   const resolved = resolveContentSettings(item.mode ?? DEFAULT_CONTENT_MODE, settingsMap);
   return {

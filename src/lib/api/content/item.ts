@@ -21,10 +21,8 @@ import {
 } from "@/lib/data/content";
 import {
   DEFAULT_CONTENT_MODE,
-  legacyColumnsToSettings,
   mergeContentSettings,
   normalizeSettingsMap,
-  settingsToLegacyColumns,
 } from "@/lib/content/modes";
 
 const storage = getStorage();
@@ -82,39 +80,6 @@ export const handlePatchContentItem = async (
     if (parsedForm.paletteMode) {
       payload.paletteMode = parsedForm.paletteMode;
     }
-    if (parsedForm.fadeDurationSeconds !== undefined) {
-      payload.fadeDurationSeconds = parsedForm.fadeDurationSeconds;
-    }
-    if (parsedForm.introFadeSeconds !== undefined) {
-      payload.introFadeSeconds = parsedForm.introFadeSeconds;
-    }
-    if (parsedForm.outroFadeSeconds !== undefined) {
-      payload.outroFadeSeconds = parsedForm.outroFadeSeconds;
-    }
-    if (parsedForm.audioFadeInSeconds !== undefined) {
-      payload.audioFadeInSeconds = parsedForm.audioFadeInSeconds;
-    }
-    if (parsedForm.audioFadeOutSeconds !== undefined) {
-      payload.audioFadeOutSeconds = parsedForm.audioFadeOutSeconds;
-    }
-    if (parsedForm.audioFadeInOffsetSeconds !== undefined) {
-      payload.audioFadeInOffsetSeconds = parsedForm.audioFadeInOffsetSeconds;
-    }
-    if (parsedForm.audioFadeOutOffsetSeconds !== undefined) {
-      payload.audioFadeOutOffsetSeconds = parsedForm.audioFadeOutOffsetSeconds;
-    }
-    if (parsedForm.visualizationEnabled !== undefined) {
-      payload.visualizationEnabled = parsedForm.visualizationEnabled;
-    }
-    if (parsedForm.visualizationBars !== undefined) {
-      payload.visualizationBars = Math.max(
-        1,
-        Math.round(parsedForm.visualizationBars)
-      );
-    }
-    if (parsedForm.playbackRate !== undefined) {
-      payload.playbackRate = parsedForm.playbackRate;
-    }
     if (parsedForm.fps !== undefined) {
       payload.fps = parsedForm.fps;
     }
@@ -123,15 +88,6 @@ export const handlePatchContentItem = async (
     }
     if (parsedForm.height !== undefined) {
       payload.height = parsedForm.height;
-    }
-    if (parsedForm.scalePercent !== undefined) {
-      payload.scalePercent = parsedForm.scalePercent;
-    }
-    if (parsedForm.overlapRatio !== undefined) {
-      payload.overlapRatio = Math.min(
-        0.9,
-        Math.max(0, parsedForm.overlapRatio)
-      );
     }
     if (parsedForm.mode && parsedForm.mode.trim()) {
       payload.mode = parsedForm.mode.trim();
@@ -161,32 +117,7 @@ export const handlePatchContentItem = async (
     payload = await request.json();
   }
 
-  const legacySettingKeys = [
-    "songDurationSeconds",
-    "segmentDurationSeconds",
-    "videoDurationSeconds",
-    "fadeDurationSeconds",
-    "introFadeSeconds",
-    "outroFadeSeconds",
-    "audioFadeInSeconds",
-    "audioFadeOutSeconds",
-    "audioFadeInOffsetSeconds",
-    "audioFadeOutOffsetSeconds",
-    "scalePercent",
-    "visualizationEnabled",
-    "visualizationBars",
-    "edgeRaysEnabled",
-    "edgeRaysIntensity",
-    "edgeRaysVocalBalance",
-    "overlapRatio",
-    "playbackRate",
-    "fps",
-    "width",
-    "height",
-  ];
-  const hasLegacyPatch = legacySettingKeys.some((key) => key in payload);
-  const shouldUpdateSettings =
-    "settings" in payload || "mode" in payload || hasLegacyPatch;
+  const shouldUpdateSettings = "settings" in payload || "mode" in payload;
 
   if (shouldUpdateSettings) {
     const mode =
@@ -194,13 +125,8 @@ export const handlePatchContentItem = async (
         ? payload.mode
         : item.mode ?? DEFAULT_CONTENT_MODE;
     const baseSettings =
-      (item.settings as Record<string, unknown> | null | undefined) ??
-      legacyColumnsToSettings(mode, item as Record<string, unknown>);
-    const patchInput =
-      payload.settings ??
-      (hasLegacyPatch
-        ? legacyColumnsToSettings(mode, payload as Record<string, unknown>)
-        : {});
+      (item.settings as Record<string, unknown> | null | undefined) ?? {};
+    const patchInput = payload.settings ?? {};
     const baseMap = normalizeSettingsMap(mode, baseSettings);
     const patchMap = normalizeSettingsMap(mode, patchInput);
     const merged = mergeContentSettings(mode, baseMap, patchMap);
@@ -211,7 +137,6 @@ export const handlePatchContentItem = async (
     };
     payload.mode = merged.mode;
     payload.settings = nextMap;
-    Object.assign(payload, settingsToLegacyColumns(merged.mode, merged.settings));
   }
 
   const resolvedPaletteMode =

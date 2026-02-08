@@ -176,7 +176,8 @@ export const handleGetProviderAvatar = async (request: Request) => {
   if (isCacheFresh && cacheMatchesProfile) {
     try {
       const file = await storage.readFile(imageFile);
-      return new NextResponse(file, {
+      const cachedBytes = new Uint8Array(file);
+      return new NextResponse(cachedBytes, {
         headers: {
           "Content-Type": cache?.contentType ?? "image/png",
           "Cache-Control": "public, max-age=600",
@@ -211,15 +212,16 @@ export const handleGetProviderAvatar = async (request: Request) => {
   }
 
   const contentType = imageResponse.headers.get("content-type") ?? "image/png";
-  const buffer = Buffer.from(await imageResponse.arrayBuffer());
-  await storage.writeFile(imageFile, buffer);
+  const imageArrayBuffer = await imageResponse.arrayBuffer();
+  const imageBytes = new Uint8Array(imageArrayBuffer);
+  await storage.writeFile(imageFile, Buffer.from(imageArrayBuffer));
   await writeCacheMeta(metaFile, {
     fetchedAt: Date.now(),
     contentType,
     sourceUrl: imageUrl,
   });
 
-  return new NextResponse(buffer, {
+  return new NextResponse(imageBytes, {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=600",
