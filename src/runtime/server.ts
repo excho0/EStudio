@@ -7,12 +7,49 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import si from "systeminformation";
 
+declare global {
+  // Shared Socket.IO instance for legacy modules that still access global state.
+  var io: Server | undefined;
+}
+
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT || 3000);
 const app = next({ dev, hostname: "0.0.0.0", port });
 const handle = app.getRequestHandler();
 let mockFanStep = 0;
 let mockFanDir = 1;
+
+type NvidiaSmiEntry = {
+  model: string;
+  utilizationGpu: number;
+  vramTotalMB: number;
+  vramUsedMB: number;
+  temperatureGpu: number;
+  fanSpeedPct: number;
+  powerDrawW: number;
+  powerLimitW: number;
+};
+
+type RocmSmiEntry = {
+  model: string;
+  utilizationGpu: number | null;
+  temperatureGpu: number | null;
+  vramUsedMB: number | null;
+  vramTotalMB: number | null;
+  fanSpeedPct: number | null;
+  powerDrawW: number | null;
+  powerLimitW: number | null;
+};
+
+type GraphicsControllerWithVram = {
+  model?: string;
+  vendor?: string;
+  bus?: string;
+  utilizationGpu?: number | null;
+  temperatureGpu?: number | null;
+  vramTotal?: number;
+  vramUsed?: number;
+};
 
 app
   .prepare()
@@ -54,7 +91,7 @@ app
     globalThis.io = io;
 
     const readNvidiaSmi = () =>
-      new Promise((resolve) => {
+      new Promise<NvidiaSmiEntry[] | null>((resolve) => {
         execFile(
           "nvidia-smi",
           [
@@ -87,7 +124,7 @@ app
       });
 
     const readRocmSmi = () =>
-      new Promise((resolve) => {
+      new Promise<RocmSmiEntry[] | null>((resolve) => {
         execFile(
           "rocm-smi",
           ["--showuse", "--showmeminfo", "vram", "--showtemp", "--json"],
@@ -99,7 +136,9 @@ app
             }
             try {
               const parsed = JSON.parse(stdout);
-              const entries = Object.values(parsed).map((entry) => {
+              const entries = Object.values(
+                parsed as Record<string, Record<string, unknown>>
+              ).map((entry) => {
                 const usage = Number(entry["GPU use (%)"] ?? entry["GPU use"] ?? NaN);
                 const temp = Number(entry["Temperature (Sensor junction) (C)"] ?? entry["Temperature (Sensor edge) (C)"] ?? NaN);
                 const vramUsed = Number(entry["VRAM Total Used (B)"] ?? NaN);
@@ -107,13 +146,17 @@ app
                 const fanSpeed = Number(entry["Fan speed (%)"] ?? entry["Fan Speed (%)"] ?? NaN);
                 const powerDraw = Number(entry["Average Graphics Package Power (W)"] ?? entry["Average Graphics Package Power"] ?? NaN);
                 return {
-                  model: entry["Card series"] ?? "AMD GPU",
+                  model:
+                    typeof entry["Card series"] === "string"
+                      ? entry["Card series"]
+                      : "AMD GPU",
                   utilizationGpu: Number.isFinite(usage) ? usage : null,
                   temperatureGpu: Number.isFinite(temp) ? temp : null,
                   vramUsedMB: Number.isFinite(vramUsed) ? Math.round(vramUsed / (1024 * 1024)) : null,
                   vramTotalMB: Number.isFinite(vramTotal) ? Math.round(vramTotal / (1024 * 1024)) : null,
                   fanSpeedPct: Number.isFinite(fanSpeed) ? fanSpeed : null,
                   powerDrawW: Number.isFinite(powerDraw) ? powerDraw : null,
+                  powerLimitW: null,
                 };
               });
               resolve(entries);
@@ -145,7 +188,8 @@ app
             mockFanDir *= -1;
           }
 
-          const gpus = graphics.controllers.map((gpu, index) => {
+          const gpus = graphics.controllers.map((gpuRaw, index) => {
+          const gpu = gpuRaw as GraphicsControllerWithVram;
           const vramTotalBytes = gpu.vramTotal ? gpu.vramTotal * 1024 * 1024 : 0;
           const vramUsedBytes = gpu.vramUsed ? gpu.vramUsed * 1024 * 1024 : 0;
           const vramPct =
@@ -207,11 +251,19 @@ app
 
     io.on("connection", (socket) => {
       socket.emit("content:update", { type: "connected" });
-      socket.on("user:register", (payload) => {
-        const userId =
-          typeof payload === "string"
-            ? payload
-            : (payload?.userId ?? null);
+      socket.on("user:register", (payload: unknown) => {
+        const userId = (() => {
+          if (typeof payload === "string") return payload;
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "userId" in payload &&
+            typeof (payload as { userId?: unknown }).userId === "string"
+          ) {
+            return (payload as { userId: string }).userId;
+          }
+          return null;
+        })();
         if (!userId || typeof userId !== "string") {
           return;
         }

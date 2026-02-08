@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import type { ChildProcess } from "child_process";
 
 const modeArg =
   process.argv.find((arg) => arg.startsWith("--mode="))?.split("=")[1] ||
@@ -13,13 +14,23 @@ if (!validModes.has(mode)) {
   process.exit(1);
 }
 
-const children = [];
+type RuntimeChild = {
+  name: string;
+  child: ChildProcess;
+};
+
+const children: RuntimeChild[] = [];
 const hasRedisForWorkers =
   Boolean(process.env.REDIS_URL?.trim()) ||
   Boolean(process.env.RENDER_QUEUE_REDIS_URL?.trim()) ||
   Boolean(process.env.PUBLISH_QUEUE_REDIS_URL?.trim());
 
-const spawnProc = (name, cmd, args, env = {}) => {
+const spawnProc = (
+  name: string,
+  cmd: string,
+  args: string[],
+  env: Record<string, string> = {}
+) => {
   const child = spawn(cmd, args, {
     stdio: "inherit",
     env: { ...process.env, ...env },
@@ -36,12 +47,12 @@ const spawnProc = (name, cmd, args, env = {}) => {
 };
 
 if (mode === "api+worker" || mode === "api") {
-  spawnProc("api", "node", ["server.mjs"]);
+  spawnProc("api", "pnpm", ["tsx", "src/runtime/server.ts"]);
 }
 
 if (mode === "api+worker" || mode === "worker") {
   if (hasRedisForWorkers) {
-    spawnProc("worker", "pnpm", ["tsx", "worker.ts"]);
+    spawnProc("worker", "pnpm", ["tsx", "src/runtime/worker.ts"]);
   } else if (mode === "worker") {
     console.error(
       "[runtime] worker mode requires REDIS_URL or queue-specific Redis URLs"
@@ -54,7 +65,7 @@ if (mode === "api+worker" || mode === "worker") {
   }
 }
 
-const shutdown = (signal) => {
+const shutdown = (signal: NodeJS.Signals) => {
   for (const { child } of children) {
     try {
       child.kill(signal);

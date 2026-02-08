@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
-import { executeRenderForContent } from "./src/lib/rendering/content-render-runner";
-import { processPublishJob } from "./src/lib/publishing/publish-queue";
+import { executeRenderForContent } from "@/lib/rendering/content-render-runner";
+import { processPublishJob } from "@/lib/publishing/publish-queue";
 
 const redisUrl =
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
