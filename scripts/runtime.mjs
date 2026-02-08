@@ -41,7 +41,7 @@ if (mode === "api+worker" || mode === "api") {
 
 if (mode === "api+worker" || mode === "worker") {
   if (hasRedisForWorkers) {
-    spawnProc("worker", "node", ["worker.mjs"]);
+    spawnProc("worker", "pnpm", ["tsx", "worker.ts"]);
   } else if (mode === "worker") {
     console.error(
       "[runtime] worker mode requires REDIS_URL or queue-specific Redis URLs"

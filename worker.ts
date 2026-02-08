@@ -1,14 +1,11 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
+import { executeRenderForContent } from "./src/lib/rendering/content-render-runner";
+import { processPublishJob } from "./src/lib/publishing/publish-queue";
 
 const redisUrl =
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
-const apiBaseUrl =
-  process.env.RENDER_WORKER_API_BASE_URL?.trim() ||
-  process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-  `http://localhost:${process.env.PORT || 3000}`;
-const workerSecret = process.env.RENDER_WORKER_SECRET?.trim() || "";
 const concurrency = Math.max(1, Number(process.env.RENDER_WORKER_CONCURRENCY || "1"));
 const publishConcurrency = Math.max(
   1,
@@ -17,11 +14,6 @@ const publishConcurrency = Math.max(
 
 if (!redisUrl) {
   console.error("[worker] missing REDIS_URL/RENDER_QUEUE_REDIS_URL");
-  process.exit(1);
-}
-
-if (!workerSecret) {
-  console.error("[worker] missing RENDER_WORKER_SECRET");
   process.exit(1);
 }
 
@@ -35,25 +27,9 @@ const renderWorker = new Worker(
   async (job) => {
     const { id, userId } = job.data ?? {};
     if (!id || !userId) {
-      throw new Error("Invalid job payload");
+      throw new Error("Invalid render payload");
     }
-
-    const response = await fetch(`${apiBaseUrl}/api/content/${id}/render`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-render-worker-secret": workerSecret,
-      },
-      body: JSON.stringify({
-        userId,
-        executeNow: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Render execute failed (${response.status}): ${text}`);
-    }
+    await executeRenderForContent({ userId, id });
   },
   {
     connection,
@@ -68,18 +44,7 @@ const publishWorker = new Worker(
     if (!publishId) {
       throw new Error("Invalid publish payload");
     }
-    const response = await fetch(`${apiBaseUrl}/api/internal/publish`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-render-worker-secret": workerSecret,
-      },
-      body: JSON.stringify({ publishId }),
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Publish execute failed (${response.status}): ${text}`);
-    }
+    await processPublishJob(publishId);
   },
   {
     connection,
@@ -88,14 +53,12 @@ const publishWorker = new Worker(
 );
 
 renderWorker.on("ready", () => {
-  console.log(
-    `[worker] ready queue=content-render concurrency=${concurrency} api=${apiBaseUrl}`
-  );
+  console.log(`[worker] ready queue=content-render concurrency=${concurrency}`);
 });
 
 publishWorker.on("ready", () => {
   console.log(
-    `[worker] ready queue=content-publish concurrency=${publishConcurrency} api=${apiBaseUrl}`
+    `[worker] ready queue=content-publish concurrency=${publishConcurrency}`
   );
 });
 
@@ -119,7 +82,7 @@ publishWorker.on("failed", (job, error) => {
   );
 });
 
-const shutdown = async (signal) => {
+const shutdown = async (signal: string) => {
   console.log(`[worker] shutdown signal=${signal}`);
   await Promise.all([renderWorker.close(), publishWorker.close()]);
   await connection.quit();

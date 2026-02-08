@@ -12,7 +12,7 @@ import {
   clearRenderProgressSnapshot,
   getRenderProgressSnapshot,
   setRenderProgressSnapshot,
-} from "@/lib/render-progress/store";
+} from "@/lib/rendering/progress-store";
 
 type GlobalWithSocket = typeof globalThis & {
   io?: SocketIOServer;
