@@ -75,6 +75,20 @@ CONTENT_ASSET_SIGNING_SECRET=
 
 `CONTENT_ASSET_SIGNING_SECRET` signs short‑lived tokens used by Remotion to fetch assets while rendering server‑side.
 
+Render/shader env variables:
+
+```
+REMOTION_RENDER_CONCURRENCY=
+REMOTION_OFFTHREAD_VIDEO_THREADS=
+REMOTION_RENDER_ENABLE_SHADER=false
+REMOTION_RENDER_GL=
+```
+
+Notes:
+- `REMOTION_RENDER_ENABLE_SHADER=false` is the safe default for headless exports.
+- Set `REMOTION_RENDER_ENABLE_SHADER=true` only if you explicitly want shader effects in final renders.
+- If shader render is enabled, optionally set `REMOTION_RENDER_GL` to one of: `angle`, `egl`, `swiftshader`, `swangle`.
+
 ## How Rendering Works
 
 1) User triggers `/api/content/[id]/render`  

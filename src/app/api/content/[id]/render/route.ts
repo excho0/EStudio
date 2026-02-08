@@ -1,6 +1,6 @@
 import os from "os";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { NextResponse } from "next/server";
 import {
   ensureContentStore,
@@ -37,6 +37,7 @@ const storage = getStorage();
 
 let bundlePromise: Promise<string> | null = null;
 const lastProgressPercent = new Map<string, number>();
+const glProbeCache = new Map<string, boolean>();
 
 /**
  * Rendering strategy (the "pure solution"):
@@ -119,6 +120,132 @@ const resolvePositiveInt = (value?: string | null) => {
   return Math.floor(numeric);
 };
 
+const resolveChromiumGlBackend = () => {
+  const value = process.env.REMOTION_RENDER_GL?.trim().toLowerCase();
+  if (value === "angle") return "angle" as const;
+  if (value === "egl") return "egl" as const;
+  if (value === "swiftshader") return "swiftshader" as const;
+  if (value === "swangle") return "swangle" as const;
+  if (value === "auto") return "auto" as const;
+  return null;
+};
+
+const probeGlBackendWithChromium = async (
+  executablePath: string,
+  backend: "angle" | "egl" | "swiftshader" | "swangle"
+) => {
+  const cacheKey = `${executablePath}::${backend}`;
+  const cached = glProbeCache.get(cacheKey);
+  if (typeof cached === "boolean") {
+    return cached;
+  }
+
+  const html = [
+    "<html><body><canvas id=\"c\" width=\"16\" height=\"16\"></canvas>",
+    "<script>",
+    "try {",
+    "const c = document.getElementById('c');",
+    "const gl = c && (c.getContext('webgl') || c.getContext('experimental-webgl'));",
+    "document.body.setAttribute('data-webgl-ok', gl ? '1' : '0');",
+    "} catch {",
+    "document.body.setAttribute('data-webgl-ok', '0');",
+    "}",
+    "</script></body></html>",
+  ].join("");
+  const tempDir = await createTempDir("gl-probe");
+  const probeHtmlPath = path.join(tempDir, `probe-${backend}.html`);
+  await writeFilePath(probeHtmlPath, html);
+  const url = `file://${probeHtmlPath}`;
+
+  const ok = await new Promise<boolean>((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const backendArgs =
+      backend === "swiftshader"
+        ? ["--use-gl=angle", "--use-angle=swiftshader"]
+        : backend === "swangle"
+          ? ["--use-gl=angle", "--use-angle=swiftshader-webgl"]
+          : [`--use-gl=${backend}`];
+    const args = [
+      "--headless",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu-vsync",
+      "--ignore-gpu-blocklist",
+      "--enable-webgl",
+      ...backendArgs,
+      "--virtual-time-budget=1500",
+      "--dump-dom",
+      url,
+    ];
+    const child = spawn(executablePath, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const finalize = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", () => finalize(false));
+    child.on("close", () => {
+      if (!stdout.includes('data-webgl-ok="1"') && stderr.trim()) {
+        const firstLine = stderr.split("\n").find((line) => line.trim().length > 0);
+        if (firstLine) {
+          console.log(`[render] gl-probe backend=${backend} detail=${firstLine.trim()}`);
+        }
+      }
+      finalize(stdout.includes('data-webgl-ok="1"'));
+    });
+
+    setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // ignore
+      }
+      finalize(false);
+    }, 8000);
+  });
+
+  await removePath(tempDir, { recursive: true, force: true });
+
+  glProbeCache.set(cacheKey, ok);
+  return ok;
+};
+
+const resolveWorkingChromiumGl = async ({
+  requested,
+  executablePath,
+}: {
+  requested: "angle" | "egl" | "swiftshader" | "swangle" | "auto" | null;
+  executablePath: string | null;
+}) => {
+  if (!requested || !executablePath) return null;
+
+  const candidates =
+    requested === "auto"
+      ? (["angle", "swangle", "swiftshader", "egl"] as const)
+      : ([requested] as const);
+
+  for (const backend of candidates) {
+    const available = await probeGlBackendWithChromium(executablePath, backend);
+    console.log(`[render] gl-probe backend=${backend} available=${available}`);
+    if (available) {
+      return backend;
+    }
+  }
+  return null;
+};
+
 /**
  * Returns a default concurrency value for the render job.
  * - Scales with CPU count but avoids overloading.
@@ -153,6 +280,44 @@ const buildFrameRanges = (totalFrames: number, chunkSize: number) => {
 
 const shouldUseMultiRender = () => process.env.REMOTION_MULTI_RENDER === "true";
 
+const logChromiumProcessSnapshot = (tag: string) => {
+  try {
+    const result = spawnSync(
+      "bash",
+      [
+        "-lc",
+        "ps -eo pid,cmd | rg 'chromium|chrome' | rg -v 'rg chromium|rg chrome' | head -n 20",
+      ],
+      { encoding: "utf8" }
+    );
+    const output = result.stdout?.trim();
+    if (output) {
+      console.log(`[render] chromium-processes(${tag}):\n${output}`);
+    } else {
+      console.log(`[render] chromium-processes(${tag}): none`);
+    }
+  } catch {
+    // best-effort diagnostics only
+  }
+};
+
+const extractBrowserPid = (browser: BrowserInstance): number | null => {
+  const candidate = browser as unknown as {
+    pid?: number;
+    process?: () => { pid?: number } | null | undefined;
+    browserProcess?: () => { pid?: number } | null | undefined;
+    _browserProcess?: { pid?: number } | null | undefined;
+  };
+  if (typeof candidate.pid === "number") return candidate.pid;
+  const processPid = candidate.process?.()?.pid;
+  if (typeof processPid === "number") return processPid;
+  const browserProcessPid = candidate.browserProcess?.()?.pid;
+  if (typeof browserProcessPid === "number") return browserProcessPid;
+  const internalPid = candidate._browserProcess?.pid;
+  if (typeof internalPid === "number") return internalPid;
+  return null;
+};
+
 const runFfmpeg = (binary: string, args: string[]) =>
   new Promise<void>((resolve, reject) => {
     const child = spawn(binary, args, {
@@ -181,6 +346,8 @@ const startRenderJob = async ({
   try {
     const { renderMedia, selectComposition, openBrowser, getExecutablePath } =
       loadRenderer();
+    const debugNonHeadless =
+      process.env.REMOTION_RENDER_DEBUG_NON_HEADLESS === "true";
 
     // Enforce the union type at compile time (avoids "string" errors)
     const resolvedChromeMode: "headless-shell" | "chrome-for-testing" =
@@ -190,11 +357,34 @@ const startRenderJob = async ({
       process.env.REMOTION_RENDER_BROWSER_EXECUTABLE ||
       process.env.REMOTION_BROWSER_EXECUTABLE ||
       null;
+    const probeExecutable =
+      browserExecutable ??
+      (getExecutablePath?.({
+        type: "compositor",
+        indent: false,
+        logLevel: "warn",
+        binariesDirectory: null,
+      }) ??
+        null);
 
+    const chromiumGlRequested = resolveChromiumGlBackend();
+    const chromiumGl = await resolveWorkingChromiumGl({
+      requested: chromiumGlRequested,
+      executablePath: probeExecutable,
+    });
+    const chromiumOptions = {
+      ...(chromiumGl ? { gl: chromiumGl } : {}),
+      ...(debugNonHeadless ? { headless: false as const } : {}),
+    };
     const renderDefaults = {
       logLevel: "warn" as const,
       browserExecutable,
       chromeMode: resolvedChromeMode,
+      ...((Object.keys(chromiumOptions).length > 0
+        ? ({
+            chromiumOptions,
+          } as const)
+        : {}) as Record<string, unknown>),
     };
 
     const props = inputProps as InputProps;
@@ -242,6 +432,13 @@ const startRenderJob = async ({
     console.log(
       `[render] offthreadVideoThreads=${String(offthreadVideoThreads)} source=${process.env.REMOTION_OFFTHREAD_VIDEO_THREADS ?? "auto"}`
     );
+    console.log(
+      `[render] chromiumGL=${chromiumGl ?? "disabled"} requested=${chromiumGlRequested ?? "unset"}`
+    );
+    if (debugNonHeadless) {
+      console.warn("[render] debug non-headless mode enabled");
+    }
+    logChromiumProcessSnapshot("before-render");
 
     lastProgressPercent.set(id, -1);
     emitRenderProgress({
@@ -255,6 +452,7 @@ const startRenderJob = async ({
     const startedAt = Date.now();
 
     if (!shouldUseMultiRender()) {
+      let lastChromiumSnapshotPercent = -1;
       await renderMedia({
         serveUrl,
         composition,
@@ -269,6 +467,7 @@ const startRenderJob = async ({
           console.log(
             `[render] start frames=${frameCount} parallelEncoding=${Boolean(parallelEncoding)} resolvedConcurrency=${String(resolvedConcurrency)}`
           );
+          logChromiumProcessSnapshot("render-start");
         },
         onProgress: ({ renderedFrames, encodedFrames, progress }) => {
           const rendered = Number.isFinite(renderedFrames)
@@ -276,13 +475,22 @@ const startRenderJob = async ({
             : Number.isFinite(encodedFrames)
               ? Number(encodedFrames)
               : 0;
-          const safeProgress = typeof progress === "number" ? progress : 0;
+          const safeProgress =
+            typeof progress === "number"
+              ? progress
+              : totalFrames > 0
+                ? Math.min(1, Math.max(0, rendered / totalFrames))
+                : 0;
           const percent = Math.floor(safeProgress * 100);
           const lastPercent = lastProgressPercent.get(id) ?? -1;
           if (percent === lastPercent) {
             return;
           }
           lastProgressPercent.set(id, percent);
+          if (percent % 10 === 0 && percent !== lastChromiumSnapshotPercent) {
+            lastChromiumSnapshotPercent = percent;
+            logChromiumProcessSnapshot(`progress-${percent}%`);
+          }
           emitRenderProgress({
             userId,
             id,
@@ -377,9 +585,16 @@ const startRenderJob = async ({
       const queue = ranges.slice();
 
       const openNewBrowser = async () =>
-        openBrowser("chrome", {
-          ...renderDefaults,
-        });
+        {
+          const browser = await openBrowser("chrome", {
+            ...renderDefaults,
+          });
+          const pid = extractBrowserPid(browser);
+          console.log(
+            `[render] browser-open pid=${pid ?? "unknown"} mode=${resolvedChromeMode}`
+          );
+          return browser;
+        };
 
       // Each worker holds a browser, but recycles it periodically
       const worker = async () => {
@@ -476,6 +691,9 @@ const startRenderJob = async ({
 
       console.log("[render] audio render start");
       const audioBrowser = await openBrowser("chrome", { ...renderDefaults });
+      console.log(
+        `[render] audio-browser-open pid=${extractBrowserPid(audioBrowser) ?? "unknown"}`
+      );
       await renderMedia({
         serveUrl,
         composition: audioComposition,
@@ -636,6 +854,40 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const renderShaderEnabled = process.env.REMOTION_RENDER_ENABLE_SHADER === "true";
+  if (renderShaderEnabled) {
+    const { getExecutablePath } = loadRenderer();
+    const probeExecutable =
+      resolvedBrowser ??
+      (getExecutablePath?.({
+        type: "compositor",
+        indent: false,
+        logLevel: "warn",
+        binariesDirectory: null,
+      }) ??
+        null);
+    const requestedGl = resolveChromiumGlBackend();
+    const resolvedGl = await resolveWorkingChromiumGl({
+      requested: requestedGl,
+      executablePath: probeExecutable,
+    });
+    if (resolvedGl !== "angle") {
+      console.error(
+        `[render] refusing shader render: requiredGL=angle resolvedGL=${resolvedGl ?? "none"} requested=${requestedGl ?? "unset"}`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Shader rendering requires Chromium GL backend 'angle'. Current environment resolved to a non-angle backend.",
+          requiredGl: "angle",
+          resolvedGl: resolvedGl ?? null,
+          requestedGl: requestedGl ?? null,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   await ensureContentStore(user.id);
   await updateContentItem(user.id, id, { status: "rendering" });
   emitContentUpdate({ userId: user.id, type: "content:status", id, status: "rendering" });
@@ -672,6 +924,14 @@ export async function POST(
       : url;
 
   const resolved = resolveContentSettings(item.mode, item.settings ?? {});
+  const shaderDebugModeRaw =
+    process.env.REMOTION_RENDER_SHADER_DEBUG_MODE?.trim().toLowerCase() ?? "none";
+  const shaderDebugMode: "none" | "passthrough" | "uv" | "solid" =
+    shaderDebugModeRaw === "passthrough" ||
+    shaderDebugModeRaw === "uv" ||
+    shaderDebugModeRaw === "solid"
+      ? shaderDebugModeRaw
+      : "none";
   const props: InputProps = modeDefinition.buildProps({
     item,
     settings: resolved.settings,
@@ -683,8 +943,16 @@ export async function POST(
       audioSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=song`),
     },
   }) as unknown as InputProps;
+  props.renderShaderEnabled = renderShaderEnabled;
+  props.renderShaderDebugMode = shaderDebugMode;
 
   const browserLabel = resolvedBrowser ?? "auto";
+  console.log(
+    `[render] shaderInRender=${renderShaderEnabled} source=${process.env.REMOTION_RENDER_ENABLE_SHADER ?? "unset"}`
+  );
+  if (shaderDebugMode !== "none") {
+    console.log(`[render] shaderDebugMode=${shaderDebugMode}`);
+  }
 
   void startRenderJob({
     userId: user.id,

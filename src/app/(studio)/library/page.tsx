@@ -73,6 +73,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import React from "react";
 import { queryKeys } from "@/lib/query-keys";
+import { throwForNonOkResponse } from "@/lib/fetch-json";
 import type { ContentColumnMeta } from "@/types";
 
 export default function LibraryPage() {
@@ -155,9 +156,7 @@ export default function LibraryPage() {
   const renderMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await fetch(`/api/content/${id}/render`, { method: "POST" });
-      if (!response.ok) {
-        throw new Error("Render failed. Please check server logs.");
-      }
+      await throwForNonOkResponse(response, "Render failed. Please check server logs.");
     },
     onSuccess: () => {
       toast.message("Render started.");
@@ -414,10 +413,10 @@ export default function LibraryPage() {
         const item = row.original;
         return (
           <div className="text-xs text-slate-500 dark:text-zinc-400">
-            <div>
+            {/* <div>
               {item.segmentDurationSeconds}s segments / {item.fadeDurationSeconds}s
               {" "}fade
-            </div>
+            </div> */}
             <div className="text-slate-500 dark:text-zinc-500">
               {item.width}x{item.height} @ {item.fps}fps
             </div>

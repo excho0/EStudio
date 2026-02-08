@@ -22,11 +22,30 @@ const maxCacheBytes = Number.isFinite(maxCacheMb)
   : 0;
 
 const storage = getStorage();
+const assetMetaCache = new Map<
+  string,
+  {
+    relativePath: string;
+    size: number;
+    mtimeMs: number;
+    contentType: string;
+    canRange: boolean;
+    expiresAt: number;
+  }
+>();
+const assetMetaTtlMs = Math.max(
+  250,
+  Number(process.env.ASSET_METADATA_CACHE_TTL_MS ?? "5000")
+);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Range, Content-Type",
+  "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
+  "Access-Control-Expose-Headers":
+    "Accept-Ranges, Content-Length, Content-Range, Content-Type",
+  "Cross-Origin-Resource-Policy": "cross-origin",
+  "Timing-Allow-Origin": "*",
 };
 
 export async function OPTIONS() {
@@ -86,6 +105,11 @@ const cacheAsset = (
  * Fixes: "Controller is already closed" when client cancels / seeks / range-switches.
  */
 const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
+  const typedStream = nodeStream as NodeJS.ReadableStream & {
+    destroy?: () => void;
+    pause?: () => void;
+    resume?: () => void;
+  };
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
@@ -128,12 +152,6 @@ const nodeStreamToWeb = (nodeStream: ReadStream, signal: AbortSignal) => {
           // ignore
         }
         safeClose();
-      };
-
-      const typedStream = nodeStream as NodeJS.ReadableStream & {
-        destroy?: () => void;
-        pause?: () => void;
-        resume?: () => void;
       };
 
       const onData = (chunk: string | Buffer) => {
@@ -192,69 +210,110 @@ export async function GET(
   const { id } = await params;
   const { searchParams } = new URL(request.url);
 
-  const user = await getSessionUser();
   const token = searchParams.get("token");
   const tokenPayload = token ? verifyContentAssetToken(token) : null;
 
   if (token && !tokenPayload) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
 
-  const item = user
-    ? await getContentItem(user.id, id)
-    : tokenPayload && tokenPayload.contentId === id
-      ? await getContentItemById(id)
+  const isTokenAccess = Boolean(tokenPayload && tokenPayload.contentId === id);
+  const user = isTokenAccess ? null : await getSessionUser();
+  const item = isTokenAccess
+    ? await getContentItemById(id)
+    : user
+      ? await getContentItem(user.id, id)
       : null;
 
   if (!item) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
 
   const userId = item.userId;
   if (!userId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
   }
 
   if (tokenPayload && tokenPayload.userId !== userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
 
   const type = searchParams.get("type");
   const renderName = searchParams.get("name");
+  const metaCacheKey = [
+    userId,
+    item.id,
+    type ?? "video",
+    renderName ?? "",
+  ].join(":");
+  const now = Date.now();
+  const cachedMeta = assetMetaCache.get(metaCacheKey);
 
-  const relativePath =
-    type === "render"
-      ? renderName
-        ? (() => {
-            const safeName = path.basename(renderName);
-            if (
-              safeName !== renderName ||
-              !safeName.toLowerCase().endsWith(".mp4")
-            ) {
-              return null;
-            }
-            return path.join(getContentRenderDir(userId, item.id), safeName);
-          })()
-        : await findLatestRenderPath(userId, item.id)
-      : await findContentAssetPath(
-          userId,
-          item.id,
-          type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
-        );
+  let relativePath: string | null = null;
+  let stat: { size: number; mtimeMs: number } | null = null;
+  let contentType = "application/octet-stream";
+  let canRange = false;
+
+  if (cachedMeta && cachedMeta.expiresAt > now) {
+    relativePath = cachedMeta.relativePath;
+    stat = { size: cachedMeta.size, mtimeMs: cachedMeta.mtimeMs };
+    contentType = cachedMeta.contentType;
+    canRange = cachedMeta.canRange;
+  } else {
+    relativePath =
+      type === "render"
+        ? renderName
+          ? (() => {
+              const safeName = path.basename(renderName);
+              if (
+                safeName !== renderName ||
+                !safeName.toLowerCase().endsWith(".mp4")
+              ) {
+                return null;
+              }
+              return path.join(getContentRenderDir(userId, item.id), safeName);
+            })()
+          : await findLatestRenderPath(userId, item.id)
+        : await findContentAssetPath(
+            userId,
+            item.id,
+            type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
+          );
+
+    if (relativePath) {
+      stat = await storage.stat(relativePath);
+      if (stat) {
+        const extension = path.extname(relativePath).toLowerCase();
+        contentType = mimeByExtension[extension] ?? "application/octet-stream";
+        canRange =
+          contentType.startsWith("video/") || contentType.startsWith("audio/");
+        assetMetaCache.set(metaCacheKey, {
+          relativePath,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          contentType,
+          canRange,
+          expiresAt: now + assetMetaTtlMs,
+        });
+      }
+    }
+  }
 
   if (!relativePath) {
-    return NextResponse.json({ error: "Asset not available" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Asset not available" },
+      { status: 404, headers: corsHeaders }
+    );
   }
 
-  const stat = await storage.stat(relativePath);
   if (!stat) {
-    return NextResponse.json({ error: "Asset not available" }, { status: 404 });
+    assetMetaCache.delete(metaCacheKey);
+    return NextResponse.json(
+      { error: "Asset not available" },
+      { status: 404, headers: corsHeaders }
+    );
   }
 
-  const extension = path.extname(relativePath).toLowerCase();
-  const contentType = mimeByExtension[extension] ?? "application/octet-stream";
-  const canRange =
-    contentType.startsWith("video/") || contentType.startsWith("audio/");
   const range = request.headers.get("range");
 
   // Range request
