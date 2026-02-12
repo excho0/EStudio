@@ -11,7 +11,7 @@ Use this as the primary orientation guide before making changes.
 Core capabilities:
 - Create and edit content items with mode-specific settings.
 - Preview Remotion compositions in the studio UI.
-- Render videos/audio through Remotion renderer.
+- Render videos/audio through selectable backends (`local` renderer or `lambda` backend).
 - Queue render and publish jobs via BullMQ workers.
 - Track progress in real-time with Socket.IO (optionally Redis adapter for multi-instance sync).
 - Publish rendered outputs to provider integrations (currently YouTube-focused flow).
@@ -66,10 +66,12 @@ Important runtime files:
 - `src/lib/content/*`
 - Content asset paths/storage helpers, mode system, palette extraction, tokenized asset access.
 - Content mode system is centralized in `src/lib/content/modes/*`.
+- Asset analysis (palette/audio duration probing) may materialize storage objects into temp local files
+  to remain compatible with non-local storage adapters.
 
 ### Async Processing Layer
 - `src/lib/queue/*` for BullMQ queue creation/enqueue utilities.
-- `src/lib/rendering/*` for render execution, progress/snapshot tracking.
+- `src/lib/rendering/*` for backend selection, render execution, progress/snapshot tracking.
 - `src/lib/publishing/*` for publish job processing and provider adapters.
 
 ### Realtime/Eventing Layer
@@ -120,11 +122,12 @@ Service handlers per domain:
 - `domains/*`: typed methods matching backend route contracts.
 
 ### `src/lib/queue`
-- `render-queue.ts`: enqueue and health utilities for render queue.
+- `render-queue.ts`: enqueue and health utilities for render queue (includes backend in payload).
 - `publish-queue.ts`: enqueue for publish queue.
 - `health.ts` / `index.ts`: shared queue exports.
 
 ### `src/lib/rendering`
+- `backend.ts`: render backend resolver/dispatcher (`local` or `lambda`) and lambda execution path.
 - `execute-render-job.ts`: heavy render pipeline (Remotion renderMedia orchestration).
 - `content-render-runner.ts`: content-aware render entrypoint.
 - `progress-store.ts`, `snapshot-store.ts`: render progress tracking.
@@ -180,12 +183,15 @@ Service handlers per domain:
 
 ### Render
 - Enqueue render job via API -> BullMQ `content-render` queue.
-- Worker (`src/runtime/worker.ts`) consumes queue and calls `executeRenderForContent`.
-- Rendering pipeline in `src/lib/rendering/execute-render-job.ts`:
+- API accepts optional backend selection via render request payload (`backend`).
+- Worker (`src/runtime/worker.ts`) consumes queue and dispatches through `src/lib/rendering/backend.ts`.
+- Local backend pipeline in `src/lib/rendering/execute-render-job.ts`:
   - bundles/selects composition
   - executes segmented renders
   - emits progress snapshots and socket updates
   - stores render artifacts and updates content status
+- Lambda backend path dispatches using `@remotion/lambda-client`, polls progress, downloads output,
+  stores artifact through storage adapter, and updates content status/events.
 
 ### Publish
 - Publish actions enqueue `content-publish` jobs.
@@ -205,6 +211,12 @@ Important environment variables used in multiple modules:
 - `REDIS_URL` (shared default redis)
 - `RENDER_QUEUE_REDIS_URL` / `PUBLISH_QUEUE_REDIS_URL` (queue-specific)
 - `SOCKET_IO_REDIS_URL` (socket adapter)
+- `RENDER_BACKEND` (`local` default, `lambda` optional)
+- `REMOTION_LAMBDA_FUNCTION_NAME` / `REMOTION_LAMBDA_REGION` / `REMOTION_LAMBDA_SERVE_URL`
+  (required for direct lambda backend)
+- `REMOTION_LAMBDA_BUCKET_NAME` (optional bucket override)
+- `REMOTION_LAMBDA_POLL_MS` / `REMOTION_LAMBDA_TIMEOUT_MS` (lambda polling/timeout tuning)
+- `RENDER_LAMBDA_DISPATCH_URL` (optional lambda dispatch fallback endpoint)
 - render tuning vars in `execute-render-job.ts` (concurrency, GL backend, etc.)
 
 Nix/flake notes:
@@ -260,6 +272,13 @@ Nix/flake notes:
 3. Implement domain runner in `src/lib/<domain>/...`.
 4. Add progress/events through socket manager/event bus as needed.
 
+### Add or modify a render backend
+1. Extend backend schema and resolution in `src/lib/rendering/backend.ts`.
+2. Ensure API render handler accepts/validates backend request options.
+3. Ensure render queue payload includes backend and worker dispatch respects it.
+4. Keep render progress/status/socket events consistent across backends.
+5. Update `.env.local.example` and this document with required environment variables.
+
 ## 12) Validation Checklist Before Commit
 
 Run at minimum:
@@ -270,12 +289,15 @@ For behavior changes, also test manually:
 - upload -> edit -> save -> render -> publish happy path.
 - page refresh during render progress.
 - API-only mode and worker-only mode boot behavior.
+- render with `RENDER_BACKEND=local`.
+- render with `RENDER_BACKEND=lambda` (or explicit request backend override) when lambda env is configured.
 
 ## 13) Known Practical Constraints
 
 - Rendering/shader path has strict runtime differences between preview and headless render.
 - GPU/GL backend behavior can vary by system setup.
 - Redis optional mode exists; worker mode requires Redis URLs.
+- Storage adapter currently defaults to local filesystem. Non-local storage drivers are planned but not fully implemented.
 
 ## 14) Source of Truth Summary
 
