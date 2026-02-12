@@ -4,23 +4,32 @@ import * as React from "react";
 
 import { cn } from "@/lib/shared/utils";
 
+const loadedImageSrcCache = new Set<string>();
+
 type ImageWithSkeletonProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   wrapperClassName?: string;
   skeletonClassName?: string;
 };
 
 const ImageWithSkeleton = React.forwardRef<HTMLImageElement, ImageWithSkeletonProps>(
-  ({ className, wrapperClassName, skeletonClassName, onLoad, alt = "", ...props }, ref) => {
-    const [loaded, setLoaded] = React.useState(false);
+  ({ className, wrapperClassName, skeletonClassName, onLoad, alt = "", src, ...props }, ref) => {
+    const [loaded, setLoaded] = React.useState(() =>
+      typeof src === "string" && src.length > 0 ? loadedImageSrcCache.has(src) : false
+    );
     const innerRef = React.useRef<HTMLImageElement | null>(null);
 
     React.useImperativeHandle(ref, () => innerRef.current as HTMLImageElement);
 
     React.useEffect(() => {
+      if (typeof src === "string" && src.length > 0 && loadedImageSrcCache.has(src)) {
+        setLoaded(true);
+        return;
+      }
+      setLoaded(false);
       if (innerRef.current?.complete) {
         setLoaded(true);
       }
-    }, []);
+    }, [src]);
 
     return (
       <div
@@ -39,7 +48,11 @@ const ImageWithSkeleton = React.forwardRef<HTMLImageElement, ImageWithSkeletonPr
         <img
           ref={innerRef}
           className={cn(loaded ? "opacity-100" : "opacity-0", "transition-opacity duration-300", className)}
+          src={src}
           onLoad={(event) => {
+            if (typeof src === "string" && src.length > 0) {
+              loadedImageSrcCache.add(src);
+            }
             setLoaded(true);
             onLoad?.(event);
           }}
