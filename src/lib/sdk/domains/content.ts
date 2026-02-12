@@ -10,6 +10,7 @@ import {
   retryPublishResponseSchema,
 } from "@/lib/data/publish";
 import {
+  triggerRenderRequestSchema,
   renderProgressMapResponseSchema,
   rendersResponseSchema,
   rescanResponseSchema,
@@ -40,6 +41,7 @@ export type ContentPublishesResponse = z.infer<
 export type ContentCreatePublishResponse = z.infer<typeof createPublishResponseSchema>;
 export type ContentRetryPublishResponse = z.infer<typeof retryPublishResponseSchema>;
 export type ContentTriggerRenderResponse = z.infer<typeof triggerRenderResponseSchema>;
+export type TriggerRenderOptions = z.infer<typeof triggerRenderRequestSchema>;
 
 export const contentSdk = {
   list(query: ContentQuery): Promise<ContentListResponse> {
@@ -82,10 +84,14 @@ export const contentSdk = {
     const query = keepRenders ? "?keepRenders=1" : "";
     return client.del(`/api/content/${id}${query}`, "Failed to delete content.");
   },
-  triggerRender(id: string): Promise<ContentTriggerRenderResponse> {
+  triggerRender(
+    id: string,
+    options?: TriggerRenderOptions
+  ): Promise<ContentTriggerRenderResponse> {
+    const parsedOptions = triggerRenderRequestSchema.parse(options ?? {});
     return client.postJson(
       `/api/content/${id}/render`,
-      undefined,
+      parsedOptions.backend ? parsedOptions : undefined,
       "Render failed. Please check server logs.",
       triggerRenderResponseSchema
     );

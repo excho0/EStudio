@@ -6,6 +6,8 @@ export type ContentUpdatePayload = {
   item?: unknown;
 };
 
+export type RenderBackend = "local" | "lambda";
+
 export type RenderProgressPayload = {
   userId?: string | null;
   id: string;
@@ -65,7 +67,7 @@ export type AppEventMap = {
   "content.updated": ContentUpdatePayload;
   "content.deleted": ContentUpdatePayload;
   "content.status.changed": ContentUpdatePayload;
-  "render.queued": { userId: string; id: string };
+  "render.queued": { userId: string; id: string; backend?: RenderBackend };
   "render.started": ContentUpdatePayload;
   "render.progress": RenderProgressPayload;
   "render.completed": RenderCompletePayload | ContentUpdatePayload;

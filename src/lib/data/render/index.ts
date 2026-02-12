@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const renderBackendSchema = z.enum(["local", "lambda"]);
+export const triggerRenderRequestSchema = z.object({
+  backend: renderBackendSchema.optional(),
+});
+
 export const renderProgressSchema = z.object({
   id: z.string(),
   rendered: z.number(),
@@ -36,5 +41,5 @@ export const triggerRenderResponseSchema = z.object({
   ok: z.boolean(),
   status: z.string(),
   id: z.string(),
+  backend: renderBackendSchema.optional(),
 });
-
