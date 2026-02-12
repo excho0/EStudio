@@ -4,10 +4,14 @@ import { eventBus } from "@/lib/event-bus";
 import { emitContentUpdate } from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { enqueueRenderJob, isRenderQueueEnabled } from "@/lib/queue/render-queue";
+import { triggerRenderRequestSchema } from "@/lib/data/render";
 import {
   ContentRenderError,
-  executeRenderForContent,
 } from "@/lib/rendering/content-render-runner";
+import {
+  executeRenderForContentWithBackend,
+  resolveRenderBackend,
+} from "@/lib/rendering/backend";
 
 const resolveRenderRedisUrl = () =>
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
@@ -62,32 +66,38 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     return NextResponse.json({ ok: true, status: "rendering", id }, { status: 202 });
   }
 
+  const requestPayload = triggerRenderRequestSchema
+    .safeParse(await request.json().catch(() => null))
+    .data;
+  const backend = resolveRenderBackend(requestPayload?.backend);
+
   const shouldUseQueue = isRenderQueueEnabled();
   if (shouldUseQueue) {
     try {
       const queued = await withRenderRequestLock(userId, id, async () => {
-        await enqueueRenderJob({ id, userId });
+        await enqueueRenderJob({ id, userId, backend });
         await updateContentItem(userId, id, { status: "rendering" });
         emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
-        void eventBus.emit("render.queued", { userId, id });
+        void eventBus.emit("render.queued", { userId, id, backend });
         return true;
       });
       if (queued) {
         return NextResponse.json(
-          { ok: true, status: "queued", id },
+          { ok: true, status: "queued", id, backend },
           { status: 202 }
         );
       }
-      return NextResponse.json({ ok: true, status: "rendering", id }, { status: 202 });
+      return NextResponse.json({ ok: true, status: "rendering", id, backend }, { status: 202 });
     } catch (error) {
       console.warn("[render] queue enqueue failed, falling back to inline", error);
     }
   }
 
   try {
-    const result = await executeRenderForContent({
+    const result = await executeRenderForContentWithBackend({
       userId,
       id,
+      backend,
       requestUrl: request.url,
     });
     return NextResponse.json(result, { status: 202 });

@@ -1,7 +1,10 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
-import { executeRenderForContent } from "@/lib/rendering/content-render-runner";
+import {
+  executeRenderForContentWithBackend,
+  resolveRenderBackend,
+} from "@/lib/rendering/backend";
 import { processPublishJob } from "@/lib/publishing/publish-queue";
 import { readPublishRow, updatePublish } from "@/lib/publishing/publish-job-runner";
 import { emitPublishUpdate } from "@/lib/socket/manager";
@@ -27,11 +30,14 @@ const connection = new IORedis(redisUrl, {
 const renderWorker = new Worker(
   "content-render",
   async (job) => {
-    const { id, userId } = job.data ?? {};
+    const { id, userId, backend: requestedBackend } = job.data ?? {};
     if (!id || !userId) {
       throw new Error("Invalid render payload");
     }
-    await executeRenderForContent({ userId, id });
+    const backend = resolveRenderBackend(
+      typeof requestedBackend === "string" ? requestedBackend : undefined
+    );
+    await executeRenderForContentWithBackend({ userId, id, backend });
   },
   {
     connection,

@@ -1,11 +1,13 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import type { RenderBackend } from "@/lib/rendering/backend";
 
 export const RENDER_QUEUE_NAME = "content-render";
 
 export type RenderQueueJobPayload = {
   id: string;
   userId: string;
+  backend: RenderBackend;
 };
 
 const resolveRedisUrl = () =>
