@@ -7,7 +7,7 @@ import {
   getContentAssetPath,
   writeContentManifest,
 } from "@/lib/content/store";
-import { getStorage } from "@/lib/storage";
+import { createTempDir, getStorage, removePath, writeFilePath } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/content/color-palette";
 import { emitContentUpdate } from "@/lib/socket/manager";
 import {
@@ -86,6 +86,36 @@ const getAudioDurationSeconds = (absolutePath: string) =>
 
     tryFfprobe();
   });
+
+const withStorageKeyLocalPath = async <T>(
+  key: string,
+  fileName: string,
+  run: (absolutePath: string) => Promise<T>
+) => {
+  const tempDir = await createTempDir("content-probe");
+  const absolutePath = path.join(tempDir, fileName);
+  try {
+    const buffer = await storage.readFile(key);
+    await writeFilePath(absolutePath, buffer);
+    return await run(absolutePath);
+  } finally {
+    await removePath(tempDir, { recursive: true, force: true });
+  }
+};
+
+const getPaletteFromStorageKey = async (key: string) => {
+  const extension = path.extname(key) || ".bin";
+  return withStorageKeyLocalPath(key, `thumbnail${extension}`, async (absolutePath) =>
+    getPaletteFromPath(absolutePath)
+  );
+};
+
+const getSongDurationFromStorageKey = async (key: string) => {
+  const extension = path.extname(key) || ".bin";
+  return withStorageKeyLocalPath(key, `song${extension}`, async (absolutePath) =>
+    getAudioDurationSeconds(absolutePath)
+  );
+};
 
 const writeUpload = async (
   userId: string,
@@ -184,10 +214,9 @@ export const handleCreateContent = async (request: Request, userId: string) => {
       finalizeDraft(userId, payload.songPath, id, "song"),
     ]);
     const colorPalette = thumbnailPath
-      ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
+      ? await getPaletteFromStorageKey(thumbnailPath)
       : null;
-    const songAbsolutePath = storage.resolvePath(songPath);
-    const serverSongDuration = await getAudioDurationSeconds(songAbsolutePath);
+    const serverSongDuration = await getSongDurationFromStorageKey(songPath);
 
     const mode = payload.mode ?? DEFAULT_CONTENT_MODE;
     const settingsInput = payload.settings ?? {};
@@ -252,10 +281,9 @@ export const handleCreateContent = async (request: Request, userId: string) => {
   ]);
 
   const colorPalette = thumbnailPath
-    ? await getPaletteFromPath(storage.resolvePath(thumbnailPath))
+    ? await getPaletteFromStorageKey(thumbnailPath)
     : null;
-  const songAbsolutePath = storage.resolvePath(songPath);
-  const serverSongDuration = await getAudioDurationSeconds(songAbsolutePath);
+  const serverSongDuration = await getSongDurationFromStorageKey(songPath);
 
   const settingsInput = parseContentSettingsString(settingsRaw);
   const resolved = resolveContentSettings(mode, settingsInput ?? {});
