@@ -23,6 +23,16 @@ import {
   contentUpdateSchema,
 } from "./schemas";
 
+const ALLOWED_STATUS_TRANSITIONS: Record<
+  "uploaded" | "rendering" | "rendered" | "failed",
+  ReadonlyArray<"uploaded" | "rendering" | "rendered" | "failed">
+> = {
+  uploaded: ["uploaded", "rendering", "failed"],
+  rendering: ["rendering", "rendered", "failed"],
+  rendered: ["rendered", "rendering", "failed"],
+  failed: ["failed", "rendering"],
+};
+
 export async function listContentItems(
   userId: string,
   query: z.infer<typeof contentQuerySchema>
@@ -366,6 +376,18 @@ export async function updateContentItem(
 
   if (Object.keys(cleaned).length === 0) {
     return getContentItem(userId, id);
+  }
+
+  if (cleaned.status) {
+    const current = await getContentItem(userId, id);
+    if (!current) {
+      return null;
+    }
+    const fromStatus = current.status;
+    const toStatus = cleaned.status;
+    if (!ALLOWED_STATUS_TRANSITIONS[fromStatus].includes(toStatus)) {
+      throw new Error(`Invalid content status transition: ${fromStatus} -> ${toStatus}`);
+    }
   }
 
   await withContentDb({

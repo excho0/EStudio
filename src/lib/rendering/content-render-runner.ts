@@ -1,4 +1,5 @@
 import path from "path";
+import { randomBytes } from "crypto";
 import {
   ensureContentStore,
   getContentRenderDir,
@@ -107,7 +108,8 @@ export const executeRenderForContent = async ({
   }
 
   const slug = getSlug(item.title) || "untitled";
-  const fileName = `${slug}_${nextIndex}.mp4`;
+  const shortId = randomBytes(3).toString("hex");
+  const fileName = `${slug}_${nextIndex}_${shortId}.mp4`;
   const renderPath = getContentRenderPath(userId, id, fileName);
   const outputPath = resolveContentPath(renderPath);
 
