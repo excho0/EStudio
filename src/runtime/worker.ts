@@ -3,6 +3,8 @@ import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { executeRenderForContent } from "@/lib/rendering/content-render-runner";
 import { processPublishJob } from "@/lib/publishing/publish-queue";
+import { readPublishRow, updatePublish } from "@/lib/publishing/publish-job-runner";
+import { emitPublishUpdate } from "@/lib/socket/manager";
 
 const redisUrl =
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
@@ -44,7 +46,10 @@ const publishWorker = new Worker(
     if (!publishId) {
       throw new Error("Invalid publish payload");
     }
-    await processPublishJob(publishId);
+    await processPublishJob(publishId, {
+      attempt: (job.attemptsMade ?? 0) + 1,
+      maxAttempts: job.opts.attempts,
+    });
   },
   {
     connection,
@@ -80,6 +85,45 @@ publishWorker.on("failed", (job, error) => {
   console.error(
     `[worker] failed publish job=${job?.id ?? "unknown"} error=${error.message}`
   );
+  if (!job?.data?.publishId) {
+    return;
+  }
+  const publishId = String(job.data.publishId);
+  const maxAttempts =
+    typeof job.opts.attempts === "number" ? Math.max(1, job.opts.attempts) : 1;
+  const attemptsMade = Math.max(1, job.attemptsMade ?? 1);
+  void (async () => {
+    const publish = await readPublishRow(publishId);
+    if (!publish) {
+      return;
+    }
+    if (attemptsMade < maxAttempts) {
+      const retryMessage = `Retrying upload (${attemptsMade + 1}/${maxAttempts})`;
+      await updatePublish(publishId, { status: "queued", error: retryMessage });
+      emitPublishUpdate({
+        userId: publish.userId,
+        id: publishId,
+        status: "queued",
+        error: retryMessage,
+      });
+      return;
+    }
+
+    const finalMessage = `Final failure after ${attemptsMade}/${maxAttempts} attempts: ${error.message}`;
+    await updatePublish(publishId, { status: "failed", error: finalMessage });
+    emitPublishUpdate({
+      userId: publish.userId,
+      id: publishId,
+      status: "failed",
+      error: finalMessage,
+    });
+  })().catch((cause) => {
+    console.error(
+      `[worker] failed to persist publish retry/failure state job=${publishId} error=${
+        cause instanceof Error ? cause.message : String(cause)
+      }`
+    );
+  });
 });
 
 const shutdown = async (signal: string) => {

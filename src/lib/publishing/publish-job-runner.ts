@@ -15,6 +15,7 @@ import { getStorage, storageKey } from "@/lib/storage";
 export type PublishJob = {
   publishId: string;
   attempt: number;
+  maxAttempts?: number;
 };
 
 const parseMetadata = (value: string | null) => {
@@ -228,10 +229,31 @@ export const runPublishJob = async (job: PublishJob) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Publish failed unexpectedly.";
+    const attemptLabel =
+      typeof job.maxAttempts === "number"
+        ? `Attempt ${job.attempt}/${job.maxAttempts}`
+        : `Attempt ${job.attempt}`;
+    await updatePublish(job.publishId, {
+      status: "failed",
+      error: `${attemptLabel} failed: ${message}`,
+    });
+    emitPublishUpdate({
+      userId: publish.userId,
+      id: job.publishId,
+      status: "failed",
+      error: `${attemptLabel} failed: ${message}`,
+    });
     throw new Error(message);
   }
 };
 
-export const processPublishJob = async (publishId: string) => {
-  await runPublishJob({ publishId, attempt: 1 });
+export const processPublishJob = async (
+  publishId: string,
+  options?: { attempt?: number; maxAttempts?: number }
+) => {
+  await runPublishJob({
+    publishId,
+    attempt: Math.max(1, options?.attempt ?? 1),
+    maxAttempts: options?.maxAttempts,
+  });
 };
