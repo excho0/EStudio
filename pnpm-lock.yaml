@@ -68,6 +68,9 @@ importers:
       '@remotion/bundler':
         specifier: 4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/lambda-client':
+        specifier: 4.0.409
+        version: 4.0.409
       '@remotion/media':
         specifier: ^4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -3008,6 +3011,9 @@ packages:
     resolution: {integrity: sha512-74gj/vgMJ1Bkp7eZLQ5Hy+Bwae5FksfzgmtuRGWS/cT5683NfUN7PdOejAZvTzYgKitR+pVd5QL8eQo4ZY5yRA==}
     cpu: [x64]
     os: [win32]
+
+  '@remotion/lambda-client@4.0.409':
+    resolution: {integrity: sha512-8+skTtW4Z0rGEHaWYxVV++Wv/9PMsavyZ/YKtMiUWCEXhVTGII4XkKczAsiDC1ZvWVSrOYNXsyIR7MBGgKe+2w==}
 
   '@remotion/licensing@4.0.409':
     resolution: {integrity: sha512-lo9S78ngigQzuZnEtyLrUz7DDxDYXoaDQK+4bUVl9PKBdxJXrAyrzaEb+qv/ooKY8GaoOLU409yKyJYfAiUBDg==}
@@ -9760,6 +9766,8 @@ snapshots:
 
   '@remotion/compositor-win32-x64-msvc@4.0.409':
     optional: true
+
+  '@remotion/lambda-client@4.0.409': {}
 
   '@remotion/licensing@4.0.409': {}
 
