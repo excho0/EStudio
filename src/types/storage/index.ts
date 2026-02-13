@@ -18,7 +18,7 @@ export type StorageAdapter = {
   createReadStream: (
     key: string,
     options?: { start?: number; end?: number }
-  ) => import("fs").ReadStream;
-  createWriteStream: (key: string) => import("fs").WriteStream;
+  ) => NodeJS.ReadableStream;
+  createWriteStream: (key: string) => NodeJS.WritableStream;
   getPublicUrl?: (key: string) => string | null;
 };
