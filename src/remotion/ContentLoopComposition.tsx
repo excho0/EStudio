@@ -65,21 +65,30 @@ const mixHex = (first: string, second: string, amount: number) => {
   const b = normalizeHex(second);
   if (!a || !b) return first;
   const t = Math.max(0, Math.min(1, amount));
-  const ar = Number.parseInt(a.slice(1, 3), 16);
-  const ag = Number.parseInt(a.slice(3, 5), 16);
-  const ab = Number.parseInt(a.slice(5, 7), 16);
-  const br = Number.parseInt(b.slice(1, 3), 16);
-  const bg = Number.parseInt(b.slice(3, 5), 16);
-  const bb = Number.parseInt(b.slice(5, 7), 16);
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const b2 = Math.round(ab + (bb - ab) * t);
+  const toLinear = (value: number) => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const toSrgb = (value: number) => {
+    const c = value <= 0.0031308 ? value * 12.92 : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
+    return Math.round(Math.max(0, Math.min(1, c)) * 255);
+  };
+  const ar = toLinear(Number.parseInt(a.slice(1, 3), 16));
+  const ag = toLinear(Number.parseInt(a.slice(3, 5), 16));
+  const ab = toLinear(Number.parseInt(a.slice(5, 7), 16));
+  const br = toLinear(Number.parseInt(b.slice(1, 3), 16));
+  const bg = toLinear(Number.parseInt(b.slice(3, 5), 16));
+  const bb = toLinear(Number.parseInt(b.slice(5, 7), 16));
+  const r = toSrgb(ar + (br - ar) * t);
+  const g = toSrgb(ag + (bg - ag) * t);
+  const b2 = toSrgb(ab + (bb - ab) * t);
   return `#${r.toString(16).padStart(2, "0")}${g
     .toString(16)
     .padStart(2, "0")}${b2.toString(16).padStart(2, "0")}`;
 };
 
 const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
   const { isRendering } = useRemotionEnvironment();
@@ -565,6 +574,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   }, [smoothBars]);
 
   const glowRef = useRef(0);
+  const glowOutputRef = useRef(0);
   const lastEnergyRef = useRef(0);
   const transientRef = useRef(0);
   const gateRef = useRef(0);
@@ -573,6 +583,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const target = Math.min(1, edgeEnergy * intensityScale);
     if (frame === 0) {
       glowRef.current = target;
+      glowOutputRef.current = target;
       lastEnergyRef.current = target;
       return target;
     }
@@ -581,23 +592,28 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const rise = Math.max(0, target - lastEnergy);
     lastEnergyRef.current = target;
 
-    const transient = lerp(transientRef.current, rise, 0.35);
+    const transient = lerp(transientRef.current, rise, 0.26);
     transientRef.current = transient;
 
-    const gateTarget = rise > 0.03 ? 1 : 0;
-    const gate = lerp(gateRef.current, gateTarget, 0.2);
+    const gateTarget = rise > 0.022 || target > 0.07 ? 1 : 0;
+    const gate = gateTarget > gateRef.current
+      ? lerp(gateRef.current, gateTarget, 0.38)
+      : lerp(gateRef.current, gateTarget, 0.08);
     gateRef.current = gate;
 
     const current = glowRef.current;
-    const attack = 0.8;
-    const release = 0.18;
+    const attack = 0.62;
+    const release = 0.14;
     const smoothed = target > current
       ? lerp(current, target, attack)
       : lerp(current, target, release);
     glowRef.current = smoothed;
 
-    const kick = transient * 1.4 * gate;
-    return Math.min(1, smoothed + kick);
+    const kick = transient * 1.25 * gate;
+    const combined = Math.min(1, smoothed + kick);
+    const output = lerp(glowOutputRef.current, combined, 0.42);
+    glowOutputRef.current = output;
+    return output;
   }, [edgeEnergy, edgeRaysIntensity, frame]);
 
   const motionEnvelopeRef = useRef(0);
@@ -641,13 +657,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     : 0;
   const motionXRef = useRef(0);
   const motionYRef = useRef(0);
-  const motionLerpAlpha = 0.52;
+  const motionLerpAlpha = 0.22;
+  const motionMaxStep = Math.max(0.5, motionAmountPx * 0.35);
   if (frame === 0) {
     motionXRef.current = motionXRaw;
     motionYRef.current = motionYRaw;
   } else {
-    motionXRef.current = lerp(motionXRef.current, motionXRaw, motionLerpAlpha);
-    motionYRef.current = lerp(motionYRef.current, motionYRaw, motionLerpAlpha);
+    const nextX = lerp(motionXRef.current, motionXRaw, motionLerpAlpha);
+    const nextY = lerp(motionYRef.current, motionYRaw, motionLerpAlpha);
+    const dx = nextX - motionXRef.current;
+    const dy = nextY - motionYRef.current;
+    // Limit per-frame jump to avoid tiny jerk spikes in noisy music regions.
+    motionXRef.current += clamp(dx, -motionMaxStep, motionMaxStep);
+    motionYRef.current += clamp(dy, -motionMaxStep, motionMaxStep);
   }
   const motionX = motionXRef.current;
   const motionY = motionYRef.current;
