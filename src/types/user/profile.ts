@@ -1,14 +1,8 @@
-export type ProfilePayload = {
-  name: string;
-  email: string;
-  image: string | null;
-  pendingEmail?: string | null;
-};
+import type { z } from "zod";
+import type {
+  connectionsResponseSchema,
+  profilePayloadSchema,
+} from "@/lib/data/user";
 
-export type ConnectionsResponse = {
-  connections: Array<{
-    provider: string;
-    providerAccountId: string | null;
-    profile: { image?: string | null; name?: string | null } | null;
-  }>;
-};
+export type ProfilePayload = z.infer<typeof profilePayloadSchema>;
+export type ConnectionsResponse = z.infer<typeof connectionsResponseSchema>;

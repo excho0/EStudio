@@ -1,13 +1,5 @@
-export type RenderItem = {
-  name: string;
-  size: number;
-  mtimeMs: number;
-  assetUrl: string;
-};
+import type { z } from "zod";
+import type { rendersResponseSchema } from "@/lib/data/render";
 
-export type RenderListResponse = {
-  page: number;
-  limit: number;
-  total: number;
-  items: RenderItem[];
-};
+export type RenderListResponse = z.infer<typeof rendersResponseSchema>;
+export type RenderItem = RenderListResponse["items"][number];

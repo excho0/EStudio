@@ -1,12 +1,8 @@
-import { z } from "zod";
-
-import { contentItemSchema } from "@/lib/data/content/schemas";
+import type { z } from "zod";
+import type {
+  contentItemSchema,
+  contentListResponseSchema,
+} from "@/lib/data/content/schemas";
 
 export type ContentItem = z.infer<typeof contentItemSchema>;
-
-export type ContentListResponse = {
-  items: ContentItem[];
-  total: number;
-  page: number;
-  limit: number;
-};
+export type ContentListResponse = z.infer<typeof contentListResponseSchema>;

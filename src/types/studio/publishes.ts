@@ -1,29 +1,14 @@
-export type PublishRecord = {
-  id: string;
-  renderId: string;
-  provider: string;
-  providerAccountId?: string | null;
-  providerAssetId: string | null;
-  status: "draft" | "queued" | "publishing" | "published" | "published_with_warning" | "failed" | "deleted";
-  metadata: string | null;
-  error?: string | null;
-  updatedAt?: number | string | Date | null;
-  createdAt?: number | string | Date | null;
-};
+import type { z } from "zod";
+import type {
+  publishRecordSchema,
+  studioPublishMetadataSchema,
+} from "@/lib/data/publish";
 
-export type PublishMetadata = {
-  title?: string;
-  description?: string;
-  thumbnailUrl?: string;
-  options?: {
-    privacy?: string;
-    scheduleAt?: string | null;
-  };
-};
-
+export type PublishRecord = z.infer<typeof publishRecordSchema>;
 export type PublishListResponse = {
   publishes: PublishRecord[];
 };
+export type PublishMetadata = z.infer<typeof studioPublishMetadataSchema>;
 
 export type ProviderSectionProps = {
   provider: string;

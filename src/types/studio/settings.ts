@@ -1,22 +1,6 @@
-export type SettingsStats = {
-  total: number;
-  uploaded: number;
-  rendering: number;
-  rendered: number;
-  failed: number;
-};
+import type { z } from "zod";
+import type { settingsResponseSchema } from "@/lib/data/settings";
 
-export type SettingsStorage = {
-  baseDir: string;
-  uploadsDir: string;
-  rendersDir: string;
-  manifestsDir: string;
-  uploadsCount: number;
-  rendersCount: number;
-  manifestsCount: number;
-};
-
-export type SettingsResponse = {
-  storage: SettingsStorage;
-  stats: SettingsStats;
-};
+export type SettingsResponse = z.infer<typeof settingsResponseSchema>;
+export type SettingsStorage = SettingsResponse["storage"];
+export type SettingsStats = SettingsResponse["stats"];

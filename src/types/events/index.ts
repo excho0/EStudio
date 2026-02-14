@@ -1,65 +1,27 @@
-export type ContentUpdatePayload = {
-  userId?: string | null;
-  type: string;
-  id?: string;
-  status?: string;
-  item?: unknown;
-};
+import type { z } from "zod";
+import type {
+  contentUpdatePayloadSchema,
+  providerConnectionPayloadSchema,
+  publishProgressPayloadSchema,
+  publishQueuedPayloadSchema,
+  publishUpdatePayloadSchema,
+  renderCompletePayloadSchema,
+  renderProgressPayloadSchema,
+  renderQueuedPayloadSchema,
+  userProfileUpdatedPayloadSchema,
+} from "@/lib/data/events";
+import type { renderBackendSchema } from "@/lib/data/render";
 
-export type RenderBackend = "local" | "lambda";
-
-export type RenderProgressPayload = {
-  userId?: string | null;
-  id: string;
-  rendered: number;
-  total: number;
-  progress: number;
-  eta?: string;
-};
-
-export type RenderCompletePayload = {
-  userId?: string | null;
-  id: string;
-  durationSeconds?: number;
-  avgFps?: number;
-};
-
-export type PublishUpdatePayload = {
-  userId?: string | null;
-  id: string;
-  status: string;
-  providerAssetId?: string;
-  error?: string;
-};
-
-export type PublishProgressPayload = {
-  userId?: string | null;
-  id: string;
-  stage: string;
-  progress?: number;
-  bytesUploaded?: number;
-  bytesTotal?: number;
-};
-
-export type PublishQueuedPayload = {
-  userId: string;
-  id: string;
-  contentId: string;
-  provider: string;
-};
-
-export type ProviderConnectionPayload = {
-  userId: string;
-  provider: string;
-  providerAccountId?: string | null;
-};
-
-export type UserProfileUpdatedPayload = {
-  userId: string;
-  name: string;
-  email: string;
-  pendingEmail: string | null;
-};
+export type ContentUpdatePayload = z.infer<typeof contentUpdatePayloadSchema>;
+export type RenderBackend = z.infer<typeof renderBackendSchema>;
+export type RenderQueuedPayload = z.infer<typeof renderQueuedPayloadSchema>;
+export type RenderProgressPayload = z.infer<typeof renderProgressPayloadSchema>;
+export type RenderCompletePayload = z.infer<typeof renderCompletePayloadSchema>;
+export type PublishUpdatePayload = z.infer<typeof publishUpdatePayloadSchema>;
+export type PublishProgressPayload = z.infer<typeof publishProgressPayloadSchema>;
+export type PublishQueuedPayload = z.infer<typeof publishQueuedPayloadSchema>;
+export type ProviderConnectionPayload = z.infer<typeof providerConnectionPayloadSchema>;
+export type UserProfileUpdatedPayload = z.infer<typeof userProfileUpdatedPayloadSchema>;
 
 export type AppEventMap = {
   "content.update": ContentUpdatePayload;
@@ -67,7 +29,7 @@ export type AppEventMap = {
   "content.updated": ContentUpdatePayload;
   "content.deleted": ContentUpdatePayload;
   "content.status.changed": ContentUpdatePayload;
-  "render.queued": { userId: string; id: string; backend?: RenderBackend };
+  "render.queued": RenderQueuedPayload;
   "render.started": ContentUpdatePayload;
   "render.progress": RenderProgressPayload;
   "render.completed": RenderCompletePayload | ContentUpdatePayload;

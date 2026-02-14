@@ -1,19 +1,18 @@
 import type { ComponentType } from "react";
 import type { VariantProps } from "class-variance-authority";
+import type { z } from "zod";
 
 import type { badgeVariants } from "@/components/ui/badge";
+import type {
+  publishMetadataSchema,
+  publishOptionsSchema,
+  publishProgressSchema,
+  publishProviderResponseSchema,
+  publishResultSchema,
+} from "@/lib/data/publish";
 
-export type PublishMetadata = {
-  title: string;
-  description?: string;
-  tags?: string[];
-  categoryId?: string;
-};
-
-export type PublishOptions = {
-  privacy?: "public" | "unlisted" | "private";
-  scheduleAt?: string | null;
-};
+export type PublishMetadata = z.infer<typeof publishMetadataSchema>;
+export type PublishOptions = z.infer<typeof publishOptionsSchema>;
 
 export type PublishPayload = {
   userId?: string;
@@ -28,19 +27,8 @@ export type PublishPayload = {
   onProgress?: (progress: PublishProgress) => void;
 };
 
-export type PublishResult = {
-  providerAssetId: string;
-  providerUrl?: string;
-  status?: "queued" | "publishing" | "published" | "failed" | "published_with_warning";
-  warning?: string;
-};
-
-export type PublishProgress = {
-  stage: "uploading" | "processing" | "thumbnail" | "complete";
-  progress?: number;
-  bytesUploaded?: number;
-  bytesTotal?: number;
-};
+export type PublishResult = z.infer<typeof publishResultSchema>;
+export type PublishProgress = z.infer<typeof publishProgressSchema>;
 
 export type ProviderKey = "youtube";
 
@@ -96,12 +84,4 @@ export type ProviderAdapter = {
   >;
 };
 
-export type YoutubeConnection = {
-  connected: boolean;
-  needsReconnect?: boolean;
-  channel?: {
-    id?: string | null;
-    title?: string | null;
-    thumbnail?: string | null;
-  } | null;
-};
+export type YoutubeConnection = z.infer<typeof publishProviderResponseSchema>;

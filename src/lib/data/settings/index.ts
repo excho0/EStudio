@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/** Settings API response including storage and content stats. */
 export const settingsResponseSchema = z.object({
   storage: z.object({
     baseDir: z.string(),
@@ -17,5 +18,4 @@ export const settingsResponseSchema = z.object({
     rendered: z.number(),
     failed: z.number(),
   }),
-});
-
+}).describe("Settings response.");

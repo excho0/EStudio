@@ -1,3 +1,6 @@
+/**
+ * Canonical render job payload passed into the render executor.
+ */
 export type RenderJob = {
   userId: string;
   id: string;
@@ -8,6 +11,10 @@ export type RenderJob = {
   outputPath: string;
   inputProps: Record<string, unknown>;
 };
+
+/**
+ * Remotion bundle function signature.
+ */
 export type BundleFn = (
   entryPoint: string,
   onProgress: (progress: number) => void,
@@ -22,9 +29,17 @@ export type BundleFn = (
     onSymlinkDetected: (path: string) => void;
   }
 ) => Promise<string>;
+
+/**
+ * Minimal browser instance contract used by render internals.
+ */
 export type BrowserInstance = {
   close: (options?: { silent?: boolean }) => Promise<void>;
 };
+
+/**
+ * Remotion browser opener signature.
+ */
 export type OpenBrowserFn = (
   browser: "chrome",
   options?: {
@@ -33,6 +48,10 @@ export type OpenBrowserFn = (
     logLevel?: "warn";
   }
 ) => Promise<BrowserInstance>;
+
+/**
+ * Remotion media render function signature.
+ */
 export type RenderMediaFn = (options: {
   serveUrl: string;
   composition: {
@@ -75,12 +94,20 @@ export type RenderMediaFn = (options: {
     progress?: number | null;
   }) => void;
 }) => Promise<unknown>;
+
+/**
+ * Remotion executable path resolver signature.
+ */
 export type GetExecutablePathFn = (options: {
   type: "compositor" | "ffmpeg" | "ffprobe";
   indent: boolean;
   logLevel: "warn";
   binariesDirectory: string | null;
 }) => string;
+
+/**
+ * Remotion composition selector signature.
+ */
 export type SelectCompositionFn = (options: {
   serveUrl: string;
   id: string;
@@ -97,6 +124,9 @@ export type SelectCompositionFn = (options: {
   defaultProps?: Record<string, unknown>;
 }>;
 
+/**
+ * Remotion chunk combiner signature for multi-instance rendering.
+ */
 export type CombineChunksFn = (options: {
   outputLocation: string;
   audioFiles: string[];

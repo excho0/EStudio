@@ -1,12 +1,8 @@
-export type PaletteMode = "auto" | "manual";
+import type { z } from "zod";
+import type {
+  editFormValuesSchema,
+  paletteModeSchema,
+} from "@/lib/data/content/schemas";
 
-export type EditFormValues = {
-  title: string;
-  status: string;
-  mode: string;
-  songDurationSeconds: string;
-  fps: string;
-  width: string;
-  height: string;
-  settings: Record<string, unknown>;
-};
+export type PaletteMode = z.infer<typeof paletteModeSchema>;
+export type EditFormValues = z.infer<typeof editFormValuesSchema>;
