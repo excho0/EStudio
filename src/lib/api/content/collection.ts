@@ -162,8 +162,19 @@ export const handleListContent = async (request: Request, userId: string) => {
     10_000,
     Number(process.env.RENDER_STALE_TIMEOUT_MS ?? "120000")
   );
+  const activeIds = Object.values(activeProgress)
+    .filter((progress) => {
+      const updatedAt = progress.updatedAt;
+      if (typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) {
+        // Backward compatibility for old snapshots without heartbeat.
+        return true;
+      }
+      return Date.now() - updatedAt <= staleTimeoutMs;
+    })
+    .map((progress) => progress.id)
+    .filter(Boolean);
   const recoveredIds = await failStaleRenderingItems(userId, {
-    activeIds: Object.keys(activeProgress),
+    activeIds,
     staleBefore: new Date(Date.now() - staleTimeoutMs),
   });
   if (recoveredIds.length > 0) {

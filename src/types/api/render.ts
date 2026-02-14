@@ -52,11 +52,14 @@ export type RenderMediaFn = (options: {
   concurrency?: number | string | null;
   offthreadVideoThreads?: number;
   frameRange?: [number, number] | number;
+  compositionStart?: number;
   muted?: boolean;
   imageFormat?: "jpeg" | "png" | "none";
   audioCodec?: "pcm-16" | "aac" | "mp3" | "opus";
-  puppeteerInstance?: BrowserInstance;
+  separateAudioTo?: string;
   forSeamlessAacConcatenation?: boolean;
+  enforceAudioTrack?: boolean;
+  puppeteerInstance?: BrowserInstance;
   ffmpegOverride?: (payload: {
     type: "stitcher" | "pre-stitcher";
     args: string[];
@@ -93,3 +96,16 @@ export type SelectCompositionFn = (options: {
   height: number;
   defaultProps?: Record<string, unknown>;
 }>;
+
+export type CombineChunksFn = (options: {
+  outputLocation: string;
+  audioFiles: string[];
+  codec: "h264" | "h264-ts" | "aac";
+  videoFiles: string[];
+  fps: number;
+  framesPerChunk: number;
+  preferLossless: boolean;
+  compositionDurationInFrames: number;
+  audioCodec?: "pcm-16" | "aac" | "mp3" | "opus" | null;
+  logLevel?: "trace" | "verbose" | "info" | "warn" | "error";
+}) => Promise<void>;

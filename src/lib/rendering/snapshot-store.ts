@@ -21,7 +21,7 @@ const resolveStoreMode = (modeEnvKey?: string): StoreMode => {
       : process.env.RENDER_PROGRESS_STORE?.trim().toLowerCase();
   if (configured === "memory") return "memory";
   if (configured === "redis") return "redis";
-  if (process.env.NODE_ENV === "production" && process.env.REDIS_URL) {
+  if (process.env.REDIS_URL) {
     return "redis";
   }
   return "memory";

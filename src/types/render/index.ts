@@ -4,4 +4,5 @@ export type RenderProgress = {
   total: number;
   progress: number;
   eta?: string;
+  updatedAt?: number;
 };

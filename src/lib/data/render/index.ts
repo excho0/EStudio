@@ -11,6 +11,7 @@ export const renderProgressSchema = z.object({
   total: z.number(),
   progress: z.number(),
   eta: z.string().optional(),
+  updatedAt: z.number().optional(),
 });
 
 export const renderProgressMapResponseSchema = z.object({

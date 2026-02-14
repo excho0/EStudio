@@ -16,6 +16,7 @@ export const setRenderProgressSnapshot = async (
     total: payload.total,
     progress: payload.progress,
     eta: payload.eta,
+    updatedAt: Date.now(),
   });
 };
 

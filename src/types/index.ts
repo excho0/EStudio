@@ -26,6 +26,7 @@ export type {
   RenderMediaFn,
   GetExecutablePathFn,
   SelectCompositionFn,
+  CombineChunksFn,
 } from "./api/render";
 export type {
   PublishMetadata,
