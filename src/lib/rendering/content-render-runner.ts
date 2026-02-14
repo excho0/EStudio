@@ -12,6 +12,7 @@ import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/shared/helpers";
 import { createContentAssetToken } from "@/lib/content/asset-token";
 import { getContentMode, resolveContentSettings } from "@/lib/content/modes";
+import { getLogger } from "@/lib/logging";
 import {
   getServeUrl,
   loadRenderer,
@@ -22,6 +23,7 @@ import {
 } from "./execute-render-job";
 
 const storage = getStorage();
+const logger = getLogger("content-render-runner");
 
 export class ContentRenderError extends Error {
   status: number;
@@ -149,12 +151,15 @@ export const executeRenderForContent = async ({
 
   const browserLabel = resolvedBrowser ?? "auto";
   if (renderShaderEnabled) {
-    console.log(
-      `[render] shaderInRender=true source=${process.env.REMOTION_RENDER_ENABLE_SHADER ?? "unset"}`
+    logger.info(
+      {
+        source: process.env.REMOTION_RENDER_ENABLE_SHADER ?? "unset",
+      },
+      "Shader rendering in render pipeline enabled."
     );
   }
   if (shaderDebugMode !== "none") {
-    console.log(`[render] shaderDebugMode=${shaderDebugMode}`);
+    logger.info({ shaderDebugMode }, "Shader debug mode enabled.");
   }
 
   await startRenderJob({

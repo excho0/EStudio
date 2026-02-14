@@ -2,6 +2,9 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { normalizeSettingsMap } from "../src/lib/content/modes";
+import { getLogger } from "../src/lib/logging";
+
+const logger = getLogger("script-migrate-settings-map");
 
 type JsonValue =
   | string
@@ -88,7 +91,7 @@ const resolveSqlitePath = () => {
 const migrateDb = () => {
   const dbPath = resolveSqlitePath();
   if (!fs.existsSync(dbPath)) {
-    console.warn(`DB not found at ${dbPath}, skipping DB migration.`);
+    logger.warn({ dbPath }, "DB not found, skipping DB migration.");
     return;
   }
 
@@ -161,15 +164,13 @@ const migrateDb = () => {
   }
 
   db.close();
-  console.log(
-    `DB migration complete. Updated ${updated} row(s) (forced ${forced}).`
-  );
+  logger.info({ updated, forced }, "DB migration complete.");
 };
 
 const migrateManifests = () => {
   const manifestRoot = path.join(process.cwd(), "data", "users");
   if (!fs.existsSync(manifestRoot)) {
-    console.warn("No manifests directory found, skipping manifest migration.");
+    logger.warn("No manifests directory found, skipping manifest migration.");
     return;
   }
   const userIds = fs.readdirSync(manifestRoot);
@@ -216,9 +217,7 @@ const migrateManifests = () => {
       }
     }
   }
-  console.log(
-    `Manifest migration complete. Updated ${updated} file(s) (forced ${forced}).`
-  );
+  logger.info({ updated, forced }, "Manifest migration complete.");
 };
 
 const main = () => {

@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { getDrizzleDb, type PostgresDrizzleDb, type SqliteDrizzleDb } from "../src/lib/drizzle/client";
 import { schema, sqliteSchema } from "../src/lib/drizzle/schema";
+import { getLogger } from "../src/lib/logging";
+
+const logger = getLogger("script-seed-content");
 
 type SeedOptions = {
   count: number;
@@ -101,10 +104,10 @@ const run = async () => {
   }
 
   const target = isPostgres ? "Postgres" : "SQLite";
-  console.log(`Seeded ${count} content items into ${target}.`);
+  logger.info({ count, target }, "Seeded content items.");
 };
 
 run().catch((error) => {
-  console.error("Seed failed:", error);
+  logger.error({ error }, "Seed failed.");
   process.exit(1);
 });

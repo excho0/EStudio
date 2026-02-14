@@ -12,6 +12,9 @@ import {
   executeRenderForContentWithBackend,
   resolveRenderBackend,
 } from "@/lib/rendering/backend";
+import { getLogger } from "@/lib/logging";
+
+const logger = getLogger("api-content-render");
 
 const resolveRenderRedisUrl = () =>
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
@@ -89,7 +92,10 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
       }
       return NextResponse.json({ ok: true, status: "rendering", id, backend }, { status: 202 });
     } catch (error) {
-      console.warn("[render] queue enqueue failed, falling back to inline", error);
+      logger.warn(
+        { error },
+        "Queue enqueue failed. Falling back to inline rendering."
+      );
     }
   }
 

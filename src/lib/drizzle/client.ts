@@ -12,11 +12,13 @@ import type {
 } from "@/types";
 
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
+import { getLogger } from "@/lib/logging";
 import { ensureDirPathSync } from "@/lib/storage";
 
 export type { DrizzleDb, PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 
 let cachedDb: DrizzleDb | null = null;
+const logger = getLogger("db-drizzle-client");
 
 export const resolveIsPostgres = () => {
   const driver = process.env.DB_DRIVER?.toLowerCase();
@@ -35,7 +37,7 @@ function createSqliteDb(): SqliteDrizzleDb {
 
   ensureDirPathSync(path.dirname(absolutePath));
 
-  console.info(`[db] Using SQLite database at ${absolutePath}`);
+  logger.debug({ absolutePath }, "Using SQLite database.");
   const database = new Database(absolutePath);
   database.pragma("foreign_keys = ON");
 

@@ -1,4 +1,7 @@
 import nodemailer from "nodemailer";
+import { getLogger } from "@/lib/logging";
+
+const logger = getLogger("auth-email");
 
 const getBaseUrl = () => {
   if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL;
@@ -46,13 +49,19 @@ export const sendEmailChangeVerification = async (params: {
   const greeting = params.name ? `Hi ${params.name},` : "Hi,";
 
   if (!from) {
-    console.warn("SMTP_FROM is not configured. Email change link:", confirmUrl);
+    logger.warn(
+      { confirmUrl },
+      "SMTP_FROM is not configured. Email change link generated only."
+    );
     return { confirmUrl };
   }
 
   const transport = getTransport();
   if (!transport) {
-    console.warn("SMTP is not configured. Email change link:", confirmUrl);
+    logger.warn(
+      { confirmUrl },
+      "SMTP transport is not configured. Email change link generated only."
+    );
     return { confirmUrl };
   }
 

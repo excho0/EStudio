@@ -1,4 +1,7 @@
 import { Vibrant } from "node-vibrant/node";
+import { getLogger } from "@/lib/logging";
+
+const logger = getLogger("content-color-palette");
 
 const swatchesToPalette = (
   swatches: Record<string, { getHex?: () => string; hex?: string } | null>,
@@ -20,9 +23,9 @@ const swatchesToPalette = (
 };
 
 export const getPaletteFromPath = async (path: string, maxColors = 5) => {
-  console.log(`[palette] extracting from ${path}`);
+  logger.debug({ path, maxColors }, "Extracting color palette.");
   const palette = await Vibrant.from(path).maxColorCount(maxColors).getPalette();
   const colors = swatchesToPalette(palette, maxColors);
-  console.log(`[palette] extracted ${colors.length} colors`, colors);
+  logger.debug({ count: colors.length, colors }, "Extracted color palette.");
   return colors;
 };

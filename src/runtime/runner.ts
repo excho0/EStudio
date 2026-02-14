@@ -1,5 +1,8 @@
 import { spawn } from "child_process";
 import type { ChildProcess } from "child_process";
+import { getLogger } from "@/lib/logging";
+
+const logger = getLogger("runtime-runner");
 
 const modeArg =
   process.argv.find((arg) => arg.startsWith("--mode="))?.split("=")[1] ||
@@ -10,7 +13,7 @@ const mode = modeArg.toLowerCase();
 
 const validModes = new Set(["api+worker", "worker", "api"]);
 if (!validModes.has(mode)) {
-  console.error(`Invalid mode "${mode}". Use: api+worker | worker | api`);
+  logger.error({ mode }, 'Invalid mode. Use one of: "api+worker" | "worker" | "api".');
   process.exit(1);
 }
 
@@ -38,9 +41,9 @@ const spawnProc = (
   children.push({ name, child });
   child.on("exit", (code, signal) => {
     if (signal) {
-      console.log(`[runtime] ${name} exited via signal ${signal}`);
+      logger.info({ name, signal }, "Runtime child exited via signal.");
     } else {
-      console.log(`[runtime] ${name} exited code=${code}`);
+      logger.info({ name, code }, "Runtime child exited.");
     }
   });
   return child;
@@ -54,13 +57,13 @@ if (mode === "api+worker" || mode === "worker") {
   if (hasRedisForWorkers) {
     spawnProc("worker", "pnpm", ["tsx", "src/runtime/worker.ts"]);
   } else if (mode === "worker") {
-    console.error(
-      "[runtime] worker mode requires REDIS_URL or queue-specific Redis URLs"
+    logger.error(
+      "Worker mode requires REDIS_URL or queue-specific Redis URLs."
     );
     process.exit(1);
   } else {
-    console.warn(
-      "[runtime] skipping worker: no REDIS_URL/RENDER_QUEUE_REDIS_URL/PUBLISH_QUEUE_REDIS_URL"
+    logger.warn(
+      "Skipping worker: no REDIS_URL/RENDER_QUEUE_REDIS_URL/PUBLISH_QUEUE_REDIS_URL."
     );
   }
 }

@@ -8,6 +8,7 @@ import {
 import { processPublishJob } from "@/lib/publishing/publish-queue";
 import { readPublishRow, updatePublish } from "@/lib/publishing/publish-job-runner";
 import { emitPublishUpdate } from "@/lib/socket/manager";
+import { getLogger } from "@/lib/logging";
 
 const redisUrl =
   process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
@@ -16,9 +17,10 @@ const publishConcurrency = Math.max(
   1,
   Number(process.env.PUBLISH_WORKER_CONCURRENCY || "2")
 );
+const logger = getLogger("runtime-worker");
 
 if (!redisUrl) {
-  console.error("[worker] missing REDIS_URL/RENDER_QUEUE_REDIS_URL");
+  logger.error("Missing REDIS_URL/RENDER_QUEUE_REDIS_URL.");
   process.exit(1);
 }
 
@@ -64,32 +66,43 @@ const publishWorker = new Worker(
 );
 
 renderWorker.on("ready", () => {
-  console.log(`[worker] ready queue=content-render concurrency=${concurrency}`);
+  logger.info({ queue: "content-render", concurrency }, "Worker ready.");
 });
 
 publishWorker.on("ready", () => {
-  console.log(
-    `[worker] ready queue=content-publish concurrency=${publishConcurrency}`
+  logger.info(
+    { queue: "content-publish", concurrency: publishConcurrency },
+    "Worker ready."
   );
 });
 
 renderWorker.on("completed", (job) => {
-  console.log(`[worker] completed render job=${job.id}`);
+  logger.info({ queue: "content-render", jobId: job.id }, "Job completed.");
 });
 
 publishWorker.on("completed", (job) => {
-  console.log(`[worker] completed publish job=${job.id}`);
+  logger.info({ queue: "content-publish", jobId: job.id }, "Job completed.");
 });
 
 renderWorker.on("failed", (job, error) => {
-  console.error(
-    `[worker] failed render job=${job?.id ?? "unknown"} error=${error.message}`
+  logger.error(
+    {
+      queue: "content-render",
+      jobId: job?.id ?? "unknown",
+      error: error.message,
+    },
+    "Job failed."
   );
 });
 
 publishWorker.on("failed", (job, error) => {
-  console.error(
-    `[worker] failed publish job=${job?.id ?? "unknown"} error=${error.message}`
+  logger.error(
+    {
+      queue: "content-publish",
+      jobId: job?.id ?? "unknown",
+      error: error.message,
+    },
+    "Job failed."
   );
   if (!job?.data?.publishId) {
     return;
@@ -124,16 +137,19 @@ publishWorker.on("failed", (job, error) => {
       error: finalMessage,
     });
   })().catch((cause) => {
-    console.error(
-      `[worker] failed to persist publish retry/failure state job=${publishId} error=${
-        cause instanceof Error ? cause.message : String(cause)
-      }`
+    logger.error(
+      {
+        queue: "content-publish",
+        jobId: publishId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      },
+      "Failed to persist publish retry/failure state."
     );
   });
 });
 
 const shutdown = async (signal: string) => {
-  console.log(`[worker] shutdown signal=${signal}`);
+  logger.info({ signal }, "Worker shutdown signal received.");
   await Promise.all([renderWorker.close(), publishWorker.close()]);
   await connection.quit();
   process.exit(0);

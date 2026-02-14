@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import si from "systeminformation";
+import { getLogger } from "@/lib/logging";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -18,6 +19,7 @@ const app = next({ dev, hostname: "0.0.0.0", port });
 const handle = app.getRequestHandler();
 let mockFanStep = 0;
 let mockFanDir = 1;
+const logger = getLogger("runtime-server");
 
 type NvidiaSmiEntry = {
   model: string;
@@ -73,19 +75,24 @@ app
         });
         const subClient = pubClient.duplicate();
         pubClient.on("error", (error) => {
-          console.warn("[socket.io] redis pub error", error);
+          logger.warn({ error }, "Socket.IO redis publisher client error.");
         });
         subClient.on("error", (error) => {
-          console.warn("[socket.io] redis sub error", error);
+          logger.warn({ error }, "Socket.IO redis subscriber client error.");
         });
         await Promise.all([pubClient.connect(), subClient.connect()]);
         io.adapter(createAdapter(pubClient, subClient));
-        console.log("[socket.io] redis adapter enabled");
+        logger.info("Socket.IO redis adapter enabled.");
       } catch (error) {
-        console.warn("[socket.io] redis adapter disabled, falling back to in-memory", error);
+        logger.warn(
+          { error },
+          "Socket.IO redis adapter disabled. Falling back to in-memory adapter."
+        );
       }
     } else {
-      console.log("[socket.io] redis adapter skipped (no REDIS_URL/SOCKET_IO_REDIS_URL)");
+      logger.info(
+        "Socket.IO redis adapter skipped (no REDIS_URL/SOCKET_IO_REDIS_URL)."
+      );
     }
 
     globalThis.io = io;
@@ -242,7 +249,7 @@ app
           gpus,
         });
       } catch (error) {
-        console.warn("metrics:update failed", error);
+        logger.warn({ error }, "metrics:update failed.");
       }
     };
 
@@ -301,10 +308,10 @@ app
     }
 
     httpServer.listen(port, () => {
-      console.log(`> Ready on http://localhost:${port}`);
+      logger.info({ port }, "Server ready.");
     });
   })
   .catch((error) => {
-    console.error("Failed to start server", error);
+    logger.error({ error }, "Failed to start server.");
     process.exit(1);
   });
