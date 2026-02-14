@@ -5,6 +5,7 @@ import { signIn, useSession } from "next-auth/react";
 import { Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { queryKeys } from "@/lib/http/query-keys";
@@ -12,6 +13,7 @@ import { sdk } from "@/lib/sdk";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import {
   AlertDialog,
@@ -48,6 +50,33 @@ const hashString = (value: string) => {
 };
 
 type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
+
+const cardTransition = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.2, ease: "easeOut" as const },
+};
+
+const ProviderCardSkeleton = () => (
+  <div className="rounded-2xl border border-slate-200 p-5 shadow-sm dark:border-white/10">
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-3 w-52" />
+        </div>
+      </div>
+      <Skeleton className="h-6 w-16 rounded-full" />
+    </div>
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      <Skeleton className="h-10 w-40 rounded-md" />
+      <Skeleton className="h-10 w-24 rounded-md" />
+      <Skeleton className="h-3 w-72" />
+    </div>
+  </div>
+);
 
 export default function ConnectionsSettingsPage() {
   const { status } = useSession();
@@ -166,6 +195,7 @@ export default function ConnectionsSettingsPage() {
         </div>
         
         <div className="mt-6 grid gap-4">
+          <AnimatePresence mode="wait" initial={false}>
           {providers.map((provider) => {
             const state = connections[provider.id];
             const providerId = provider.id;
@@ -179,9 +209,17 @@ export default function ConnectionsSettingsPage() {
             const cacheBust = thumbnailCacheBust[providerId] ?? 0;
             const canConnect = Boolean(provider.oauthProviderId);
 
+            if (isLoading) {
+              return (
+                <motion.div key={`${provider.id}-loading`} {...cardTransition}>
+                  <ProviderCardSkeleton />
+                </motion.div>
+              );
+            }
             return (
-              <div
-                key={provider.id}
+              <motion.div
+                key={`${provider.id}-ready`}
+                {...cardTransition}
                 className="rounded-2xl border border-slate-200 p-5 shadow-sm dark:border-white/10"
               >
                 <div className="flex items-center justify-between gap-4">
@@ -279,9 +317,10 @@ export default function ConnectionsSettingsPage() {
                     Sign in to manage publishing connections.
                   </p>
                 )}
-              </div>
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
       </Card>
 

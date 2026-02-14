@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Link2, UserRound, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authProviderIcons } from "@/components/auth/auth-page";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import {
   AlertDialog,
@@ -49,6 +51,62 @@ const emptyProfile: ProfilePayload = {
   email: "",
   image: null,
   pendingEmail: null,
+};
+
+const SocialProviderCardSkeleton = () => (
+  <div className="rounded-2xl border border-slate-200 p-4 shadow-sm transition-all dark:border-white/10">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+      </div>
+      <Skeleton className="h-6 w-16 rounded-full" />
+    </div>
+    <div className="mt-2 flex w-full flex-col gap-2 lg:flex-row lg:gap-x-2">
+      <Skeleton className="h-10 w-full lg:flex-1" />
+      <Skeleton className="h-10 w-full lg:flex-1" />
+    </div>
+  </div>
+);
+
+const ProfileInfoSkeleton = () => (
+  <div className="mt-6 grid gap-5">
+    <div className="grid gap-2">
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="h-11 w-full" />
+    </div>
+    <div className="grid gap-2">
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className="h-11 w-full" />
+      <Skeleton className="h-3 w-64" />
+    </div>
+    <div className="flex flex-wrap items-center gap-3">
+      <Skeleton className="h-11 w-36" />
+      <Skeleton className="h-11 w-28" />
+    </div>
+  </div>
+);
+
+const ProfilePreviewSkeleton = () => (
+  <div className="px-6 pb-6 -mt-8">
+    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
+      <Skeleton className="h-24 w-24 rounded-full sm:h-28 sm:w-28" />
+      <div className="space-y-2 text-center sm:pb-1 sm:text-left">
+        <Skeleton className="h-6 w-44" />
+        <Skeleton className="h-4 w-56" />
+      </div>
+    </div>
+  </div>
+);
+
+const cardTransition = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.2, ease: "easeOut" as const },
 };
 
 export default function ProfileSettingsPage() {
@@ -279,34 +337,44 @@ export default function ProfileSettingsPage() {
             </Button>
           </div> */}
         </div>
-        <div className="px-6 pb-6 -mt-8">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
-            <div className="relative">
-              <Avatar className="h-24 w-24 border-4 border-white shadow-lg sm:h-28 sm:w-28 dark:border-slate-900">
-                <AvatarImage src={avatarSrc} alt={draft.name} />
-                <AvatarFallback className="bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="absolute -bottom-1 -right-1 size-8 rounded-full shadow-md"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-1 text-center sm:pb-1 sm:text-left">
-              <h3 className="text-lg font-semibold">
-                {draft.name || "Your name"}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {draft.email || "you@studio.com"}
-              </p>
-            </div>
-          </div>
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          {loading ? (
+            <motion.div key="profile-preview-loading" {...cardTransition}>
+              <ProfilePreviewSkeleton />
+            </motion.div>
+          ) : (
+            <motion.div key="profile-preview-ready" {...cardTransition}>
+              <div className="px-6 pb-6 -mt-8">
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
+                  <div className="relative">
+                    <Avatar className="h-24 w-24 border-4 border-white shadow-lg sm:h-28 sm:w-28 dark:border-slate-900">
+                      <AvatarImage src={avatarSrc} alt={draft.name} />
+                      <AvatarFallback className="bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="absolute -bottom-1 -right-1 size-8 rounded-full shadow-md"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-1 text-center sm:pb-1 sm:text-left">
+                    <h3 className="text-lg font-semibold">
+                      {draft.name || "Your name"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {draft.email || "you@studio.com"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Card>
 
         <Card className="flex border-slate-200 w-full bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
@@ -324,83 +392,91 @@ export default function ProfileSettingsPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-5">
-            <div className="grid gap-2">
-              <Label htmlFor="profile-name">Full name</Label>
-              <Input
-                id="profile-name"
-                value={draft.name}
-                placeholder="Add your name"
-                onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, name: event.target.value }))
-                }
-                disabled={loading || status !== "authenticated"}
-                className="h-11"
-              />
-            </div>
+          <AnimatePresence mode="wait" initial={false}>
+            {loading ? (
+              <motion.div key="profile-info-loading" {...cardTransition}>
+                <ProfileInfoSkeleton />
+              </motion.div>
+            ) : (
+              <motion.div key="profile-info-ready" {...cardTransition} className="mt-6 grid gap-5">
+                <div className="grid gap-2">
+                  <Label htmlFor="profile-name">Full name</Label>
+                  <Input
+                    id="profile-name"
+                    value={draft.name}
+                    placeholder="Add your name"
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                    disabled={loading || status !== "authenticated"}
+                    className="h-11"
+                  />
+                </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="profile-email">Email address</Label>
-              <Input
-                id="profile-email"
-                type="email"
-                value={draft.email}
-                placeholder="you@studio.com"
-                onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, email: event.target.value }))
-                }
-                disabled={loading || status !== "authenticated"}
-                className="h-11"
-              />
-              {profile.pendingEmail ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Pending verification for {profile.pendingEmail}. Check your
-                  inbox to confirm.
-                </p>
-              ) : null}
-              <p className="text-xs text-slate-500 dark:text-zinc-400">
-                We will use this email for sign-in alerts and account recovery.
-              </p>
-            </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="profile-email">Email address</Label>
+                  <Input
+                    id="profile-email"
+                    type="email"
+                    value={draft.email}
+                    placeholder="you@studio.com"
+                    onChange={(event) =>
+                      setDraft((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    disabled={loading || status !== "authenticated"}
+                    className="h-11"
+                  />
+                  {profile.pendingEmail ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Pending verification for {profile.pendingEmail}. Check your
+                      inbox to confirm.
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    We will use this email for sign-in alerts and account recovery.
+                  </p>
+                </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                onClick={handleSave}
-                loading={saving}
-                loadingText="Saving..."
-                disabled={
-                  loading ||
-                  status !== "authenticated" ||
-                  saving ||
-                  !isDirty
-                }
-                className="h-11"
-              >
-                Save changes
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loading || status !== "authenticated" || !isDirty}
-                onClick={() =>
-                  setDraft({
-                    ...profile,
-                    email: profile.pendingEmail ?? profile.email,
-                  })
-                }
-                className="h-11 border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-              >
-                Reset
-              </Button>
-            </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    onClick={handleSave}
+                    loading={saving}
+                    loadingText="Saving..."
+                    disabled={
+                      loading ||
+                      status !== "authenticated" ||
+                      saving ||
+                      !isDirty
+                    }
+                    className="h-11"
+                  >
+                    Save changes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading || status !== "authenticated" || !isDirty}
+                    onClick={() =>
+                      setDraft({
+                        ...profile,
+                        email: profile.pendingEmail ?? profile.email,
+                      })
+                    }
+                    className="h-11 border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                  >
+                    Reset
+                  </Button>
+                </div>
 
-            {status === "unauthenticated" && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                Sign in to update your profile.
-              </p>
+                {status === "unauthenticated" && (
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    Sign in to update your profile.
+                  </p>
+                )}
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </Card>
 
 
@@ -420,11 +496,20 @@ export default function ProfileSettingsPage() {
         </div>
 
         <div className="mt-6 flex flex-col gap-6">
+          <AnimatePresence mode="wait" initial={false}>
           {providers.map((provider) => {
             const isConnected = connectedSet.has(provider.id);
+            if (connectionsLoading) {
+              return (
+                <motion.div key={`${provider.id}-loading`} {...cardTransition}>
+                  <SocialProviderCardSkeleton />
+                </motion.div>
+              );
+            }
             return (
-              <div
-                key={provider.id}
+              <motion.div
+                key={`${provider.id}-ready`}
+                {...cardTransition}
                 className="rounded-2xl border border-slate-200 p-4 shadow-sm transition-all dark:border-white/10"
               >
                 <div className="flex items-center justify-between">
@@ -495,9 +580,10 @@ export default function ProfileSettingsPage() {
                   ) : null}
                 </div>
 
-              </div>
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
 
         {status === "unauthenticated" && (
