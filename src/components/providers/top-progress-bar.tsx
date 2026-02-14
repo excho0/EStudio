@@ -68,6 +68,45 @@ export function TopProgressBar() {
     });
   }, []);
 
+  const shouldTrackFetch = useCallback((input: RequestInfo | URL, init?: RequestInit) => {
+    const normalizeHeaders = (headers?: HeadersInit) => {
+      const map = new Headers(headers);
+      return {
+        forceProgress: map.get("x-progress") === "1",
+        silentProgress: map.get("x-silent-progress") === "1",
+      };
+    };
+
+    const fromInit = normalizeHeaders(init?.headers);
+    if (fromInit.silentProgress) return false;
+    if (fromInit.forceProgress) return true;
+
+    if (typeof Request !== "undefined" && input instanceof Request) {
+      const fromRequest = normalizeHeaders(input.headers);
+      if (fromRequest.silentProgress) return false;
+      if (fromRequest.forceProgress) return true;
+    }
+
+    const toUrl = () => {
+      if (typeof input === "string") return new URL(input, window.location.href);
+      if (input instanceof URL) return input;
+      if (typeof Request !== "undefined" && input instanceof Request) {
+        return new URL(input.url, window.location.href);
+      }
+      return null;
+    };
+
+    const url = toUrl();
+    if (!url) return true;
+
+    // Default behavior: do not show top bar for background API calls.
+    if (url.origin === window.location.origin && url.pathname.startsWith("/api/")) {
+      return false;
+    }
+
+    return true;
+  }, []);
+
   useEffect(() => {
     if (patched.current) {
       return;
@@ -76,6 +115,10 @@ export function TopProgressBar() {
 
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
+      const [input, init] = args;
+      if (!shouldTrackFetch(input, init)) {
+        return originalFetch(...args);
+      }
       if (activeRequests.current === 0) {
         start();
       }
@@ -139,7 +182,7 @@ export function TopProgressBar() {
       document.removeEventListener("click", handleLinkClick, true);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [start, stop]);
+  }, [shouldTrackFetch, start, stop]);
 
   useEffect(() => {
     stop();

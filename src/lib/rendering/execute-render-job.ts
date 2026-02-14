@@ -254,7 +254,7 @@ export const resolveWorkingChromiumGl = async ({
 
   for (const backend of candidates) {
     const available = await probeGlBackendWithChromium(executablePath, backend);
-    renderLogger.info({ event: "gl-probe", backend, available });
+    renderLogger.debug({ event: "gl-probe", backend, available });
     if (available) {
       return backend;
     }
@@ -314,6 +314,82 @@ const logChromiumProcessSnapshot = (tag: string) => {
     }
   } catch {
     // best-effort diagnostics only
+  }
+};
+
+const cleanupRemotionChromiumProcesses = async () => {
+  try {
+    const ps = spawnSync("ps", ["-eo", "pid=,ppid=,args="], {
+      encoding: "utf8",
+    });
+    if (!ps.stdout) return;
+
+    const rows = ps.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const match = line.match(/^(\d+)\s+(\d+)\s+(.+)$/);
+        if (!match) return null;
+        return {
+          pid: Number(match[1]),
+          ppid: Number(match[2]),
+          args: match[3],
+        };
+      })
+      .filter((row): row is { pid: number; ppid: number; args: string } => Boolean(row));
+
+    const childrenByParent = new Map<number, number[]>();
+    for (const row of rows) {
+      const children = childrenByParent.get(row.ppid) ?? [];
+      children.push(row.pid);
+      childrenByParent.set(row.ppid, children);
+    }
+
+    const roots = rows.filter((row) => {
+      const looksLikeChromium = /(chromium|chrome)/i.test(row.args);
+      if (!looksLikeChromium) return false;
+      return (
+        row.ppid === process.pid ||
+        row.args.includes("puppeteer_dev_chrome_profile")
+      );
+    });
+
+    const toKill = new Set<number>();
+    const stack = roots.map((root) => root.pid);
+    while (stack.length > 0) {
+      const pid = stack.pop();
+      if (!pid || toKill.has(pid)) continue;
+      toKill.add(pid);
+      const children = childrenByParent.get(pid) ?? [];
+      for (const child of children) {
+        stack.push(child);
+      }
+    }
+
+    if (toKill.size === 0) return;
+
+    for (const pid of toKill) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    for (const pid of toKill) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // ignore
+      }
+    }
+
+    renderLogger.debug({ event: "chromium-cleanup", killed: toKill.size });
+  } catch (error) {
+    renderLogger.warn({ event: "chromium-cleanup-failed", error });
   }
 };
 
@@ -410,7 +486,7 @@ export const startRenderJob = async ({
         }
       : undefined;
 
-    renderLogger.info({
+    renderLogger.debug({
       event: "render-config",
       concurrency: String(concurrency),
       concurrencySource: process.env.REMOTION_RENDER_CONCURRENCY ?? "auto",
@@ -420,7 +496,7 @@ export const startRenderJob = async ({
       chromiumGlRequested: chromiumGlRequested ?? "unset",
     });
     if (debugNonHeadless) {
-      renderLogger.warn({ event: "debug-non-headless-enabled" });
+      renderLogger.debug({ event: "debug-non-headless-enabled" });
     }
     logChromiumProcessSnapshot("before-render");
 
@@ -477,6 +553,15 @@ export const startRenderJob = async ({
           if (percent % 10 === 0 && percent !== lastChromiumSnapshotPercent) {
             lastChromiumSnapshotPercent = percent;
             logChromiumProcessSnapshot(`progress-${percent}%`);
+          }
+          if (percent % 25 === 0) {
+            renderLogger.info({
+              event: "render-progress",
+              id,
+              rendered,
+              totalFrames,
+              percent,
+            });
           }
           emitRenderProgress({
             userId,
@@ -538,7 +623,7 @@ export const startRenderJob = async ({
       const ranges = buildFrameRanges(totalFrames, chunkSize);
       const numChunks = ranges.length;
 
-      renderLogger.info({
+      renderLogger.debug({
         event: "multi-render-config",
         totalConcurrencyBudget,
         instanceCount,
@@ -584,6 +669,13 @@ export const startRenderJob = async ({
             const next = queue.shift();
             if (!next) break;
             const { start, end, index } = next;
+            renderLogger.debug({
+              event: "chunk-start",
+              id,
+              chunkIndex: index,
+              start,
+              end,
+            });
             await renderMedia({
               serveUrl,
               composition,
@@ -611,6 +703,13 @@ export const startRenderJob = async ({
                 updateProgress(index, rendered);
               },
             });
+            renderLogger.debug({
+              event: "chunk-complete",
+              id,
+              chunkIndex: index,
+              start,
+              end,
+            });
           }
         };
 
@@ -621,6 +720,12 @@ export const startRenderJob = async ({
           )
         );
 
+        renderLogger.debug({
+          event: "combine-start",
+          id,
+          chunks: numChunks,
+          outputPath,
+        });
         await combineChunks({
           outputLocation: outputPath,
           videoFiles: chunkPaths,
@@ -632,6 +737,12 @@ export const startRenderJob = async ({
           compositionDurationInFrames: totalFrames,
           preferLossless: false,
           logLevel: "warn",
+        });
+        renderLogger.debug({
+          event: "combine-complete",
+          id,
+          chunks: numChunks,
+          outputPath,
         });
       } finally {
         await removePath(tempDir, { recursive: true, force: true });
@@ -666,5 +777,7 @@ export const startRenderJob = async ({
       chromeMode,
       message,
     });
+  } finally {
+    await cleanupRemotionChromiumProcesses();
   }
 };
