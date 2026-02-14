@@ -123,7 +123,6 @@ const executeLambdaRenderForContent = async ({
   const region = rawRegion as RemotionLambdaClient.AwsRegion;
 
   await ensureContentStore(userId);
-  await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
   const storage = getStorage();

@@ -9,13 +9,12 @@ import {
 } from "@/lib/content/store";
 import { createTempDir, getStorage, removePath, writeFilePath } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/content/color-palette";
-import { emitContentUpdate } from "@/lib/socket/manager";
+import { emitContentUpdate, getRenderProgressSnapshot } from "@/lib/socket/manager";
 import {
   contentCreateFormSchema,
   contentCreateSchema,
   contentQuerySchema,
   createContentItem,
-  failStaleRenderingItems,
   listContentItems,
   parseContentSettingsString,
 } from "@/lib/data/content";
@@ -24,7 +23,6 @@ import {
   resolveContentSettings,
   normalizeSettingsMap,
 } from "@/lib/content/modes";
-import { getRenderProgressSnapshot } from "@/lib/socket/manager";
 
 const storage = getStorage();
 
@@ -158,37 +156,11 @@ export const handleListContent = async (request: Request, userId: string) => {
     limit: searchParams.get("limit") ?? "50",
   });
   const activeProgress = await getRenderProgressSnapshot(userId);
-  const staleTimeoutMs = Math.max(
-    10_000,
-    Number(process.env.RENDER_STALE_TIMEOUT_MS ?? "120000")
-  );
-  const activeIds = Object.values(activeProgress)
-    .filter((progress) => {
-      const updatedAt = progress.updatedAt;
-      if (typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) {
-        // Backward compatibility for old snapshots without heartbeat.
-        return true;
-      }
-      return Date.now() - updatedAt <= staleTimeoutMs;
-    })
-    .map((progress) => progress.id)
-    .filter(Boolean);
-  const recoveredIds = await failStaleRenderingItems(userId, {
-    activeIds,
-    staleBefore: new Date(Date.now() - staleTimeoutMs),
-  });
-  if (recoveredIds.length > 0) {
-    for (const recoveredId of recoveredIds) {
-      emitContentUpdate({
-        userId,
-        type: "content:status",
-        id: recoveredId,
-        status: "failed",
-      });
-    }
-  }
   const result = await listContentItems(userId, params);
-  return NextResponse.json(result);
+  const items = result.items.map((item) =>
+    activeProgress[item.id] ? { ...item, status: "rendering" as const } : item
+  );
+  return NextResponse.json({ ...result, items });
 };
 
 export const handleCreateContent = async (request: Request, userId: string) => {

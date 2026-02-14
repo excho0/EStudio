@@ -8,7 +8,7 @@ import {
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
 import { emitContentUpdate } from "@/lib/socket/manager";
-import { getContentItem, updateContentItem } from "@/lib/data/content";
+import { getContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/shared/helpers";
 import { createContentAssetToken } from "@/lib/content/asset-token";
 import { getContentMode, resolveContentSettings } from "@/lib/content/modes";
@@ -93,7 +93,6 @@ export const executeRenderForContent = async ({
   }
 
   await ensureContentStore(userId);
-  await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
   const renderDirKey = getContentRenderDir(userId, id);

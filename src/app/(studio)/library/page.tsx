@@ -44,6 +44,7 @@ import { ResponsiveActionMenu } from "@/components/controls/responsive-action-me
 import { PublishDrawer } from "@/components/publishing/publish-drawer";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   type ColumnDef,
   flexRender,
@@ -75,6 +76,13 @@ import React from "react";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { ContentColumnMeta } from "@/types";
+
+const stateTransition = {
+  initial: { opacity: 0, y: 10, filter: "blur(2px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, y: -8, filter: "blur(2px)" },
+  transition: { duration: 0.2, ease: "easeOut" as const },
+};
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");
@@ -137,6 +145,11 @@ export default function LibraryPage() {
   const canGoNext = page < displayTotalPages;
   const isMobile = useIsMobile();
   const [isHydrated, setIsHydrated] = useState(false);
+  const pageState: "loading" | "empty" | "ready" = loading
+    ? "loading"
+    : total === 0
+      ? "empty"
+      : "ready";
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const desktopVirtualizer = useVirtualizer({
@@ -153,6 +166,10 @@ export default function LibraryPage() {
     overscan: 12,
     getItemKey: (index) => items[index]?.id ?? index,
   });
+  useEffect(() => {
+    desktopVirtualizer.measure();
+    mobileVirtualizer.measure();
+  }, [desktopVirtualizer, mobileVirtualizer, isMobile, items.length, pageState]);
   const renderMutation = useMutation({
     mutationFn: async (id: string) => {
       await sdk.content.triggerRender(id);
@@ -220,13 +237,21 @@ export default function LibraryPage() {
     await deleteMutation.mutateAsync({ id, keepRenders });
   }, [deleteMutation]);
 
+  const getEffectiveStatus = useCallback(
+    (item: ContentItem) => (renderProgress[item.id] ? "rendering" : item.status),
+    [renderProgress]
+  );
+
   const getActionItems = useCallback((item: ContentItem) => [
+    ...(() => {
+      const effectiveStatus = getEffectiveStatus(item);
+      return [
     {
       label: "Details",
       icon: Eye,
       href: `/edit/${item.id}`,
     },
-    ...(item.status === "rendered" || item.status === "rendering"
+    ...(effectiveStatus === "rendered" || effectiveStatus === "rendering"
       ? [
           {
             label: "Publish",
@@ -249,12 +274,15 @@ export default function LibraryPage() {
       : []),
     { type: "separator" as const },
     {
-      label: renderingId === item.id ? "Rendering..." : "Render now",
+      label:
+        renderingId === item.id || effectiveStatus === "rendering"
+          ? "Rendering..."
+          : "Render now",
       icon: Play,
       onSelect: () => handleRender(item.id),
-      disabled: renderingId === item.id,
+      disabled: renderingId === item.id || effectiveStatus === "rendering",
     },
-    ...(item.status === "rendered" || item.status === "rendering"
+    ...(effectiveStatus === "rendered" || effectiveStatus === "rendering"
       ? [
           {
             label: "View renders",
@@ -279,7 +307,9 @@ export default function LibraryPage() {
         handleDelete(item.id, options?.keepRenders),
       destructive: true,
     },
-  ], [handleDelete, handleRender, renderingId]);
+  ];
+    })(),
+  ], [getEffectiveStatus, handleDelete, handleRender, renderingId]);
 
   const getStatusMeta = useCallback((status: string) => {
     switch (status) {
@@ -391,7 +421,7 @@ export default function LibraryPage() {
       header: "Status",
       cell: ({ row }) =>
         renderStatusBadge(
-          row.original.status,
+          getEffectiveStatus(row.original),
           true,
           renderProgress[row.original.id]?.progress
         ),
@@ -424,7 +454,7 @@ export default function LibraryPage() {
       ),
       meta: { align: "center", cellClassName: "text-center" } satisfies ContentColumnMeta,
     },
-  ], [formatDateTime, getActionItems, renderProgress, renderStatusBadge]);
+  ], [formatDateTime, getActionItems, getEffectiveStatus, renderProgress, renderStatusBadge]);
 
   const table = useReactTable({
     data: items,
@@ -432,6 +462,8 @@ export default function LibraryPage() {
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
   });
+  const desktopVirtualItems = desktopVirtualizer.getVirtualItems();
+  const mobileVirtualItems = mobileVirtualizer.getVirtualItems();
 
   const filtersPanel = (
     <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-3">
@@ -503,45 +535,47 @@ export default function LibraryPage() {
   }, []);
 
   const DesktopSkeletonRows = () => (
-    <Table className="-mb-12">
-      <thead>
-        <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-          <th className="py-3">Project</th>
-          <th>Status</th>
-          <th>Settings</th>
-          <th className="text-right">Actions</th>
-        </tr>
-      </thead>
-      <tbody className="text-sm">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <tr key={`skeleton-row-${index}`} className="border-t border-slate-200 dark:border-white/10">
-            <td className="py-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-12 w-16 rounded-md" />
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-40" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
-            </td>
-            <td>
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </td>
-            <td>
-              <div className="space-y-2">
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-            </td>
-            <td className="text-right">
-              <div className="flex justify-end">
-                <Skeleton className="h-8 w-10 rounded-md" />
-              </div>
-            </td>
+    <div className="overflow-x-hidden overflow-y-hidden">
+      <Table className="-mb-12">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+            <th className="py-3">Project</th>
+            <th>Status</th>
+            <th>Settings</th>
+            <th className="text-right">Actions</th>
           </tr>
-        ))}
-      </tbody>
-    </Table>
+        </thead>
+        <tbody className="text-sm">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <tr key={`skeleton-row-${index}`} className="border-t border-slate-200 dark:border-white/10">
+              <td className="py-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-12 w-16 rounded-md" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+              </td>
+              <td>
+                <Skeleton className="h-6 w-24 rounded-full" />
+              </td>
+              <td>
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              </td>
+              <td className="text-right">
+                <div className="flex justify-end">
+                  <Skeleton className="h-8 w-10 rounded-md" />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    </div>
   );
 
   const MobileSkeletonCards = () => (
@@ -631,22 +665,32 @@ export default function LibraryPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="mt-6">
+        <AnimatePresence mode="wait" initial={false}>
+        {pageState === "loading" ? (
+          <motion.div key="library-loading" {...stateTransition} className="mt-6">
             {!isHydrated ? (
               <></>
             ) : isMobile ? (
-              <MobileSkeletonCards />
+                <MobileSkeletonCards />
             ) : (
-              <DesktopSkeletonRows />
+                <DesktopSkeletonRows />
             )}
-          </div>
-        ) : total === 0 ? (
-          <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-zinc-400">
+          </motion.div>
+        ) : pageState === "empty" ? (
+          <motion.div
+            key="library-empty"
+            {...stateTransition}
+            className="mt-6 rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-zinc-400"
+          >
             No matches found. Try a different search.
-          </div>
+          </motion.div>
         ) : (
-          <>
+          <motion.div key="library-ready" {...stateTransition}>
+            {items.length === 0 ? (
+              <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-white/10 dark:text-zinc-400">
+                No items on this page yet. Try changing filters or go to page 1.
+              </div>
+            ) : null}
             {!isMobile && (
             <div className="mt-6">
               <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-zinc-950/80">
@@ -697,74 +741,117 @@ export default function LibraryPage() {
                     <col className="w-[12%]" />
                   </colgroup>
                   <TableBody className="text-sm">
-                    {desktopVirtualizer.getVirtualItems()[0]?.start ? (
+                    {desktopVirtualItems[0]?.start ? (
                       <TableRow>
                         <TableCell
                           colSpan={4}
-                          style={{ height: desktopVirtualizer.getVirtualItems()[0].start }}
+                          style={{ height: desktopVirtualItems[0].start }}
                         />
                       </TableRow>
                     ) : null}
-                    {desktopVirtualizer.getVirtualItems().map((virtualRow) => {
-                      const row = table.getRowModel().rows[virtualRow.index];
-                      if (!row) return null;
-                      const item = row.original;
-                      return (
-                        <React.Fragment key={row.id}>
-                          <TableRow
-                            data-index={virtualRow.index}
-                            ref={desktopVirtualizer.measureElement}
-                            className="border-t border-slate-200 dark:border-white/10"
-                          >
-                            {row.getVisibleCells().map((cell) => {
-                              const meta = cell.column.columnDef.meta as
-                                | ContentColumnMeta
-                                | undefined;
-                              return (
-                                <TableCell
-                                  key={cell.id}
-                                  className={cn(
-                                    meta?.cellClassName,
-                                    meta?.align === "center" && "text-center",
-                                    meta?.align === "right" && "text-right"
-                                  )}
-                                >
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext()
-                                  )}
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                          {item.status === "rendering" ? (
-                            <TableRow className="border-b border-slate-200 dark:border-white/10">
-                              <TableCell colSpan={4} className="pb-4">
-                                <StatRow show className="px-1">
-                                  <Progress
-                                    value={Math.round(
-                                      (renderProgress[item.id]?.progress ?? 0) *
-                                        100
-                                    )}
-                                    variant="amber"
-                                  />
-                                </StatRow>
-                              </TableCell>
-                            </TableRow>
-                          ) : null}
-                        </React.Fragment>
-                      );
-                    })}
-                    {desktopVirtualizer.getVirtualItems().length ? (
+                    {desktopVirtualItems.length > 0
+                      ? desktopVirtualItems.map((virtualRow) => {
+                          const row = table.getRowModel().rows[virtualRow.index];
+                          if (!row) return null;
+                          const item = row.original;
+                          return (
+                            <React.Fragment key={row.id}>
+                              <TableRow
+                                data-index={virtualRow.index}
+                                ref={desktopVirtualizer.measureElement}
+                                className="border-t border-slate-200 dark:border-white/10"
+                              >
+                                {row.getVisibleCells().map((cell) => {
+                                  const meta = cell.column.columnDef.meta as
+                                    | ContentColumnMeta
+                                    | undefined;
+                                  return (
+                                    <TableCell
+                                      key={cell.id}
+                                      className={cn(
+                                        meta?.cellClassName,
+                                        meta?.align === "center" && "text-center",
+                                        meta?.align === "right" && "text-right"
+                                      )}
+                                    >
+                                      {flexRender(
+                                        cell.column.columnDef.cell,
+                                        cell.getContext()
+                                      )}
+                                    </TableCell>
+                                  );
+                                })}
+                              </TableRow>
+                              {getEffectiveStatus(item) === "rendering" ? (
+                                <TableRow className="border-b border-slate-200 dark:border-white/10">
+                                  <TableCell colSpan={4} className="pb-4">
+                                    <StatRow show className="px-1">
+                                      <Progress
+                                        value={Math.round(
+                                          (renderProgress[item.id]?.progress ?? 0) *
+                                            100
+                                        )}
+                                        variant="amber"
+                                      />
+                                    </StatRow>
+                                  </TableCell>
+                                </TableRow>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })
+                      : table.getRowModel().rows.map((row) => {
+                          const item = row.original;
+                          return (
+                            <React.Fragment key={row.id}>
+                              <TableRow className="border-t border-slate-200 dark:border-white/10">
+                                {row.getVisibleCells().map((cell) => {
+                                  const meta = cell.column.columnDef.meta as
+                                    | ContentColumnMeta
+                                    | undefined;
+                                  return (
+                                    <TableCell
+                                      key={cell.id}
+                                      className={cn(
+                                        meta?.cellClassName,
+                                        meta?.align === "center" && "text-center",
+                                        meta?.align === "right" && "text-right"
+                                      )}
+                                    >
+                                      {flexRender(
+                                        cell.column.columnDef.cell,
+                                        cell.getContext()
+                                      )}
+                                    </TableCell>
+                                  );
+                                })}
+                              </TableRow>
+                              {getEffectiveStatus(item) === "rendering" ? (
+                                <TableRow className="border-b border-slate-200 dark:border-white/10">
+                                  <TableCell colSpan={4} className="pb-4">
+                                    <StatRow show className="px-1">
+                                      <Progress
+                                        value={Math.round(
+                                          (renderProgress[item.id]?.progress ?? 0) *
+                                            100
+                                        )}
+                                        variant="amber"
+                                      />
+                                    </StatRow>
+                                  </TableCell>
+                                </TableRow>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })}
+                    {desktopVirtualItems.length ? (
                       <TableRow>
                         <TableCell
                           colSpan={4}
                           style={{
                             height:
                               desktopVirtualizer.getTotalSize() -
-                              desktopVirtualizer.getVirtualItems()[
-                                desktopVirtualizer.getVirtualItems().length - 1
-                              ].end,
+                              desktopVirtualItems[desktopVirtualItems.length - 1].end,
                           }}
                         />
                       </TableRow>
@@ -775,14 +862,19 @@ export default function LibraryPage() {
             </div>
             )}
 
-            {isMobile && (
+            {isMobile && items.length > 0 && (
             <div className="mt-6">
               <ScrollArea className="h-[50svh]" viewportRef={mobileScrollRef}>
                 <div
-                  className="relative"
-                  style={{ height: mobileVirtualizer.getTotalSize() }}
+                  className={cn(mobileVirtualItems.length > 0 && "relative")}
+                  style={
+                    mobileVirtualItems.length > 0
+                      ? { height: mobileVirtualizer.getTotalSize() }
+                      : undefined
+                  }
                 >
-                  {mobileVirtualizer.getVirtualItems().map((virtualRow) => {
+                  {mobileVirtualItems.length > 0
+                    ? mobileVirtualItems.map((virtualRow) => {
                     const item = items[virtualRow.index];
                     if (!item) return null;
                     return (
@@ -815,7 +907,7 @@ export default function LibraryPage() {
                                 </div>
                                 <div className="mt-2">
                                   {renderStatusBadge(
-                                    item.status,
+                                    getEffectiveStatus(item),
                                     false,
                                     renderProgress[item.id]?.progress
                                   )}
@@ -827,7 +919,7 @@ export default function LibraryPage() {
                             </div>
                           </div>
                           <StatRow
-                            show={item.status === "rendering"}
+                            show={getEffectiveStatus(item) === "rendering"}
                             className="w-full"
                           >
                             <Progress
@@ -840,13 +932,56 @@ export default function LibraryPage() {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                    : items.map((item) => (
+                        <div key={item.id} className="w-full px-1 py-1">
+                          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex flex-1 gap-3">
+                                <ImageWithSkeleton
+                                  src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                    item.updatedAt
+                                  )}`}
+                                  alt={`${item.title} thumbnail`}
+                                  className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                                  wrapperClassName="h-16 w-20 rounded-md"
+                                />
+                                <div className="flex-1">
+                                  <div className="text-sm font-semibold">{item.title}</div>
+                                  <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                    {formatDate(item.createdAt)}
+                                  </div>
+                                  <div className="mt-2">
+                                    {renderStatusBadge(
+                                      getEffectiveStatus(item),
+                                      false,
+                                      renderProgress[item.id]?.progress
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 items-start justify-end">
+                                <ResponsiveActionMenu items={getActionItems(item)} />
+                              </div>
+                            </div>
+                            <StatRow show={getEffectiveStatus(item) === "rendering"} className="w-full">
+                              <Progress
+                                value={Math.round(
+                                  (renderProgress[item.id]?.progress ?? 0) * 100
+                                )}
+                                variant="amber"
+                              />
+                            </StatRow>
+                          </div>
+                        </div>
+                      ))}
                 </div>
               </ScrollArea>
             </div>
             )}
-          </>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         <div
           className={cn(

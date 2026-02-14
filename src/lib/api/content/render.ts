@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import IORedis from "ioredis";
 import { eventBus } from "@/lib/event-bus";
-import { emitContentUpdate } from "@/lib/socket/manager";
-import { getContentItem, updateContentItem } from "@/lib/data/content";
+import { emitContentUpdate, getRenderProgressSnapshot } from "@/lib/socket/manager";
+import { getContentItem } from "@/lib/data/content";
 import { enqueueRenderJob, isRenderQueueEnabled } from "@/lib/queue/render-queue";
 import { triggerRenderRequestSchema } from "@/lib/data/render";
 import {
@@ -65,7 +65,8 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (item.status === "rendering") {
+  const activeProgress = await getRenderProgressSnapshot(userId);
+  if (activeProgress[id]) {
     return NextResponse.json({ ok: true, status: "rendering", id }, { status: 202 });
   }
 
@@ -79,7 +80,6 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     try {
       const queued = await withRenderRequestLock(userId, id, async () => {
         await enqueueRenderJob({ id, userId, backend });
-        await updateContentItem(userId, id, { status: "rendering" });
         emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
         void eventBus.emit("render.queued", { userId, id, backend });
         return true;

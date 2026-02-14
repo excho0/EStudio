@@ -20,6 +20,7 @@ import {
   RotateCw,
   Save,
   Monitor,
+  AlertCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import type { EditFormValues, PaletteMode } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
@@ -78,12 +80,13 @@ import StickyBox from "@/components/ui/sticky-box";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { is } from "drizzle-orm";
 import { cn } from "@/lib/shared/utils";
+import { Alert, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/ui/alert";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
-  { value: "rendering", label: "Rendering", icon: Loader2 },
+  // { value: "rendering", label: "Rendering", icon: Loader2 },
   { value: "rendered", label: "Rendered", icon: CheckCircle2 },
-  { value: "failed", label: "Failed", icon: XCircle },
+  // { value: "failed", label: "Failed", icon: XCircle },
 ] as const;
 
 const defaultFormValues = {
@@ -207,6 +210,13 @@ const ColorCopyButton = ({
   </button>
 );
 
+const stateTransition = {
+  initial: { opacity: 0, y: 12, filter: "blur(3px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, y: -10, filter: "blur(2px)" },
+  transition: { duration: 0.2, ease: "easeOut" as const },
+};
+
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
   const isMobile = useIsMobile();
@@ -235,6 +245,15 @@ export default function EditContentPage() {
     },
   });
   const loading = contentQuery.isLoading || contentQuery.isFetching;
+  const resolvedItem = item ?? contentQuery.data ?? null;
+  const pageState: "loading" | "error" | "notFound" | "ready" = loading
+    ? "loading"
+    : error
+      ? "error"
+      : resolvedItem
+        ? "ready"
+        : "notFound";
+  const isReady = pageState === "ready";
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!contentQuery.data) return;
@@ -301,10 +320,10 @@ export default function EditContentPage() {
     },
   });
   const saving = saveMutation.isPending;
-  const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
-  const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
-  const thumbnailUrl = item
-    ? `/api/content/${item.id}/asset?type=thumbnail&v=${thumbnailVersion}`
+  const videoUrl = resolvedItem ? `/api/content/${resolvedItem.id}/asset?type=video` : null;
+  const audioUrl = resolvedItem ? `/api/content/${resolvedItem.id}/asset?type=song` : null;
+  const thumbnailUrl = resolvedItem
+    ? `/api/content/${resolvedItem.id}/asset?type=thumbnail&v=${thumbnailVersion}`
     : null;
   const { blobUrl: videoBlobUrl, loading: videoLoading } =
     useMediaBlobUrl(videoUrl);
@@ -554,48 +573,78 @@ export default function EditContentPage() {
               isSticky && isMobile || isTablet ? "justify-center" : "justify-end"
             )}
           >
-
-          <Button
-            onClick={handleSave}
-            loading={saving}
-            disabled={!isDirty || saving}
-            className="gap-2"
-          >
-            <Save className="size-5" />
-            <span className="hidden sm:inline">Save</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-            onClick={handleRevert}
-            disabled={!isDirty}
-          >
-            <RotateCw className="size-5" />
-            <span className="hidden sm:inline">Revert changes</span>
-          </Button>
+            <AnimatePresence mode="wait" initial={false}>
+              {pageState === "loading" ? (
+                <motion.div
+                  key="sticky-actions-loading"
+                  {...stateTransition}
+                  className="flex items-center gap-3"
+                >
+                  <Skeleton className="h-10 w-28 rounded-xl" />
+                  <Skeleton className="h-10 w-36 rounded-xl" />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="sticky-actions-ready"
+                  {...stateTransition}
+                  className="flex items-center gap-3"
+                >
+                  <Button
+                    onClick={handleSave}
+                    loading={saving}
+                    disabled={!isDirty || saving}
+                    className="gap-2"
+                  >
+                    <Save className="size-5" />
+                    <span className="hidden sm:inline">Save</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                    onClick={handleRevert}
+                    disabled={!isDirty}
+                  >
+                    <RotateCw className="size-5" />
+                    <span className="hidden sm:inline">Revert changes</span>
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </StickyBox>
     </div>
 
       <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)]">
-          {loading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64" />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
+          <AnimatePresence mode="wait" initial={false}>
+          {pageState === "loading" ? (
+            <motion.div key="loading" {...stateTransition} className="space-y-5">
+              <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50 p-4 dark:border-white/10 dark:from-white/5 dark:to-white/[0.03]">
+                <Skeleton className="h-5 w-52" />
+                <Skeleton className="mt-3 h-3 w-64" />
               </div>
-            </div>
-          ) : error ? (
-            <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-200">
+              <div className="flex flex-col gap-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={`edit-skeleton-${index}`}
+                    className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/[0.03]"
+                  >
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="mt-3 h-10 w-full rounded-xl" />
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          ) : pageState === "error" ? (
+            <motion.div
+              key="error"
+              {...stateTransition}
+              className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-200"
+            >
               {error}
-            </div>
-          ) : item ? (
-            <div className="flex flex-col gap-6">
+            </motion.div>
+          ) : isReady && resolvedItem ? (
+            <motion.div key="ready" {...stateTransition} className="flex flex-col gap-6">
               <div className="grid gap-6">
                 <div className="grid gap-2">
                   <LabelWithTooltip
@@ -687,7 +736,7 @@ export default function EditContentPage() {
                     />
                     <div className="flex items-center gap-4 py-2">
                       <div className="h-20 w-28 overflow-hidden rounded-md ">
-                        {thumbnailPreview || item ? (
+                        {thumbnailPreview || resolvedItem ? (
                           <ImageWithSkeleton
                             src={thumbnailPreview ?? thumbnailUrl ?? ""}
                             alt="Thumbnail preview"
@@ -917,15 +966,23 @@ export default function EditContentPage() {
                   }
                 />
               </div>
-            </div>
-        ) : contentQuery.isFetched ? (
-          <div className="text-sm text-slate-500 dark:text-zinc-400">
-            Content item not found.
-            <Link href="/library" className="ml-2 text-emerald-500">
-              Go back
-            </Link>
-          </div>
+            </motion.div>
+        ) : pageState === "notFound" ? (
+          <motion.div key="empty" {...stateTransition}>
+          <Alert variant={"secondary"} >
+            <AlertIcon>
+              <AlertCircle className="size-5" />
+            </AlertIcon>
+            <AlertTitle>Content not found</AlertTitle>
+            <AlertContent>
+              <Link href="/library" className="ml-2 text-emerald-500">
+                Go back
+              </Link>
+            </AlertContent>
+          </Alert>
+          </motion.div>
         ) : null}
+          </AnimatePresence>
         <div>
           <StickyBox
             top={isMobile || isTablet ? 120 : 140}
@@ -933,23 +990,35 @@ export default function EditContentPage() {
             className="self-start"
           >
             <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
-              {loading || videoLoading || audioLoading || !previewProps || !canRenderPreview ? (
-                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
-              ) : item ? (
-                <Player
-                  acknowledgeRemotionLicense
-                  component={previewComponent}
-                  inputProps={previewProps ?? {}}
-                  durationInFrames={safeDurationInFrames}
-                  fps={resolvedFps}
-                  compositionWidth={resolvedWidth}
-                  compositionHeight={resolvedHeight}
-                  controls
-                  style={{ width: "100%" }}
-                />
-              ) : (
-                <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
-              )}
+              <AnimatePresence mode="wait" initial={false}>
+                {pageState === "loading" ||
+                videoLoading ||
+                audioLoading ||
+                !previewProps ||
+                !canRenderPreview ? (
+                  <motion.div key="preview-loading" {...stateTransition}>
+                    <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+                  </motion.div>
+                ) : isReady && resolvedItem ? (
+                  <motion.div key="preview-ready" {...stateTransition}>
+                    <Player
+                      acknowledgeRemotionLicense
+                      component={previewComponent}
+                      inputProps={previewProps ?? {}}
+                      durationInFrames={safeDurationInFrames}
+                      fps={resolvedFps}
+                      compositionWidth={resolvedWidth}
+                      compositionHeight={resolvedHeight}
+                      controls
+                      style={{ width: "100%" }}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div key="preview-empty" {...stateTransition}>
+                    <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
               
               {isTablet ? (
                 <button
@@ -964,19 +1033,21 @@ export default function EditContentPage() {
             </div>
           </StickyBox>
           <div className="p-2 py-4">
-            {loading ? (
-              <>
-                <Skeleton className="h-7 w-72" />
-                <Skeleton className="mt-2 h-3 w-40" />
-              </>
-            ) : item ? (
-              <>
-                <div className="text-2xl font-semibold">{item.title}</div>
-                <div className="text-xs text-slate-500 dark:text-zinc-400">
-                  {new Date(item.createdAt).toLocaleString()}
-                </div>
-              </>
-            ) : null}
+            <AnimatePresence mode="wait" initial={false}>
+              {pageState === "loading" ? (
+                <motion.div key="meta-loading" {...stateTransition}>
+                  <Skeleton className="h-7 w-72" />
+                  <Skeleton className="mt-2 h-3 w-40" />
+                </motion.div>
+              ) : isReady && resolvedItem ? (
+                <motion.div key="meta-ready" {...stateTransition}>
+                  <div className="text-2xl font-semibold">{resolvedItem.title}</div>
+                  <div className="text-xs text-slate-500 dark:text-zinc-400">
+                    {new Date(resolvedItem.createdAt).toLocaleString()}
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         </div>
       </div>

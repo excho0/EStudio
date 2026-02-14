@@ -27,10 +27,10 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
   "uploaded" | "rendering" | "rendered" | "failed",
   ReadonlyArray<"uploaded" | "rendering" | "rendered" | "failed">
 > = {
-  uploaded: ["uploaded", "rendering", "failed"],
+  uploaded: ["uploaded", "rendering", "rendered", "failed"],
   rendering: ["rendering", "rendered", "failed"],
   rendered: ["rendered", "rendering", "failed"],
-  failed: ["failed", "rendering"],
+  failed: ["failed", "rendering", "rendered"],
 };
 
 export async function listContentItems(

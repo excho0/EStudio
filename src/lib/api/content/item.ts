@@ -11,7 +11,7 @@ import {
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/content/color-palette";
-import { emitContentUpdate } from "@/lib/socket/manager";
+import { emitContentUpdate, getRenderProgressSnapshot } from "@/lib/socket/manager";
 import {
   contentUpdateFormSchema,
   deleteContentItem,
@@ -48,7 +48,11 @@ export const handleGetContentItem = async (userId: string, id: string) => {
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(item);
+  const activeProgress = await getRenderProgressSnapshot(userId);
+  const withEffectiveStatus = activeProgress[id]
+    ? { ...item, status: "rendering" as const }
+    : item;
+  return NextResponse.json(withEffectiveStatus);
 };
 
 export const handlePatchContentItem = async (
