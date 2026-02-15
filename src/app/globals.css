@@ -122,6 +122,9 @@
   body {
     @apply bg-background text-foreground;
   }
+  body[data-scroll-locked="true"] {
+    overflow: hidden !important;
+  }
 }
 
 #nprogress {
