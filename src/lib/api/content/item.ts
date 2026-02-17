@@ -84,15 +84,6 @@ export const handlePatchContentItem = async (
     if (parsedForm.paletteMode) {
       payload.paletteMode = parsedForm.paletteMode;
     }
-    if (parsedForm.fps !== undefined) {
-      payload.fps = parsedForm.fps;
-    }
-    if (parsedForm.width !== undefined) {
-      payload.width = parsedForm.width;
-    }
-    if (parsedForm.height !== undefined) {
-      payload.height = parsedForm.height;
-    }
     if (parsedForm.mode && parsedForm.mode.trim()) {
       payload.mode = parsedForm.mode.trim();
     }

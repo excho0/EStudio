@@ -175,9 +175,6 @@ export const handleCreateContent = async (request: Request, userId: string) => {
           thumbnailPath?: string;
           videoPath?: string;
           songPath?: string;
-          fps?: number;
-          width?: number;
-          height?: number;
           mode?: string;
           settings?: Record<string, unknown>;
         }
@@ -207,9 +204,6 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     const settingsMap = normalizeSettingsMap(mode, settingsInput);
     settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
     const songDurationSeconds = serverSongDuration ?? 0;
-    const fps = typeof payload.fps === "number" ? payload.fps : undefined;
-    const width = typeof payload.width === "number" ? payload.width : undefined;
-    const height = typeof payload.height === "number" ? payload.height : undefined;
     const item = contentCreateSchema.parse({
       id,
       userId,
@@ -220,9 +214,6 @@ export const handleCreateContent = async (request: Request, userId: string) => {
       mode: resolved.mode,
       settings: settingsMap,
       songDurationSeconds,
-      fps,
-      width,
-      height,
     });
 
     const created = await createContentItem(item);
@@ -254,7 +245,7 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     );
   }
 
-  const { fps, width, height, mode, settings: settingsRaw } = parsedForm;
+  const { mode, settings: settingsRaw } = parsedForm;
 
   const id = randomUUID();
   const [thumbnailPath, videoPath, songPath] = await Promise.all([
@@ -283,9 +274,6 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     mode: resolved.mode,
     settings: settingsMap,
     songDurationSeconds: serverSongDuration ?? 0,
-    fps,
-    width,
-    height,
   });
 
   const created = await createContentItem(item);

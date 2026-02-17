@@ -125,9 +125,6 @@ export const contentItems = sqliteTable(
     status: text("status").notNull().default("uploaded"),
     // asset paths derived from content id
     songDurationSeconds: real("song_duration_seconds").notNull().default(0),
-    fps: integer("fps").notNull().default(30),
-    width: integer("width").notNull().default(1280),
-    height: integer("height").notNull().default(720),
     colorPalette: text("color_palette"),
     paletteMode: text("palette_mode").notNull().default("auto"),
     mode: text("mode").notNull().default("video_loop"),
@@ -196,9 +193,6 @@ export const contentItemsPg = pgTable(
     status: pgText("status").notNull().default("uploaded"),
     // asset paths derived from content id
     songDurationSeconds: pgReal("song_duration_seconds").notNull().default(0),
-    fps: pgInteger("fps").notNull().default(30),
-    width: pgInteger("width").notNull().default(1280),
-    height: pgInteger("height").notNull().default(720),
     colorPalette: pgText("color_palette"),
     paletteMode: pgText("palette_mode").notNull().default("auto"),
     mode: pgText("mode").notNull().default("video_loop"),

@@ -84,6 +84,12 @@ export async function findLatestRenderPath(userId: string, id: string) {
   return latest ? storageKey(getContentRenderDir(userId, id), latest.name) : null;
 }
 
+export async function hasAnyRenderedOutput(userId: string, id: string) {
+  const dirKey = getContentRenderDir(userId, id);
+  const entries = await storage.list(dirKey).catch(() => []);
+  return entries.some((entry) => entry.toLowerCase().endsWith(".mp4"));
+}
+
 export async function findContentAssetPath(
   userId: string,
   id: string,

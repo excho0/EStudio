@@ -32,9 +32,6 @@ export const normalizeContentRow = (row: unknown): ContentItem => {
     paletteMode: record.paletteMode ?? "auto",
     mode: record.mode ?? "video_loop",
     settings: record.settings ?? null,
-    fps: record.fps ?? 30,
-    width: record.width ?? 1280,
-    height: record.height ?? 720,
     publishesCount: Number.isFinite(Number(record.publishesCount))
       ? Number(record.publishesCount)
       : 0,

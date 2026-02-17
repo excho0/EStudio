@@ -28,7 +28,7 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
   ReadonlyArray<"uploaded" | "rendering" | "rendered" | "failed">
 > = {
   uploaded: ["uploaded", "rendering", "rendered", "failed"],
-  rendering: ["rendering", "rendered", "failed"],
+  rendering: ["uploaded", "rendering", "rendered", "failed"],
   rendered: ["rendered", "rendering", "failed"],
   failed: ["failed", "rendering", "rendered"],
 };

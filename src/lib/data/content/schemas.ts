@@ -18,9 +18,6 @@ export const contentItemSchema = z.object({
   settings: z.record(z.string(), z.unknown()).optional().nullable(),
   status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
   songDurationSeconds: z.number().nonnegative(),
-  fps: z.number().int().positive(),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
   publishesCount: z.number().int().nonnegative().optional(),
 }).describe("Content item.");
 
@@ -53,9 +50,6 @@ export const contentCreateSchema = z.object({
   mode: z.string().default("video_loop"),
   settings: z.record(z.string(), z.unknown()).optional().nullable(),
   songDurationSeconds: z.number().nonnegative().default(0),
-  fps: z.number().int().positive().default(30),
-  width: z.number().int().positive().default(1280),
-  height: z.number().int().positive().default(720),
 }).describe("Content create payload.");
 
 /** Data shape used when partially updating a content item in persistence layer. */
@@ -67,9 +61,6 @@ export const contentUpdateSchema = z.object({
   mode: z.string().optional(),
   settings: z.record(z.string(), z.unknown()).optional().nullable(),
   songDurationSeconds: z.number().nonnegative().optional(),
-  fps: z.number().int().positive().optional(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
 }).describe("Content update payload.");
 
 /** Multipart/form-data create payload accepted by content create endpoint. */
@@ -77,9 +68,6 @@ export const contentCreateFormSchema = z.object({
   title: z.string().default("Untitled"),
   mode: z.string().default("video_loop"),
   settings: z.string().optional(),
-  fps: z.coerce.number().int().positive().default(30),
-  width: z.coerce.number().int().positive().default(1280),
-  height: z.coerce.number().int().positive().default(720),
 }).describe("Content create form payload.");
 
 /** Multipart/form-data update payload accepted by content update endpoint. */
@@ -87,9 +75,6 @@ export const contentUpdateFormSchema = z.object({
   title: z.string().optional(),
   status: z.string().optional(),
   paletteMode: paletteModeSchema.optional(),
-  fps: z.coerce.number().int().positive().optional(),
-  width: z.coerce.number().int().positive().optional(),
-  height: z.coerce.number().int().positive().optional(),
   mode: z.string().optional(),
   settings: z.string().optional(),
 }).describe("Content update form payload.");
@@ -100,9 +85,6 @@ export const editFormValuesSchema = z.object({
   status: z.string(),
   mode: z.string(),
   songDurationSeconds: z.string(),
-  fps: z.string(),
-  width: z.string(),
-  height: z.string(),
   settings: z.record(z.string(), z.unknown()),
 }).describe("Studio edit form values.");
 

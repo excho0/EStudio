@@ -84,9 +84,6 @@ type ContentLoopItemLike = {
   colorPalette?: string[] | null;
   paletteMode?: "auto" | "manual" | null;
   songDurationSeconds?: number | null;
-  fps?: number | null;
-  width?: number | null;
-  height?: number | null;
   settings?: Record<string, unknown> | null;
 };
 
@@ -225,15 +222,12 @@ export const buildContentLoopPropsFromItem = (
       CONTENT_LOOP_DEFAULTS.songDurationSeconds,
     fps:
       getSetting<number>("fps") ??
-      item.fps ??
       CONTENT_LOOP_DEFAULTS.fps,
     width:
       getSetting<number>("width") ??
-      item.width ??
       CONTENT_LOOP_DEFAULTS.width,
     height:
       getSetting<number>("height") ??
-      item.height ??
       CONTENT_LOOP_DEFAULTS.height,
     ...overrides,
   });

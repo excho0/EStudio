@@ -8,8 +8,126 @@ import {
   contentCreateSchema,
   createContentItem,
   getContentItem,
+  updateContentItem,
 } from "@/lib/data/content";
+import {
+  DEFAULT_CONTENT_MODE,
+  getContentMode,
+  getOutputDefaultsForMode,
+  normalizeSettingsMap,
+  resolveContentSettings,
+} from "@/lib/content/modes";
 import { getStorage, storageKey } from "@/lib/storage";
+
+const toNumber = (value: unknown): number | undefined => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toPositiveInt = (value: unknown): number | undefined => {
+  const parsed = toNumber(value);
+  if (parsed === undefined || parsed <= 0) return undefined;
+  return Math.round(parsed);
+};
+
+const toNonNegative = (value: unknown, fallback = 0) => {
+  const parsed = toNumber(value);
+  if (parsed === undefined || parsed < 0) return fallback;
+  return parsed;
+};
+
+const pickStatus = (value: unknown) => {
+  if (
+    value === "uploaded" ||
+    value === "rendering" ||
+    value === "rendered" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return "uploaded" as const;
+};
+
+const recoverSettingsMap = (mode: string | undefined, raw: Record<string, unknown>) => {
+  const resolvedMode = mode || DEFAULT_CONTENT_MODE;
+  const legacyOutput = {
+    fps: toPositiveInt(raw.fps),
+    width: toPositiveInt(raw.width),
+    height: toPositiveInt(raw.height),
+  };
+
+  let normalized = normalizeSettingsMap(resolvedMode, raw.settings);
+  const currentScoped =
+    (normalized[resolvedMode] as Record<string, unknown> | undefined) ?? {};
+  const outputDefaults = getOutputDefaultsForMode(resolvedMode, currentScoped);
+  const scopedOutput =
+    currentScoped.outputConfig &&
+    typeof currentScoped.outputConfig === "object" &&
+    !Array.isArray(currentScoped.outputConfig)
+      ? (currentScoped.outputConfig as Record<string, unknown>)
+      : {};
+
+  const outputConfig = {
+    ...scopedOutput,
+    fps: legacyOutput.fps ?? outputDefaults.fps,
+    width: legacyOutput.width ?? outputDefaults.width,
+    height: legacyOutput.height ?? outputDefaults.height,
+  };
+
+  normalized = {
+    ...normalized,
+    [resolvedMode]: {
+      ...currentScoped,
+      outputConfig,
+      segmentDurationSeconds:
+        toNonNegative(currentScoped.segmentDurationSeconds ?? raw.segmentDurationSeconds, 4) ?? 4,
+      fadeDurationSeconds:
+        toNonNegative(currentScoped.fadeDurationSeconds ?? raw.fadeDurationSeconds, 1) ?? 1,
+      introFadeSeconds:
+        toNonNegative(currentScoped.introFadeSeconds ?? raw.introFadeSeconds, 0) ?? 0,
+      outroFadeSeconds:
+        toNonNegative(currentScoped.outroFadeSeconds ?? raw.outroFadeSeconds, 0) ?? 0,
+      audioFadeInSeconds:
+        toNonNegative(currentScoped.audioFadeInSeconds ?? raw.audioFadeInSeconds, 0) ?? 0,
+      audioFadeOutSeconds:
+        toNonNegative(currentScoped.audioFadeOutSeconds ?? raw.audioFadeOutSeconds, 0) ?? 0,
+      audioFadeInOffsetSeconds:
+        toNonNegative(
+          currentScoped.audioFadeInOffsetSeconds ?? raw.audioFadeInOffsetSeconds,
+          0
+        ) ?? 0,
+      audioFadeOutOffsetSeconds:
+        toNonNegative(
+          currentScoped.audioFadeOutOffsetSeconds ?? raw.audioFadeOutOffsetSeconds,
+          0
+        ) ?? 0,
+      scalePercent: toNonNegative(currentScoped.scalePercent ?? raw.scalePercent, 100) ?? 100,
+      visualizationEnabled:
+        typeof currentScoped.visualizationEnabled === "boolean"
+          ? currentScoped.visualizationEnabled
+          : typeof raw.visualizationEnabled === "boolean"
+            ? raw.visualizationEnabled
+            : true,
+      visualizationBars:
+        toPositiveInt(currentScoped.visualizationBars ?? raw.visualizationBars) ?? 128,
+      videoDurationSeconds:
+        toNonNegative(currentScoped.videoDurationSeconds ?? raw.videoDurationSeconds, 0) ?? 0,
+      overlapRatio:
+        toNumber(currentScoped.overlapRatio ?? raw.overlapRatio) ??
+        (currentScoped.overlapRatio ?? raw.overlapRatio ?? null),
+      playbackRate: toNumber(currentScoped.playbackRate ?? raw.playbackRate) ?? 1,
+    },
+  };
+
+  const resolved = resolveContentSettings(resolvedMode, normalized);
+  return {
+    mode: resolved.mode,
+    settings: {
+      ...normalized,
+      [resolved.mode]: resolved.settings as Record<string, unknown>,
+    } as Record<string, Record<string, unknown>>,
+  };
+};
 
 export const handleRescanContent = async (userId: string) => {
   await ensureContentStore(userId);
@@ -25,6 +143,7 @@ export const handleRescanContent = async (userId: string) => {
 
   const manifestFiles = files.filter((file) => file.endsWith(".json"));
   let created = 0;
+  let updated = 0;
   let skipped = 0;
   const errors: string[] = [];
 
@@ -65,50 +184,50 @@ export const handleRescanContent = async (userId: string) => {
   for (const entry of manifestEntries) {
     try {
       const data = entry.data;
+      const id = typeof data.id === "string" && data.id.length > 0 ? data.id : "";
+      if (!id) {
+        skipped += 1;
+        errors.push(`Skipping ${entry.file}: missing content id.`);
+        continue;
+      }
+      const mode = typeof data.mode === "string" && data.mode ? data.mode : DEFAULT_CONTENT_MODE;
+      const recovered = recoverSettingsMap(mode, data);
+      const modeDefinition = getContentMode(recovered.mode);
       const candidate = {
-        id: data.id,
+        id,
         title: data.title ?? "Recovered",
-        status: data.status ?? "uploaded",
+        status: pickStatus(data.status),
         colorPalette: Array.isArray(data.colorPalette) ? data.colorPalette : null,
         paletteMode: data.paletteMode === "manual" ? "manual" : "auto",
-        songDurationSeconds: data.songDurationSeconds ?? 0,
-        segmentDurationSeconds: data.segmentDurationSeconds ?? 4,
-        fadeDurationSeconds: data.fadeDurationSeconds ?? 1,
-        introFadeSeconds: data.introFadeSeconds ?? 0,
-        outroFadeSeconds: data.outroFadeSeconds ?? 0,
-        audioFadeInSeconds: data.audioFadeInSeconds ?? 0,
-        audioFadeOutSeconds: data.audioFadeOutSeconds ?? 0,
-        audioFadeInOffsetSeconds: data.audioFadeInOffsetSeconds ?? 0,
-        audioFadeOutOffsetSeconds: data.audioFadeOutOffsetSeconds ?? 0,
-        scalePercent: data.scalePercent ?? 100,
-        visualizationEnabled: data.visualizationEnabled ?? true,
-        visualizationBars: data.visualizationBars ?? 128,
-        videoDurationSeconds: data.videoDurationSeconds ?? 0,
-        overlapRatio: data.overlapRatio ?? null,
-        playbackRate: data.playbackRate ?? 1,
-        fps: data.fps ?? 30,
-        width: data.width ?? 1280,
-        height: data.height ?? 720,
+        mode: recovered.mode,
+        settings: recovered.settings,
+        songDurationSeconds: toNonNegative(data.songDurationSeconds, 0),
         userId,
       };
       const parsed = contentCreateSchema.parse(candidate);
       const existing = await getContentItem(userId, parsed.id);
+      const requiredAssets = modeDefinition.requiredAssets;
+      const assetChecks = await Promise.all(
+        requiredAssets.map((assetType) => findContentAssetPath(userId, parsed.id, assetType))
+      );
+      if (assetChecks.some((exists) => !exists)) {
+        skipped += 1;
+        errors.push(`Missing required assets for ${parsed.id} (${requiredAssets.join(", ")}).`);
+        continue;
+      }
       if (existing) {
-        skipped += 1;
-        continue;
+        await updateContentItem(userId, parsed.id, {
+          mode: parsed.mode,
+          settings: parsed.settings,
+          songDurationSeconds: parsed.songDurationSeconds,
+          paletteMode: parsed.paletteMode,
+          colorPalette: parsed.colorPalette ?? null,
+        });
+        updated += 1;
+      } else {
+        await createContentItem(parsed);
+        created += 1;
       }
-      const [thumbOk, videoOk, songOk] = await Promise.all([
-        findContentAssetPath(userId, parsed.id, "thumbnail"),
-        findContentAssetPath(userId, parsed.id, "video"),
-        findContentAssetPath(userId, parsed.id, "song"),
-      ]);
-      if (!thumbOk || !videoOk || !songOk) {
-        skipped += 1;
-        errors.push(`Missing files for ${parsed.id}`);
-        continue;
-      }
-      await createContentItem(parsed);
-      created += 1;
     } catch (error) {
       errors.push(
         `Failed to import ${entry.file}: ${
@@ -118,5 +237,5 @@ export const handleRescanContent = async (userId: string) => {
     }
   }
 
-  return NextResponse.json({ created, skipped, errors });
+  return NextResponse.json({ created, updated, skipped, errors });
 };
