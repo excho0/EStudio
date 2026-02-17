@@ -54,22 +54,19 @@ import type { ContentModeField } from "@/lib/content/modes/ui-registry";
 import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
 import { SettingSliderRow, SettingToggleRow } from "@/components/content-settings/fields";
 import { normalizeSettingsMap, resolveContentSettings } from "@/lib/content/modes";
+import { getOutputDefaultsForMode } from "@/lib/content/modes";
 import {
   applyFieldValue,
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
 } from "@/lib/content/modes/ui-helpers";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { sdk } from "@/lib/sdk";
 
 type UploadFormValues = {
   title: string;
   mode: string;
   settings: Record<string, Record<string, unknown>>;
-  fps: string;
-  width: string;
-  height: string;
 };
 
 const initialForm: UploadFormValues = {
@@ -78,9 +75,6 @@ const initialForm: UploadFormValues = {
   settings: {
     video_loop: resolveContentSettings("video_loop", {}).settings as Record<string, unknown>,
   },
-  fps: "30",
-  width: "1280",
-  height: "720",
 };
 
 const stepper = defineStepper(
@@ -187,12 +181,33 @@ export default function DashboardUploadPage() {
   );
   const getFieldValue = (key: string) =>
     getFieldValueFromSettings(fieldMap, currentSettings, key);
+
   const updateFormValue = (key: string, value: string | number | boolean) => {
     setFormValues((current) => {
       const settingsMap = normalizeSettingsMap(current.mode, current.settings);
       const currentSettings =
         (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-      const nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
+      let nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
+      if (key === "outputConfig.preset" && typeof value === "string") {
+        const presetOutput = getOutputDefaultsForMode(current.mode, {
+          outputConfig: { preset: value },
+        });
+        const outputConfig =
+          nextSettings.outputConfig &&
+          typeof nextSettings.outputConfig === "object" &&
+          !Array.isArray(nextSettings.outputConfig)
+            ? (nextSettings.outputConfig as Record<string, unknown>)
+            : {};
+        nextSettings = {
+          ...nextSettings,
+          outputConfig: {
+            ...outputConfig,
+            fps: presetOutput.fps,
+            width: presetOutput.width,
+            height: presetOutput.height,
+          },
+        };
+      }
       return {
         ...current,
         settings: {
@@ -212,10 +227,11 @@ export default function DashboardUploadPage() {
     (!requiresVideo || !!draftPaths.videoPath) &&
     (!requiresSong || !!draftPaths.songPath) &&
     (!requiresVideo || getSettingNumber("segmentDurationSeconds", 0) > 0);
-  const reviewWidth = Math.round(Number(formValues.width || 1280));
-  const reviewHeight = Math.round(Number(formValues.height || 720));
+  const reviewOutput = getOutputDefaultsForMode(formValues.mode, resolvedSettings);
+  const reviewWidth = reviewOutput.width;
+  const reviewHeight = reviewOutput.height;
   const reviewScale = Math.round(getSettingNumber("scalePercent", 100));
-  const reviewFps = Math.round(Number(formValues.fps || 30));
+  const reviewFps = reviewOutput.fps;
   const reviewOverlap = Math.round(Number(getFieldValue("overlapRatio")));
   const reviewFade = getSettingNumber("fadeDurationSeconds", 0);
   const reviewIntroFade = getSettingNumber("introFadeSeconds", 0);
@@ -235,10 +251,33 @@ export default function DashboardUploadPage() {
           icon={Eye}
           label={field.label}
           tip={field.tooltip ?? ""}
-          checked={Boolean(resolvedSettings[field.key])}
+          checked={Boolean(getFieldValue(field.key))}
           disabled={disabled}
           onCheckedChange={(checked) => updateFormValue(field.key, checked)}
         />
+      );
+    }
+    if (field.input === "select") {
+      return (
+        <div key={field.key} className="grid gap-2">
+          <LabelWithTooltip
+            htmlFor={field.key}
+            text={field.label}
+            tip={field.tooltip ?? ""}
+          />
+          <IconSelect
+            id={field.key}
+            value={String(getFieldValue(field.key) ?? "")}
+            onValueChange={(value) => updateFormValue(field.key, value)}
+            triggerClassName={cn("w-full", disabled && "opacity-60")}
+            options={(field.options ?? []).map((option) => ({
+              value: option.value,
+              label: option.label,
+              icon: SlidersHorizontal,
+              disabled,
+            }))}
+          />
+        </div>
       );
     }
     if (field.input === "slider") {
@@ -274,6 +313,7 @@ export default function DashboardUploadPage() {
             step={field.step}
             value={String(getFieldValue(field.key) ?? "")}
             onChange={(event) => updateFormValue(field.key, event.target.value)}
+            disabled={disabled}
           />
         </InputGroup>
       </div>
@@ -492,19 +532,6 @@ export default function DashboardUploadPage() {
       mode: resolved.mode,
       settings: settingsMap,
     };
-    const toOptionalNumber = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return undefined;
-      const parsed = Number(trimmed);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    };
-    const fps = toOptionalNumber(formValues.fps);
-    if (fps !== undefined) payload.fps = fps;
-    const width = toOptionalNumber(formValues.width);
-    if (width !== undefined) payload.width = width;
-    const height = toOptionalNumber(formValues.height);
-    if (height !== undefined) payload.height = height;
-
     setSubmitting(true);
     try {
       await sdk.content.create(payload);
@@ -668,7 +695,11 @@ export default function DashboardUploadPage() {
                             },
                           };
                         }
-                        return { ...current, mode: value, settings: settingsMap };
+                        return {
+                          ...current,
+                          mode: value,
+                          settings: settingsMap,
+                        };
                       })
                     }
                     id="mode"
@@ -684,87 +715,6 @@ export default function DashboardUploadPage() {
                   />
                 </div>
 
-                <Collapsible
-                  // defaultOpen
-                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                >
-                  <CollapsibleTrigger
-                    title="Output"
-                    description="Frames per second and render size."
-                    icon={Monitor}
-                  />
-                  <CollapsibleContent>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="fps"
-                          text="FPS"
-                          tip="Frames per second."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="fps"
-                            type="number"
-                            min={12}
-                            max={120}
-                            step={1}
-                            value={formValues.fps}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                fps: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="width"
-                          text="Width"
-                          tip="Output width in pixels."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="width"
-                            type="number"
-                            min={320}
-                            step={1}
-                            value={formValues.width}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                width: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="height"
-                          text="Height"
-                          tip="Output height in pixels."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="height"
-                            type="number"
-                            min={240}
-                            step={1}
-                            value={formValues.height}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                height: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
                     </StepperMotion>
                   ))}
                   {methods.when("media", () => (

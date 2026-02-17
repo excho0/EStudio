@@ -1,4 +1,5 @@
 import { contentModeRegistry, type ContentModeId } from "./registry";
+export { contentModeRegistry, getOutputDefaultsForMode } from "./registry";
 
 export const DEFAULT_CONTENT_MODE: ContentModeId = "video_loop";
 

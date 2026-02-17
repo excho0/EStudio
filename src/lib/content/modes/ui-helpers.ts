@@ -1,5 +1,66 @@
 import type { ContentModeField, ContentModeSection } from "./ui-registry";
 
+const getValueAtPath = (obj: Record<string, unknown>, path: string) => {
+  const parts = path.split(".");
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+};
+
+const setValueAtPath = (
+  obj: Record<string, unknown>,
+  path: string,
+  value: unknown
+) => {
+  const parts = path.split(".");
+  const [firstPart] = parts;
+  if (!firstPart) return;
+  if (parts.length === 1) {
+    obj[firstPart] = value;
+    return;
+  }
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const part = parts[i];
+    if (!part) continue;
+    const existing = current[part];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+      current[part] = {};
+    }
+    current = current[part] as Record<string, unknown>;
+  }
+  const leaf = parts[parts.length - 1];
+  if (!leaf) return;
+  current[leaf] = value;
+};
+
+const deleteValueAtPath = (obj: Record<string, unknown>, path: string) => {
+  const parts = path.split(".");
+  const [firstPart] = parts;
+  if (!firstPart) return;
+  if (parts.length === 1) {
+    delete obj[firstPart];
+    return;
+  }
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const part = parts[i];
+    const existing = current[part];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+      return;
+    }
+    current = existing as Record<string, unknown>;
+  }
+  const leaf = parts[parts.length - 1];
+  if (!leaf) return;
+  delete current[leaf];
+};
+
 export const buildFieldMap = (sections: ContentModeSection[]) => {
   const entries: Record<string, ContentModeField> = {};
   sections.forEach((section) => {
@@ -21,7 +82,7 @@ export const getFieldValue = (
   key: string
 ) => {
   const field = fieldMap[key];
-  const rawValue = settings[key];
+  const rawValue = getValueAtPath(settings, key);
   if (rawValue === undefined && field?.defaultValue !== undefined) {
     return field.defaultValue;
   }
@@ -29,10 +90,17 @@ export const getFieldValue = (
     return field.serialize(rawValue);
   }
   if (typeof rawValue === "boolean") return rawValue;
-  if (typeof rawValue === "number" || typeof rawValue === "string") {
+  if (typeof rawValue === "number") return rawValue;
+  if (typeof rawValue === "string") {
+    if (field?.input === "select") return rawValue;
     return Number(rawValue);
   }
-  return 0;
+  if (field?.input === "select") {
+    return (
+      (typeof field.defaultValue === "string" ? field.defaultValue : undefined) ?? ""
+    );
+  }
+  return field?.input === "toggle" ? false : 0;
 };
 
 export const applyFieldValue = (
@@ -46,25 +114,34 @@ export const applyFieldValue = (
     keys.forEach((resetKey) => {
       const resetField = fieldMap[resetKey];
       if (resetField?.defaultValue !== undefined) {
-        next[resetKey] = resetField.deserialize
+        const resetValue = resetField.deserialize
           ? resetField.deserialize(resetField.defaultValue)
           : resetField.defaultValue;
+        setValueAtPath(next, resetKey, resetValue);
       } else {
-        delete next[resetKey];
+        deleteValueAtPath(next, resetKey);
       }
     });
   };
   if (typeof value === "string" && value.trim() === "") {
-    delete next[key];
+    deleteValueAtPath(next, key);
     return next;
   }
   const field = fieldMap[key];
   if (field?.deserialize) {
-    next[key] = field.deserialize(value);
+    setValueAtPath(next, key, field.deserialize(value));
     return next;
   }
   if (typeof value === "boolean") {
-    next[key] = value;
+    setValueAtPath(next, key, value);
+    const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
+    if (resetRule) {
+      resetKeysToDefault(resetRule.keys);
+    }
+    return next;
+  }
+  if (field?.input === "select") {
+    setValueAtPath(next, key, String(value));
     const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
     if (resetRule) {
       resetKeysToDefault(resetRule.keys);
@@ -73,10 +150,10 @@ export const applyFieldValue = (
   }
   const numeric = Number(value);
   if (Number.isNaN(numeric)) {
-    delete next[key];
+    deleteValueAtPath(next, key);
     return next;
   }
-  next[key] = numeric;
+  setValueAtPath(next, key, numeric);
   const resetRule = field?.resetsOnValue?.find((rule) => rule.when === numeric);
   if (resetRule) {
     resetKeysToDefault(resetRule.keys);
@@ -89,7 +166,7 @@ const resolveComparableValue = (
   settings: Record<string, unknown>,
   key: string
 ) => {
-  const raw = settings[key];
+  const raw = getValueAtPath(settings, key);
   if (raw !== undefined) return raw;
   const field = fieldMap[key];
   return field?.defaultValue;

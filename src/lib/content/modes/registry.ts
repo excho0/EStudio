@@ -22,6 +22,54 @@ export type ContentModeDefinition<TSettings extends z.ZodTypeAny, TProps> = {
   }) => TProps;
 };
 
+export const OUTPUT_PRESET_DEFAULTS = {
+  landscape_hd: { fps: 30, width: 1280, height: 720 },
+  portrait_short: { fps: 30, width: 1080, height: 1920 },
+} as const;
+
+export type OutputPresetId = keyof typeof OUTPUT_PRESET_DEFAULTS;
+export type OutputConfigPresetId = OutputPresetId | "custom";
+
+export const getOutputDefaultsForMode = (
+  mode: string | undefined,
+  settings: unknown
+) => {
+  const normalizedMode = (mode ?? "").toLowerCase();
+  const isShortMode =
+    normalizedMode.includes("short") || normalizedMode.includes("portrait");
+  const fallbackPreset: OutputPresetId =
+    isShortMode ? "portrait_short" : "landscape_hd";
+  const scoped =
+    settings && typeof settings === "object" && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>)
+      : {};
+  const rawOutputConfig =
+    scoped.outputConfig &&
+    typeof scoped.outputConfig === "object" &&
+    !Array.isArray(scoped.outputConfig)
+      ? (scoped.outputConfig as Record<string, unknown>)
+      : {};
+  const presetCandidate = rawOutputConfig.preset;
+  const preset =
+    typeof presetCandidate === "string" ? presetCandidate : fallbackPreset;
+  const basePreset =
+    preset in OUTPUT_PRESET_DEFAULTS
+      ? (preset as OutputPresetId)
+      : fallbackPreset;
+  const base = OUTPUT_PRESET_DEFAULTS[basePreset];
+  const toPositiveInt = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.round(parsed);
+  };
+  return {
+    preset,
+    fps: toPositiveInt(rawOutputConfig.fps, base.fps),
+    width: toPositiveInt(rawOutputConfig.width, base.width),
+    height: toPositiveInt(rawOutputConfig.height, base.height),
+  };
+};
+
 export const videoLoopSettingsSchema = z
   .object({
     segmentDurationSeconds: z.number().nonnegative().default(4),
@@ -53,6 +101,16 @@ export const videoLoopSettingsSchema = z
     sharpenBrightnessWeight: z.number().min(0).max(0.5).default(0.03),
     overlapRatio: z.number().min(0).max(0.9).default(0.25),
     playbackRate: z.number().positive().default(1),
+    outputConfig: z
+      .object({
+        preset: z
+          .enum(["landscape_hd", "portrait_short", "custom"])
+          .default("landscape_hd"),
+        fps: z.number().int().positive().optional(),
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
+      })
+      .default({ preset: "landscape_hd" }),
     paletteModeOverride: z.enum(["auto", "manual"]).optional(),
     paletteOverride: z.array(z.string()).optional(),
   })
@@ -86,6 +144,45 @@ export const contentModeRegistry = {
             (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
           scalePercent:
             (settings as z.infer<typeof videoLoopSettingsSchema>).scalePercent ?? 100,
+          colorPalette:
+            (settings as z.infer<typeof videoLoopSettingsSchema>).paletteOverride ??
+            item.colorPalette ??
+            undefined,
+        }
+      ) as ContentLoopProps,
+  },
+  video_loop_short: {
+    id: "video_loop_short",
+    label: "Video Loop (Short)",
+    description: "Portrait-first short video loop with audio-reactive visuals.",
+    requiredAssets: ["thumbnail", "video", "song"],
+    schema: videoLoopSettingsSchema,
+    defaults: videoLoopSettingsSchema.parse({
+      scalePercent: 110,
+      outputConfig: {
+        preset: "portrait_short",
+      },
+    }),
+    compositionId: "ContentLoop",
+    buildProps: ({ item, settings, assets }) =>
+      buildContentLoopPropsFromItem(
+        {
+          ...item,
+          settings: settings as Record<string, unknown>,
+        },
+        {
+          thumbnailSrc: assets.thumbnailSrc,
+          videoSrc: assets.videoSrc,
+          audioSrc: assets.audioSrc,
+          videoDurationSeconds:
+            (settings as z.infer<typeof videoLoopSettingsSchema>).videoDurationSeconds ??
+            undefined,
+          overlapRatio:
+            (settings as z.infer<typeof videoLoopSettingsSchema>).overlapRatio ?? null,
+          playbackRate:
+            (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
+          scalePercent:
+            (settings as z.infer<typeof videoLoopSettingsSchema>).scalePercent ?? 110,
           colorPalette:
             (settings as z.infer<typeof videoLoopSettingsSchema>).paletteOverride ??
             item.colorPalette ??

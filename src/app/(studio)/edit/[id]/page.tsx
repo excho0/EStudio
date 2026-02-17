@@ -11,15 +11,12 @@ import {
   Type,
   Info,
   Upload,
-  Loader2,
   CheckCircle2,
-  XCircle,
   Pipette,
   Copy,
   Eye,
   RotateCw,
   Save,
-  Monitor,
   AlertCircle,
 } from "lucide-react";
 
@@ -53,6 +50,7 @@ import { ContentItem } from "@/types";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
   DEFAULT_CONTENT_MODE,
+  getOutputDefaultsForMode,
   resolveContentSettings,
   normalizeSettingsMap,
 } from "@/lib/content/modes";
@@ -78,9 +76,8 @@ import {
 } from "@/components/content-settings/fields";
 import StickyBox from "@/components/ui/sticky-box";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { is } from "drizzle-orm";
 import { cn } from "@/lib/shared/utils";
-import { Alert, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertContent, AlertIcon, AlertTitle } from "@/components/ui/alert";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -94,9 +91,6 @@ const defaultFormValues = {
   status: "",
   mode: DEFAULT_CONTENT_MODE,
   songDurationSeconds: "",
-  fps: "",
-  width: "",
-  height: "",
   settings: {},
 };
 
@@ -113,9 +107,6 @@ const buildFormValuesFromItem = (item: ContentItem): FormValues => {
     status: item.status,
     mode: resolved.mode,
     songDurationSeconds: String(item.songDurationSeconds ?? ""),
-    fps: String(item.fps ?? ""),
-    width: String(item.width ?? ""),
-    height: String(item.height ?? ""),
     settings: settingsMap as Record<string, unknown>,
   };
 };
@@ -150,12 +141,6 @@ const buildSnapshotFromItem = (item: ContentItem) => ({
   if (songDurationSeconds !== undefined) {
     payload.songDurationSeconds = songDurationSeconds;
   }
-  const fps = toOptionalNumber(formValues.fps);
-  if (fps !== undefined) payload.fps = fps;
-  const width = toOptionalNumber(formValues.width);
-  if (width !== undefined) payload.width = width;
-  const height = toOptionalNumber(formValues.height);
-  if (height !== undefined) payload.height = height;
   if ((formValues.status ?? "").trim()) {
     payload.status = (formValues.status ?? "").trim();
   }
@@ -171,15 +156,6 @@ const appendPayloadToFormData = (payload: Record<string, unknown>, formData: For
   formData.append("paletteMode", String(payload.paletteMode ?? "auto"));
   if (payload.songDurationSeconds !== undefined) {
     formData.append("songDurationSeconds", String(payload.songDurationSeconds));
-  }
-  if (payload.fps !== undefined) {
-    formData.append("fps", String(payload.fps));
-  }
-  if (payload.width !== undefined) {
-    formData.append("width", String(payload.width));
-  }
-  if (payload.height !== undefined) {
-    formData.append("height", String(payload.height));
   }
   if (payload.colorPalette) {
     formData.append("colorPalette", JSON.stringify(payload.colorPalette));
@@ -360,15 +336,15 @@ export default function EditContentPage() {
       ] ?? {}) as Record<string, unknown>,
     [settingsMap, formValues.mode, item]
   );
-  const resolvedFps = Math.max(1, Math.round(Number(formValues.fps || 30)));
-  const resolvedWidth = Math.max(1, Math.round(Number(formValues.width || 1280)));
-  const resolvedHeight = Math.max(1, Math.round(Number(formValues.height || 720)));
+  const previewOutput = getOutputDefaultsForMode(formValues.mode || item?.mode, resolvedSettings);
+  const resolvedFps = previewOutput.fps;
+  const resolvedWidth = previewOutput.width;
+  const resolvedHeight = previewOutput.height;
   const getSettingNumber = (key: string, fallback: number) => {
     const value = resolvedSettings[key];
     const parsed = typeof value === "string" ? Number(value) : Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
-  // Resolved FPS/width/height now come from base form values.
   const segmentDurationSeconds = getSettingNumber("segmentDurationSeconds", 4);
   const songDurationSeconds = Math.max(
     0,
@@ -401,9 +377,6 @@ export default function EditContentPage() {
     ? modeDefinition.buildProps({
         item: {
           ...item,
-          fps: resolvedFps,
-          width: resolvedWidth,
-          height: resolvedHeight,
         },
         settings: {
           ...resolvedSettings,
@@ -428,7 +401,27 @@ export default function EditContentPage() {
       const settingsMap = normalizeSettingsMap(current.mode, current.settings);
       const currentSettings =
         (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-      const nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
+      let nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
+      if (key === "outputConfig.preset" && typeof value === "string") {
+        const presetOutput = getOutputDefaultsForMode(current.mode, {
+          outputConfig: { preset: value },
+        });
+        const outputConfig =
+          nextSettings.outputConfig &&
+          typeof nextSettings.outputConfig === "object" &&
+          !Array.isArray(nextSettings.outputConfig)
+            ? (nextSettings.outputConfig as Record<string, unknown>)
+            : {};
+        nextSettings = {
+          ...nextSettings,
+          outputConfig: {
+            ...outputConfig,
+            fps: presetOutput.fps,
+            width: presetOutput.width,
+            height: presetOutput.height,
+          },
+        };
+      }
       return {
         ...current,
         settings: {
@@ -448,10 +441,33 @@ export default function EditContentPage() {
           icon={Eye}
           label={field.label}
           tip={field.tooltip ?? ""}
-          checked={Boolean(resolvedSettings[field.key])}
+          checked={Boolean(getFieldValue(field.key))}
           disabled={disabled}
           onCheckedChange={(checked) => updateFormValue(field.key, checked)}
         />
+      );
+    }
+    if (field.input === "select") {
+      return (
+        <div key={field.key} className="grid gap-2">
+          <LabelWithTooltip
+            htmlFor={field.key}
+            text={field.label}
+            tip={field.tooltip ?? ""}
+          />
+          <IconSelect
+            id={field.key}
+            value={String(getFieldValue(field.key) ?? "")}
+            onValueChange={(value) => updateFormValue(field.key, value)}
+            triggerClassName={cn("w-full", disabled && "opacity-60")}
+            options={(field.options ?? []).map((option) => ({
+              value: option.value,
+              label: option.label,
+              icon: SlidersHorizontal,
+              disabled,
+            }))}
+          />
+        </div>
       );
     }
     if (field.input === "slider") {
@@ -489,6 +505,7 @@ export default function EditContentPage() {
             onChange={(event) =>
               updateFormValue(field.key, event.target.value)
             }
+            disabled={disabled}
           />
         </InputGroup>
       </div>
@@ -717,7 +734,11 @@ export default function EditContentPage() {
                             },
                           };
                         }
-                        return { ...current, mode: value, settings: settingsMap };
+                        return {
+                          ...current,
+                          mode: value,
+                          settings: settingsMap,
+                        };
                       })
                     }
                     id="mode"
@@ -874,87 +895,6 @@ export default function EditContentPage() {
                   renderField={renderModeField}
                 />
 
-                <Collapsible
-                  // defaultOpen
-                  className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/5"
-                >
-                  <CollapsibleTrigger
-                    title="Output"
-                    description="Frames per second and render size."
-                    icon={Monitor}
-                  />
-                  <CollapsibleContent>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="fps"
-                          text="FPS"
-                          tip="Frames per second."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="fps"
-                            type="number"
-                            min={12}
-                            max={120}
-                            step={1}
-                            value={formValues.fps}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                fps: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="width"
-                          text="Width"
-                          tip="Output width in pixels."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="width"
-                            type="number"
-                            min={320}
-                            step={1}
-                            value={formValues.width}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                width: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                      <div className="grid gap-2">
-                        <LabelWithTooltip
-                          htmlFor="height"
-                          text="Height"
-                          tip="Output height in pixels."
-                        />
-                        <InputGroup className="bg-white dark:bg-white/5">
-                          <InputGroupInput
-                            id="height"
-                            type="number"
-                            min={240}
-                            step={1}
-                            value={formValues.height}
-                            onChange={(event) =>
-                              setFormValues((current) => ({
-                                ...current,
-                                height: event.target.value,
-                              }))
-                            }
-                          />
-                        </InputGroup>
-                      </div>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
                 <input
                   ref={fileInputRef}
                   id="thumbnail"
