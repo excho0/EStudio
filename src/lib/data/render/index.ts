@@ -7,6 +7,7 @@ export const renderBackendSchema = z
 /** Trigger render request payload. */
 export const triggerRenderRequestSchema = z.object({
   backend: renderBackendSchema.optional(),
+  mode: z.string().min(1).optional(),
 }).describe("Trigger render request.");
 
 /** Per-content render progress snapshot payload. */
@@ -52,4 +53,5 @@ export const triggerRenderResponseSchema = z.object({
   status: z.string(),
   id: z.string(),
   backend: renderBackendSchema.optional(),
+  mode: z.string().optional(),
 }).describe("Trigger render response.");

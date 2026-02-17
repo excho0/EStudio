@@ -5,14 +5,26 @@ import {
   ensureContentStore,
   getContentRenderDir,
   getContentRenderPath,
+  hasAnyRenderedOutput,
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
 import { getSlug } from "@/lib/shared/helpers";
-import { emitContentUpdate, emitRenderComplete, emitRenderProgress } from "@/lib/socket/manager";
+import {
+  clearRenderProgressSnapshot,
+  emitContentUpdate,
+  emitRenderComplete,
+  emitRenderProgress,
+} from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { createContentAssetToken } from "@/lib/content/asset-token";
 import { getContentMode, resolveContentSettings } from "@/lib/content/modes";
+import { getOutputDefaultsForMode } from "@/lib/content/modes";
 import type { InputProps } from "@/lib/rendering/execute-render-job";
+import { RenderCanceledError } from "@/lib/rendering/execute-render-job";
+import {
+  clearRenderCancellation,
+  isRenderCancellationRequested,
+} from "@/lib/rendering/cancel-store";
 import { randomBytes } from "crypto";
 
 export const renderBackendSchema = z.enum(["local", "lambda"]);
@@ -28,10 +40,12 @@ export const resolveRenderBackend = (requested?: string | null): RenderBackend =
 const executeLambdaRenderForContent = async ({
   userId,
   id,
+  mode,
   requestUrl,
 }: {
   userId: string;
   id: string;
+  mode?: string;
   requestUrl?: string;
 }) => {
   const item = await getContentItem(userId, id);
@@ -54,11 +68,23 @@ const executeLambdaRenderForContent = async ({
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
 
-  const modeDefinition = getContentMode(item.mode);
-  const resolved = resolveContentSettings(item.mode, item.settings ?? {});
+  const resolved = resolveContentSettings(mode ?? item.mode, item.settings ?? {});
+  const modeDefinition = getContentMode(resolved.mode);
+  const outputDefaults = getOutputDefaultsForMode(resolved.mode, resolved.settings);
   const props: InputProps = modeDefinition.buildProps({
-    item,
-    settings: resolved.settings,
+    item: {
+      ...item,
+      mode: resolved.mode,
+    },
+    settings: {
+      ...resolved.settings,
+      outputConfig: {
+        ...(resolved.settings.outputConfig as Record<string, unknown> | undefined),
+        fps: outputDefaults.fps,
+        width: outputDefaults.width,
+        height: outputDefaults.height,
+      },
+    },
     assets: {
       thumbnailSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=thumbnail`),
       videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
@@ -123,6 +149,7 @@ const executeLambdaRenderForContent = async ({
   const region = rawRegion as RemotionLambdaClient.AwsRegion;
 
   await ensureContentStore(userId);
+  await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
   const storage = getStorage();
@@ -162,6 +189,17 @@ const executeLambdaRenderForContent = async ({
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    const cancelRequested = await isRenderCancellationRequested(userId, id);
+    if (cancelRequested) {
+      const nextStatus = (await hasAnyRenderedOutput(userId, id))
+        ? "rendered"
+        : "uploaded";
+      await updateContentItem(userId, id, { status: nextStatus });
+      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+      await clearRenderProgressSnapshot({ userId, id });
+      await clearRenderCancellation(userId, id);
+      throw new RenderCanceledError();
+    }
     const progress = await lambdaModule.getRenderProgress({
       region,
       functionName,
@@ -218,6 +256,7 @@ const executeLambdaRenderForContent = async ({
       await updateContentItem(userId, id, { status: "rendered" });
       emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
       emitRenderComplete({ userId, id });
+      await clearRenderCancellation(userId, id);
 
       return {
         ok: true,
@@ -239,17 +278,32 @@ export const executeRenderForContentWithBackend = async ({
   userId,
   id,
   backend,
+  mode,
   requestUrl,
 }: {
   userId: string;
   id: string;
   backend: RenderBackend;
+  mode?: string;
   requestUrl?: string;
 }) => {
-  if (backend === "local") {
-    const result = await executeRenderForContent({ userId, id, requestUrl });
-    return { ...result, backend: "local" as const };
-  }
+  try {
+    if (backend === "local") {
+      const result = await executeRenderForContent({ userId, id, mode, requestUrl });
+      await clearRenderCancellation(userId, id);
+      return { ...result, backend: "local" as const };
+    }
 
-  return executeLambdaRenderForContent({ userId, id, requestUrl });
+    return await executeLambdaRenderForContent({ userId, id, mode, requestUrl });
+  } catch (error) {
+    if (error instanceof RenderCanceledError) {
+      return {
+        ok: true,
+        status: "canceled",
+        id,
+        backend,
+      };
+    }
+    throw error;
+  }
 };

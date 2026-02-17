@@ -32,14 +32,14 @@ const connection = new IORedis(redisUrl, {
 const renderWorker = new Worker(
   "content-render",
   async (job) => {
-    const { id, userId, backend: requestedBackend } = job.data ?? {};
+    const { id, userId, backend: requestedBackend, mode } = job.data ?? {};
     if (!id || !userId) {
       throw new Error("Invalid render payload");
     }
     const backend = resolveRenderBackend(
       typeof requestedBackend === "string" ? requestedBackend : undefined
     );
-    await executeRenderForContentWithBackend({ userId, id, backend });
+    await executeRenderForContentWithBackend({ userId, id, backend, mode });
   },
   {
     connection,

@@ -4,23 +4,30 @@ import {
   ensureContentStore,
   getContentRenderDir,
   getContentRenderPath,
+  hasAnyRenderedOutput,
   resolveContentPath,
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
 import { emitContentUpdate } from "@/lib/socket/manager";
-import { getContentItem } from "@/lib/data/content";
+import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { getSlug } from "@/lib/shared/helpers";
 import { createContentAssetToken } from "@/lib/content/asset-token";
-import { getContentMode, resolveContentSettings } from "@/lib/content/modes";
+import {
+  getContentMode,
+  getOutputDefaultsForMode,
+  resolveContentSettings,
+} from "@/lib/content/modes";
 import { getLogger } from "@/lib/logging";
 import {
   getServeUrl,
   loadRenderer,
+  RenderCanceledError,
   resolveChromiumGlBackend,
   resolveWorkingChromiumGl,
   startRenderJob,
   type InputProps,
 } from "./execute-render-job";
+import { clearRenderCancellation } from "@/lib/rendering/cancel-store";
 
 const storage = getStorage();
 const logger = getLogger("content-render-runner");
@@ -46,10 +53,12 @@ const resolveAssetBaseUrl = (requestUrl?: string) => {
 export const executeRenderForContent = async ({
   userId,
   id,
+  mode,
   requestUrl,
 }: {
   userId: string;
   id: string;
+  mode?: string;
   requestUrl?: string;
 }) => {
   const resolvedBrowser =
@@ -93,6 +102,7 @@ export const executeRenderForContent = async ({
   }
 
   await ensureContentStore(userId);
+  await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
   const renderDirKey = getContentRenderDir(userId, id);
@@ -115,7 +125,8 @@ export const executeRenderForContent = async ({
   const outputPath = resolveContentPath(renderPath);
 
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
-  const modeDefinition = getContentMode(item.mode);
+  const resolved = resolveContentSettings(mode ?? item.mode, item.settings ?? {});
+  const modeDefinition = getContentMode(resolved.mode);
   const compositionId = modeDefinition.compositionId;
 
   const serveUrl = await getServeUrl(entryPoint);
@@ -127,7 +138,7 @@ export const executeRenderForContent = async ({
       ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(assetToken)}`
       : url;
 
-  const resolved = resolveContentSettings(item.mode, item.settings ?? {});
+  const outputDefaults = getOutputDefaultsForMode(resolved.mode, resolved.settings);
   const shaderDebugModeRaw =
     process.env.REMOTION_RENDER_SHADER_DEBUG_MODE?.trim().toLowerCase() ?? "none";
   const shaderDebugMode: "none" | "passthrough" | "uv" | "solid" =
@@ -137,8 +148,19 @@ export const executeRenderForContent = async ({
       ? shaderDebugModeRaw
       : "none";
   const props: InputProps = modeDefinition.buildProps({
-    item,
-    settings: resolved.settings,
+    item: {
+      ...item,
+      mode: resolved.mode,
+    },
+    settings: {
+      ...resolved.settings,
+      outputConfig: {
+        ...(resolved.settings.outputConfig as Record<string, unknown> | undefined),
+        fps: outputDefaults.fps,
+        width: outputDefaults.width,
+        height: outputDefaults.height,
+      },
+    },
     assets: {
       thumbnailSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=thumbnail`),
       videoSrc: withAssetToken(`${origin}/api/content/${id}/asset?type=video`),
@@ -161,16 +183,33 @@ export const executeRenderForContent = async ({
     logger.info({ shaderDebugMode }, "Shader debug mode enabled.");
   }
 
-  await startRenderJob({
-    userId,
-    id,
-    browserLabel,
-    chromeMode,
-    serveUrl,
-    compositionId,
-    outputPath,
-    inputProps: props,
-  });
+  try {
+    await startRenderJob({
+      userId,
+      id,
+      browserLabel,
+      chromeMode,
+      serveUrl,
+      compositionId,
+      outputPath,
+      inputProps: props,
+    });
+  } catch (error) {
+    if (error instanceof RenderCanceledError) {
+      const nextStatus = (await hasAnyRenderedOutput(userId, id))
+        ? "rendered"
+        : "uploaded";
+      await updateContentItem(userId, id, { status: nextStatus });
+      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+      await clearRenderCancellation(userId, id);
+      return {
+        ok: true,
+        status: "canceled",
+        id,
+      };
+    }
+    throw error;
+  }
 
   const latest = await getContentItem(userId, id);
   if (latest?.status === "failed") {

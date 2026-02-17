@@ -16,6 +16,7 @@ export const renderQueuedPayloadSchema = z.object({
   userId: z.string(),
   id: z.string(),
   backend: renderBackendSchema.optional(),
+  mode: z.string().optional(),
 }).describe("Render queued payload.");
 
 /** Render progress event payload. */

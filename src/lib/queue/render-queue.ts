@@ -8,6 +8,7 @@ export type RenderQueueJobPayload = {
   id: string;
   userId: string;
   backend: RenderBackend;
+  mode?: string;
 };
 
 const resolveRedisUrl = () =>
@@ -56,4 +57,29 @@ export const enqueueRenderJob = async (payload: RenderQueueJobPayload) => {
     return existing;
   }
   return queue.add("render", payload, { jobId });
+};
+
+export const cancelRenderJob = async (userId: string, id: string) => {
+  const queue = getRenderQueue();
+  if (!queue) {
+    return { ok: false as const, reason: "queue_unavailable" as const };
+  }
+  const jobId = `${userId}:${id}`;
+  const job = await queue.getJob(jobId);
+  if (!job) {
+    return { ok: false as const, reason: "not_found" as const };
+  }
+  const state = await job.getState();
+  if (state === "active") {
+    return { ok: false as const, reason: "active" as const };
+  }
+  if (
+    state === "completed" ||
+    state === "failed" ||
+    state === "unknown"
+  ) {
+    return { ok: false as const, reason: "not_cancelable" as const };
+  }
+  await job.remove();
+  return { ok: true as const };
 };

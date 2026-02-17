@@ -89,12 +89,17 @@ export const contentSdk = {
     options?: TriggerRenderOptions
   ): Promise<ContentTriggerRenderResponse> {
     const parsedOptions = triggerRenderRequestSchema.parse(options ?? {});
+    const payload =
+      parsedOptions.backend || parsedOptions.mode ? parsedOptions : undefined;
     return client.postJson(
       `/api/content/${id}/render`,
-      parsedOptions.backend ? parsedOptions : undefined,
+      payload,
       "Render failed. Please check server logs.",
       triggerRenderResponseSchema
     );
+  },
+  cancelRender(id: string): Promise<void> {
+    return client.del(`/api/content/${id}/render`, "Failed to cancel render.");
   },
   progress(): Promise<ContentProgressResponse> {
     return client.get(

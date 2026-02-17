@@ -24,6 +24,7 @@ export type {
   BrowserInstance,
   OpenBrowserFn,
   RenderMediaFn,
+  MakeCancelSignalFn,
   GetExecutablePathFn,
   SelectCompositionFn,
   CombineChunksFn,

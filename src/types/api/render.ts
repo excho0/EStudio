@@ -93,7 +93,16 @@ export type RenderMediaFn = (options: {
     encodedFrames?: number | null;
     progress?: number | null;
   }) => void;
+  cancelSignal?: unknown;
 }) => Promise<unknown>;
+
+/**
+ * Remotion cancellation token factory.
+ */
+export type MakeCancelSignalFn = () => {
+  cancelSignal: unknown;
+  cancel: () => void;
+};
 
 /**
  * Remotion executable path resolver signature.

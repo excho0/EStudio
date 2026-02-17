@@ -7,11 +7,15 @@ import { sdk } from "@/lib/sdk";
 
 export type { RenderProgress } from "@/types";
 
-export const useRenderProgress = () => {
+export const useRenderProgress = (options?: { paused?: boolean }) => {
+  const paused = options?.paused === true;
   const { socket } = useSocketIO();
   const [progressMap, setProgressMap] = useState<Record<string, RenderProgress>>({});
 
   useEffect(() => {
+    if (paused) {
+      return;
+    }
     let cancelled = false;
     const hydrate = async () => {
       try {
@@ -26,23 +30,45 @@ export const useRenderProgress = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [paused]);
 
   useEffect(() => {
-    if (!socket) {
+    if (!socket || paused) {
       return;
     }
 
     const handleProgress = (payload: RenderProgress) => {
       setProgressMap((current) => ({ ...current, [payload.id]: payload }));
     };
+    const clearProgress = (id: string) => {
+      setProgressMap((current) => {
+        if (!(id in current)) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    };
+    const handleComplete = (payload: { id?: string }) => {
+      if (!payload?.id) return;
+      clearProgress(payload.id);
+    };
+    const handleContentUpdate = (payload: { id?: string; status?: string }) => {
+      if (!payload?.id) return;
+      if (payload.status && payload.status !== "rendering") {
+        clearProgress(payload.id);
+      }
+    };
 
     socket.on("render:progress", handleProgress);
+    socket.on("render:complete", handleComplete);
+    socket.on("content:update", handleContentUpdate);
 
     return () => {
       socket.off("render:progress", handleProgress);
+      socket.off("render:complete", handleComplete);
+      socket.off("content:update", handleContentUpdate);
     };
-  }, [socket]);
+  }, [socket, paused]);
 
   return progressMap;
 };

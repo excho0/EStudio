@@ -76,6 +76,11 @@ import React from "react";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { ContentColumnMeta } from "@/types";
+import { getOutputDefaultsForMode, normalizeSettingsMap } from "@/lib/content/modes";
+import {
+  contentModeUiRegistry,
+  getContentModeDefinition,
+} from "@/lib/content/modes/ui-registry";
 
 const stateTransition = {
   initial: { opacity: 0, y: 10, filter: "blur(2px)" },
@@ -107,12 +112,17 @@ export default function LibraryPage() {
     enableSocketRefresh: true,
   });
   const [renderingId, setRenderingId] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [renderModePickerOpen, setRenderModePickerOpen] = useState(false);
+  const [pendingRenderItem, setPendingRenderItem] = useState<ContentItem | null>(null);
+  const [pendingRenderMode, setPendingRenderMode] = useState<string>("");
   const [publishContentId, setPublishContentId] = useState<string | null>(null);
   const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
   const publishCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const renderProgress = useRenderProgress();
+  const renderProgress = useRenderProgress({ paused: openActionMenuId !== null });
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / limit)),
@@ -171,8 +181,12 @@ export default function LibraryPage() {
     mobileVirtualizer.measure();
   }, [desktopVirtualizer, mobileVirtualizer, isMobile, items.length, pageState]);
   const renderMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await sdk.content.triggerRender(id);
+    mutationFn: async ({ id, mode }: { id: string; mode?: string }) => {
+      await sdk.content.triggerRender(id, mode ? { mode } : undefined);
+    },
+    onMutate: (variables) => {
+      const modeText = variables.mode ? ` (${getContentModeDefinition(variables.mode).label})` : "";
+      toast.message(`Starting render${modeText}...`);
     },
     onSuccess: () => {
       toast.message("Render started.");
@@ -182,16 +196,38 @@ export default function LibraryPage() {
       const message =
         error instanceof Error ? error.message : "Render failed. Please check server logs.";
       toast.error(message);
-    },
-    onSettled: () => {
       setRenderingId(null);
     },
   });
 
-  const handleRender = useCallback(async (id: string) => {
-    setRenderingId(id);
-    await renderMutation.mutateAsync(id);
-  }, [renderMutation]);
+  const getConfiguredRenderModes = useCallback((item: ContentItem) => {
+    const settingsMap = normalizeSettingsMap(item.mode, item.settings ?? {});
+    return Object.keys(settingsMap).filter(
+      (modeId) => modeId in contentModeUiRegistry
+    );
+  }, []);
+
+  const startRender = useCallback(
+    async (item: ContentItem, mode?: string) => {
+      setRenderingId(item.id);
+      await renderMutation.mutateAsync({ id: item.id, mode });
+    },
+    [renderMutation]
+  );
+
+  const handleRender = useCallback(
+    async (item: ContentItem) => {
+      const modes = getConfiguredRenderModes(item);
+      if (modes.length > 1) {
+        setPendingRenderItem(item);
+        setPendingRenderMode(item.mode && modes.includes(item.mode) ? item.mode : modes[0]);
+        setRenderModePickerOpen(true);
+        return;
+      }
+      await startRender(item, modes[0]);
+    },
+    [getConfiguredRenderModes, startRender]
+  );
 
   const getPageItems = () => {
     if (displayTotalPages <= 1) return [];
@@ -237,9 +273,31 @@ export default function LibraryPage() {
     await deleteMutation.mutateAsync({ id, keepRenders });
   }, [deleteMutation]);
 
+  const handleCancelRender = useCallback(
+    async (item: ContentItem) => {
+      try {
+        setCancelingId(item.id);
+        await sdk.content.cancelRender(item.id);
+        if (renderingId === item.id) {
+          setRenderingId(null);
+        }
+        toast.success("Cancel requested.");
+        void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to cancel render.";
+        toast.error(message);
+      } finally {
+        setCancelingId(null);
+      }
+    },
+    [queryClient, renderingId]
+  );
+
   const getEffectiveStatus = useCallback(
-    (item: ContentItem) => (renderProgress[item.id] ? "rendering" : item.status),
-    [renderProgress]
+    (item: ContentItem) =>
+      renderingId === item.id || renderProgress[item.id] ? "rendering" : item.status,
+    [renderProgress, renderingId]
   );
 
   const getActionItems = useCallback((item: ContentItem) => [
@@ -278,9 +336,11 @@ export default function LibraryPage() {
         renderingId === item.id || effectiveStatus === "rendering"
           ? "Rendering..."
           : "Render now",
-      icon: Play,
-      onSelect: () => handleRender(item.id),
-      disabled: renderingId === item.id || effectiveStatus === "rendering",
+      icon: renderingId === item.id || effectiveStatus === "rendering" ? Loader2 : Play,
+      iconClassName:
+        renderingId === item.id || effectiveStatus === "rendering" ? "animate-spin" : undefined,
+      onSelect: () => handleRender(item),
+      disabled: cancelingId === item.id || renderingId === item.id || effectiveStatus === "rendering",
     },
     ...(effectiveStatus === "rendered" || effectiveStatus === "rendering"
       ? [
@@ -292,6 +352,22 @@ export default function LibraryPage() {
         ]
       : []),
     { type: "separator" as const },
+    ...(effectiveStatus === "rendering"
+      ? [
+          {
+            type: "confirm" as const,
+            label: cancelingId === item.id ? "Canceling..." : "Cancel render",
+            icon: cancelingId === item.id ? Loader2 : XCircle,
+            description:
+              "Cancel the current render job for this item. If it is already running, cancellation will be requested and applied as soon as possible.",
+            onConfirm: () => {
+              void handleCancelRender(item);
+            },
+            destructive: true,
+          },
+          { type: "separator" as const },
+        ]
+      : []),
     {
       type: "confirm" as const,
       label: "Delete",
@@ -309,7 +385,14 @@ export default function LibraryPage() {
     },
   ];
     })(),
-  ], [getEffectiveStatus, handleDelete, handleRender, renderingId]);
+  ], [
+    cancelingId,
+    getEffectiveStatus,
+    handleCancelRender,
+    handleDelete,
+    handleRender,
+    renderingId,
+  ]);
 
   const getStatusMeta = useCallback((status: string) => {
     switch (status) {
@@ -431,6 +514,10 @@ export default function LibraryPage() {
       header: "Settings",
       cell: ({ row }) => {
         const item = row.original;
+        const settingsMap = normalizeSettingsMap(item.mode, item.settings ?? {});
+        const activeSettings =
+          (settingsMap[item.mode ?? "video_loop"] as Record<string, unknown> | undefined) ?? {};
+        const output = getOutputDefaultsForMode(item.mode, activeSettings);
         return (
           <div className="text-xs text-slate-500 dark:text-zinc-400">
             {/* <div>
@@ -438,7 +525,7 @@ export default function LibraryPage() {
               {" "}fade
             </div> */}
             <div className="text-slate-500 dark:text-zinc-500">
-              {item.width}x{item.height} @ {item.fps}fps
+              {output.width}x{output.height} @ {output.fps}fps
             </div>
           </div>
         );
@@ -449,12 +536,25 @@ export default function LibraryPage() {
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex flex-wrap justify-center gap-2">
-          <ResponsiveActionMenu items={getActionItems(row.original)} />
+          <ResponsiveActionMenu
+            items={getActionItems(row.original)}
+            open={openActionMenuId === row.original.id}
+            onOpenChange={(nextOpen) =>
+              setOpenActionMenuId(nextOpen ? row.original.id : null)
+            }
+          />
         </div>
       ),
       meta: { align: "center", cellClassName: "text-center" } satisfies ContentColumnMeta,
     },
-  ], [formatDateTime, getActionItems, getEffectiveStatus, renderProgress, renderStatusBadge]);
+  ], [
+    formatDateTime,
+    getActionItems,
+    getEffectiveStatus,
+    openActionMenuId,
+    renderProgress,
+    renderStatusBadge,
+  ]);
 
   const table = useReactTable({
     data: items,
@@ -601,6 +701,60 @@ export default function LibraryPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <ResponsiveDrawer open={renderModePickerOpen} onOpenChange={setRenderModePickerOpen}>
+        <ResponsiveDrawerContent className="w-full sm:max-w-xl">
+          <ResponsiveDrawerHeader>
+            <ResponsiveDrawerTitle>Choose Render Mode</ResponsiveDrawerTitle>
+          </ResponsiveDrawerHeader>
+          <div className="space-y-4 px-4 pb-4">
+            {pendingRenderItem ? (
+              <>
+                <p className="text-sm text-slate-600 dark:text-zinc-300">
+                  Select which mode configuration to render for{" "}
+                  <span className="font-semibold">{pendingRenderItem.title || "Untitled"}</span>.
+                </p>
+                <IconSelect
+                  id="render-mode"
+                  value={pendingRenderMode}
+                  onValueChange={setPendingRenderMode}
+                  placeholder="Select mode"
+                  triggerClassName="w-full"
+                  options={getConfiguredRenderModes(pendingRenderItem).map((modeId) => ({
+                    value: modeId,
+                    label: getContentModeDefinition(modeId).label,
+                    icon: contentModeUiRegistry[modeId]?.icon ?? SlidersHorizontal,
+                  }))}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setRenderModePickerOpen(false);
+                      setPendingRenderItem(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      if (!pendingRenderItem || !pendingRenderMode) return;
+                      setRenderModePickerOpen(false);
+                      const itemToRender = pendingRenderItem;
+                      const modeToRender = pendingRenderMode;
+                      setPendingRenderItem(null);
+                      await startRender(itemToRender, modeToRender);
+                    }}
+                  >
+                    Render
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </ResponsiveDrawerContent>
+      </ResponsiveDrawer>
       {publishContentId ? (
         <PublishDrawer
           contentId={publishContentId}

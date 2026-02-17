@@ -10,10 +10,12 @@ import {
 } from "@/lib/socket/manager";
 import { updateContentItem } from "@/lib/data/content";
 import { getLogger } from "@/lib/logging";
+import { isRenderCancellationRequested } from "@/lib/rendering/cancel-store";
 import type {
   BundleFn,
   CombineChunksFn,
   GetExecutablePathFn,
+  MakeCancelSignalFn,
   OpenBrowserFn,
   RenderJob,
   RenderMediaFn,
@@ -21,6 +23,20 @@ import type {
 } from "@/types";
 
 export type InputProps = Record<string, unknown>;
+
+export class RenderCanceledError extends Error {
+  constructor(message = "Render canceled by user.") {
+    super(message);
+    this.name = "RenderCanceledError";
+  }
+}
+
+const isCancellationLikeError = (error: unknown) => {
+  if (error instanceof RenderCanceledError) return true;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("cancel");
+};
 
 let bundlePromise: Promise<string> | null = null;
 const lastProgressPercent = new Map<string, number>();
@@ -45,6 +61,7 @@ export const loadRenderer = () => {
     selectComposition: SelectCompositionFn;
     combineChunks: CombineChunksFn;
     getExecutablePath?: GetExecutablePathFn;
+    makeCancelSignal?: MakeCancelSignalFn;
   };
   return {
     bundle: bundler.bundle,
@@ -52,6 +69,10 @@ export const loadRenderer = () => {
     renderMedia: renderer.renderMedia,
     selectComposition: renderer.selectComposition,
     combineChunks: renderer.combineChunks,
+    makeCancelSignal:
+      typeof renderer.makeCancelSignal === "function"
+        ? renderer.makeCancelSignal
+        : null,
     getExecutablePath:
       typeof renderer.getExecutablePath === "function"
         ? renderer.getExecutablePath
@@ -403,8 +424,15 @@ export const startRenderJob = async ({
   outputPath,
   inputProps,
 }: RenderJob) => {
+  let cancelMonitor: ReturnType<typeof setInterval> | null = null;
   try {
-    const { renderMedia, selectComposition, combineChunks, getExecutablePath } =
+    const {
+      renderMedia,
+      selectComposition,
+      combineChunks,
+      getExecutablePath,
+      makeCancelSignal,
+    } =
       loadRenderer();
     const debugNonHeadless =
       process.env.REMOTION_RENDER_DEBUG_NON_HEADLESS === "true";
@@ -510,9 +538,31 @@ export const startRenderJob = async ({
     });
 
     const startedAt = Date.now();
+    let isCanceled = false;
+    const cancellationControl = makeCancelSignal?.() ?? null;
+    cancelMonitor = setInterval(() => {
+      void (async () => {
+        const requested = await isRenderCancellationRequested(userId, id);
+        if (!requested || isCanceled) return;
+        isCanceled = true;
+        cancellationControl?.cancel();
+      })();
+    }, 1000);
+    const assertNotCanceled = async () => {
+      if (isCanceled) {
+        throw new RenderCanceledError();
+      }
+      const requested = await isRenderCancellationRequested(userId, id);
+      if (requested) {
+        isCanceled = true;
+        cancellationControl?.cancel();
+        throw new RenderCanceledError();
+      }
+    };
 
     if (!shouldUseMultiRender()) {
       let lastChromiumSnapshotPercent = -1;
+      await assertNotCanceled();
       await renderMedia({
         serveUrl,
         composition,
@@ -522,6 +572,7 @@ export const startRenderJob = async ({
         concurrency,
         offthreadVideoThreads,
         ffmpegOverride,
+        cancelSignal: cancellationControl?.cancelSignal,
         ...renderDefaults,
         onStart: ({ frameCount, parallelEncoding, resolvedConcurrency }) => {
           renderLogger.info({
@@ -533,6 +584,7 @@ export const startRenderJob = async ({
           logChromiumProcessSnapshot("render-start");
         },
         onProgress: ({ renderedFrames, encodedFrames, progress }) => {
+          if (isCanceled) return;
           const rendered = Number.isFinite(renderedFrames)
             ? Number(renderedFrames)
             : Number.isFinite(encodedFrames)
@@ -572,6 +624,7 @@ export const startRenderJob = async ({
           });
         },
       });
+      await assertNotCanceled();
     } else {
       // ===== Multi-render using Remotion chunk combine =====
       const cpuCount = Math.max(1, os.cpus().length);
@@ -666,6 +719,7 @@ export const startRenderJob = async ({
 
         const runChunkWorker = async () => {
           while (queue.length > 0) {
+            await assertNotCanceled();
             const next = queue.shift();
             if (!next) break;
             const { start, end, index } = next;
@@ -690,9 +744,11 @@ export const startRenderJob = async ({
               concurrency: perBrowserConcurrency,
               offthreadVideoThreads,
               ffmpegOverride,
+              cancelSignal: cancellationControl?.cancelSignal,
               frameRange: [start, end],
               ...renderDefaults,
               onProgress: ({ renderedFrames, encodedFrames, progress }) => {
+                if (isCanceled) return;
                 const rendered = Number.isFinite(renderedFrames)
                   ? Number(renderedFrames)
                   : Number.isFinite(encodedFrames)
@@ -703,6 +759,7 @@ export const startRenderJob = async ({
                 updateProgress(index, rendered);
               },
             });
+            await assertNotCanceled();
             renderLogger.debug({
               event: "chunk-complete",
               id,
@@ -748,6 +805,10 @@ export const startRenderJob = async ({
         await removePath(tempDir, { recursive: true, force: true });
       }
     }
+    if (cancelMonitor) {
+      clearInterval(cancelMonitor);
+      cancelMonitor = null;
+    }
     const elapsedSeconds = Math.max(0.001, (Date.now() - startedAt) / 1000);
     const avgFps = Math.round(totalFrames / elapsedSeconds);
     renderLogger.info({
@@ -766,6 +827,11 @@ export const startRenderJob = async ({
     emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
     emitRenderComplete({ userId, id, durationSeconds: elapsedSeconds, avgFps });
   } catch (error) {
+    if (isCancellationLikeError(error)) {
+      void clearRenderProgressSnapshot({ userId, id });
+      lastProgressPercent.delete(id);
+      throw new RenderCanceledError();
+    }
     void clearRenderProgressSnapshot({ userId, id });
     await updateContentItem(userId, id, { status: "failed" });
     emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
@@ -778,6 +844,9 @@ export const startRenderJob = async ({
       message,
     });
   } finally {
+    if (cancelMonitor) {
+      clearInterval(cancelMonitor);
+    }
     await cleanupRemotionChromiumProcesses();
   }
 };

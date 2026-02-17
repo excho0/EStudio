@@ -40,6 +40,7 @@ export type ActionItem =
       type?: "item";
       label: string;
       icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+      iconClassName?: string;
       onSelect?: () => void;
       href?: string;
       disabled?: boolean;
@@ -218,7 +219,9 @@ export function ResponsiveActionMenu({
                   >
                     <>
                       {item.icon ? (
-                        <item.icon className="h-4 w-4 shrink-0" />
+                        <item.icon
+                          className={cn("h-4 w-4 shrink-0", item.iconClassName)}
+                        />
                       ) : null}
                       {item.label}
                     </>
@@ -241,7 +244,9 @@ export function ResponsiveActionMenu({
                   disabled={item.disabled}
                 >
                   {item.icon ? (
-                    <item.icon className="h-4 w-4 shrink-0" />
+                    <item.icon
+                      className={cn("h-4 w-4 shrink-0", item.iconClassName)}
+                    />
                   ) : null}
                   {item.label}
                 </Button>
@@ -356,6 +361,7 @@ export function ResponsiveActionMenu({
                   <item.icon
                     className={cn(
                       "h-4 w-4 shrink-0",
+                      item.iconClassName,
                       item.destructive
                         ? "text-red-600!"
                         : "text-current"
@@ -384,6 +390,7 @@ export function ResponsiveActionMenu({
                 <item.icon
                   className={cn(
                     "h-4 w-4 shrink-0",
+                    item.iconClassName,
                     item.destructive
                       ? "text-red-600"
                       : "text-current"

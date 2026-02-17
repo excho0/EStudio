@@ -151,13 +151,19 @@ const renderStatusBadge = (
 export default function DashboardOverviewPage() {
   const { items, loading } = useContentList();
   const renderProgress = useRenderProgress();
+  const getEffectiveStatus = (item: ContentItem) =>
+    renderProgress[item.id] ? "rendering" : item.status;
   const formatDate = (value: string) =>
     new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
       new Date(value)
     );
 
-  const rendered = items.filter((item: ContentItem) => item.status === "rendered").length;
-  const failed = items.filter((item: ContentItem) => item.status === "failed").length;
+  const rendered = items.filter(
+    (item: ContentItem) => getEffectiveStatus(item) === "rendered"
+  ).length;
+  const failed = items.filter(
+    (item: ContentItem) => getEffectiveStatus(item) === "failed"
+  ).length;
   const recent = items.slice(0, 3);
 
   return (
@@ -271,12 +277,12 @@ export default function DashboardOverviewPage() {
                       </div>
                     </div>
                     {renderStatusBadge(
-                      item.status,
+                      getEffectiveStatus(item),
                       true,
                       renderProgress[item.id]?.progress
                     )}
                   </div>
-                  <StatRow show={item.status === "rendering"}>
+                  <StatRow show={getEffectiveStatus(item) === "rendering"}>
                     <Progress
                       value={Math.round((renderProgress[item.id]?.progress ?? 0) * 100)}
                       variant="amber"
