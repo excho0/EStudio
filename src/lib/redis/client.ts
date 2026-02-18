@@ -1,24 +1,15 @@
 import { createClient } from "redis";
+import { resolveRedisPoolUrl, type RedisPoolName } from "./pools";
+export type { RedisPoolName } from "./pools";
 
-export type RedisPoolName = "default" | "realtime" | "event-bus";
 type RedisClient = ReturnType<typeof createClient>;
 
 const redisClients = new Map<RedisPoolName, Promise<RedisClient | null>>();
 
-const resolveRedisUrl = (pool: RedisPoolName) => {
-  if (pool === "realtime") {
-    return process.env.REALTIME_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
-  }
-  if (pool === "event-bus") {
-    return process.env.EVENT_BUS_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
-  }
-  return process.env.REDIS_URL?.trim() || "";
-};
-
 export const getRedisClient = async (
   pool: RedisPoolName = "default"
 ): Promise<RedisClient | null> => {
-  const url = resolveRedisUrl(pool);
+  const url = resolveRedisPoolUrl(pool);
   if (!url) return null;
 
   const existing = redisClients.get(pool);

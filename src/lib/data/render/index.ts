@@ -13,6 +13,8 @@ export const triggerRenderRequestSchema = z.object({
 /** Per-content render progress snapshot payload. */
 export const renderProgressSchema = z.object({
   id: z.string(),
+  mode: z.string().optional(),
+  key: z.string().optional(),
   rendered: z.number(),
   total: z.number(),
   progress: z.number(),

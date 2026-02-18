@@ -1,5 +1,6 @@
 import type { RedisPoolName } from "@/lib/redis/client";
 import { getRedisClient } from "@/lib/redis/client-manager";
+import { hasRedisPoolUrl } from "@/lib/redis/pools";
 
 type StoreMode = "memory" | "redis";
 
@@ -14,14 +15,14 @@ const GLOBAL_SCOPE = "__global__";
 const resolveScope = (scope?: string | null) =>
   scope && scope.trim().length > 0 ? scope : GLOBAL_SCOPE;
 
-const resolveStoreMode = (modeEnvKey?: string): StoreMode => {
+const resolveStoreMode = (pool: RedisPoolName, modeEnvKey?: string): StoreMode => {
   const configured =
     modeEnvKey && process.env[modeEnvKey]
       ? process.env[modeEnvKey]?.trim().toLowerCase()
       : process.env.RENDER_PROGRESS_STORE?.trim().toLowerCase();
   if (configured === "memory") return "memory";
   if (configured === "redis") return "redis";
-  if (process.env.REDIS_URL) {
+  if (hasRedisPoolUrl(pool)) {
     return "redis";
   }
   return "memory";
@@ -60,7 +61,7 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   const redisKey = (scope?: string | null) => `${options.keyPrefix}:${resolveScope(scope)}`;
 
   const set = async (scope: string | null | undefined, payload: T) => {
-    if (resolveStoreMode(options.modeEnvKey) === "memory") {
+    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
       memorySet(scope, payload);
       return;
     }
@@ -77,7 +78,7 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   };
 
   const remove = async (scope: string | null | undefined, id: string) => {
-    if (resolveStoreMode(options.modeEnvKey) === "memory") {
+    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
       memoryDelete(scope, id);
       return;
     }
@@ -94,7 +95,7 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   };
 
   const getAll = async (scope: string | null | undefined) => {
-    if (resolveStoreMode(options.modeEnvKey) === "memory") {
+    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
       return memoryGetAll(scope);
     }
     const client = await getRedisClient(pool);

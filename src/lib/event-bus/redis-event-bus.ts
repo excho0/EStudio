@@ -14,6 +14,29 @@ export type EventEnvelope<
 };
 
 const channelFor = (topic: EventTopic) => `event-bus:${topic}`;
+const inMemorySubscribers = new Map<
+  EventTopic,
+  Set<(event: EventEnvelope<EventTopic, AppEventMap[EventTopic]>) => void | Promise<void>>
+>();
+
+const publishToInMemory = async <TTopic extends EventTopic>(
+  topic: TTopic,
+  envelope: EventEnvelope<TTopic, AppEventMap[TTopic]>
+) => {
+  const subscribers = inMemorySubscribers.get(topic);
+  if (!subscribers || subscribers.size === 0) return;
+  await Promise.all(
+    Array.from(subscribers).map(async (subscriber) => {
+      try {
+        await subscriber(
+          envelope as EventEnvelope<EventTopic, AppEventMap[EventTopic]>
+        );
+      } catch {
+        // ignore subscriber errors
+      }
+    })
+  );
+};
 
 export const publishEvent = async <TTopic extends EventTopic>(
   topic: TTopic,
@@ -21,16 +44,20 @@ export const publishEvent = async <TTopic extends EventTopic>(
 ) => {
   const client: Awaited<ReturnType<typeof getRedisClient>> =
     await getRedisClient("event-bus");
-  if (!client) return false;
+  const envelope: EventEnvelope<TTopic, AppEventMap[TTopic]> = {
+    topic,
+    payload,
+    at: new Date().toISOString(),
+  };
+  if (!client) {
+    await publishToInMemory(topic, envelope);
+    return true;
+  }
   try {
-    const envelope: EventEnvelope<TTopic, AppEventMap[TTopic]> = {
-      topic,
-      payload,
-      at: new Date().toISOString(),
-    };
     await client.publish(channelFor(topic), JSON.stringify(envelope));
     return true;
   } catch {
+    await publishToInMemory(topic, envelope);
     return false;
   }
 };
@@ -41,7 +68,24 @@ export const subscribeToEvent = async <TTopic extends EventTopic>(
 ) => {
   const base: Awaited<ReturnType<typeof getRedisClient>> =
     await getRedisClient("event-bus");
-  if (!base) return async () => {};
+  if (!base) {
+    const subscribers = inMemorySubscribers.get(topic) ?? new Set();
+    const adapter = async (
+      event: EventEnvelope<EventTopic, AppEventMap[EventTopic]>
+    ) => {
+      await handler(event as EventEnvelope<TTopic, AppEventMap[TTopic]>);
+    };
+    subscribers.add(adapter);
+    inMemorySubscribers.set(topic, subscribers);
+    return async () => {
+      const entries = inMemorySubscribers.get(topic);
+      if (!entries) return;
+      entries.delete(adapter);
+      if (entries.size === 0) {
+        inMemorySubscribers.delete(topic);
+      }
+    };
+  }
 
   const subscriber = base.duplicate();
   await subscriber.connect();

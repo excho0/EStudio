@@ -9,9 +9,12 @@ import { processPublishJob } from "@/lib/publishing/publish-queue";
 import { readPublishRow, updatePublish } from "@/lib/publishing/publish-job-runner";
 import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 const redisUrl =
-  process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+  resolveRedisPoolUrl("render-queue") ||
+  resolveRedisPoolUrl("publish-queue") ||
+  resolveRedisPoolUrl("default");
 const concurrency = Math.max(1, Number(process.env.RENDER_WORKER_CONCURRENCY || "1"));
 const publishConcurrency = Math.max(
   1,
@@ -20,7 +23,7 @@ const publishConcurrency = Math.max(
 const logger = getLogger("runtime-worker");
 
 if (!redisUrl) {
-  logger.error("Missing REDIS_URL/RENDER_QUEUE_REDIS_URL.");
+  logger.error("Missing REDIS_URL/RENDER_QUEUE_REDIS_URL/PUBLISH_QUEUE_REDIS_URL.");
   process.exit(1);
 }
 

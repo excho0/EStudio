@@ -23,6 +23,8 @@ export const renderQueuedPayloadSchema = z.object({
 export const renderProgressPayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  mode: z.string().optional(),
+  key: z.string().optional(),
   rendered: z.number(),
   total: z.number(),
   progress: z.number(),
@@ -33,6 +35,8 @@ export const renderProgressPayloadSchema = z.object({
 export const renderCompletePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  mode: z.string().optional(),
+  key: z.string().optional(),
   durationSeconds: z.number().optional(),
   avgFps: z.number().optional(),
 }).describe("Render complete payload.");

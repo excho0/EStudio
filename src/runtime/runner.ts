@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import type { ChildProcess } from "child_process";
 import { getLogger } from "@/lib/logging";
+import { hasRedisPoolUrl } from "@/lib/redis/pools";
 
 const logger = getLogger("runtime-runner");
 
@@ -24,9 +25,9 @@ type RuntimeChild = {
 
 const children: RuntimeChild[] = [];
 const hasRedisForWorkers =
-  Boolean(process.env.REDIS_URL?.trim()) ||
-  Boolean(process.env.RENDER_QUEUE_REDIS_URL?.trim()) ||
-  Boolean(process.env.PUBLISH_QUEUE_REDIS_URL?.trim());
+  hasRedisPoolUrl("default") ||
+  hasRedisPoolUrl("render-queue") ||
+  hasRedisPoolUrl("publish-queue");
 
 const spawnProc = (
   name: string,

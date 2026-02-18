@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSocketIO } from "./socketIO-provider";
 import type { RenderProgress } from "@/types";
 import { sdk } from "@/lib/sdk";
@@ -10,7 +10,29 @@ export type { RenderProgress } from "@/types";
 export const useRenderProgress = (options?: { paused?: boolean }) => {
   const paused = options?.paused === true;
   const { socket } = useSocketIO();
-  const [progressMap, setProgressMap] = useState<Record<string, RenderProgress>>({});
+  const [rawProgressMap, setRawProgressMap] = useState<Record<string, RenderProgress>>({});
+
+  const aggregateByContentId = (
+    map: Record<string, RenderProgress>
+  ): Record<string, RenderProgress> => {
+    const grouped = new Map<string, RenderProgress[]>();
+    Object.values(map).forEach((entry) => {
+      const current = grouped.get(entry.id) ?? [];
+      current.push(entry);
+      grouped.set(entry.id, current);
+    });
+    const aggregated: Record<string, RenderProgress> = {};
+    grouped.forEach((entries, id) => {
+      const best = entries.reduce((max, item) =>
+        item.progress > max.progress ? item : max
+      );
+      aggregated[id] = {
+        ...best,
+        id,
+      };
+    });
+    return aggregated;
+  };
 
   useEffect(() => {
     if (paused) {
@@ -21,7 +43,9 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
       try {
         const response = await sdk.content.progress();
         if (cancelled) return;
-        setProgressMap((response.items ?? {}) as Record<string, RenderProgress>);
+        setRawProgressMap(
+          (response.items ?? {}) as Record<string, RenderProgress>
+        );
       } catch {
         // Keep local socket-driven state if snapshot fetch fails.
       }
@@ -38,13 +62,16 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
     }
 
     const handleProgress = (payload: RenderProgress) => {
-      setProgressMap((current) => ({ ...current, [payload.id]: payload }));
+      setRawProgressMap((current) => {
+        const key = payload.key ?? payload.id;
+        return { ...current, [key]: payload };
+      });
     };
     const clearProgress = (id: string) => {
-      setProgressMap((current) => {
-        if (!(id in current)) return current;
-        const next = { ...current };
-        delete next[id];
+      setRawProgressMap((current) => {
+        const next = Object.fromEntries(
+          Object.entries(current).filter(([, value]) => value.id !== id)
+        ) as Record<string, RenderProgress>;
         return next;
       });
     };
@@ -70,5 +97,5 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
     };
   }, [socket, paused]);
 
-  return progressMap;
+  return useMemo(() => aggregateByContentId(rawProgressMap), [rawProgressMap]);
 };

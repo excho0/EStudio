@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 export const PUBLISH_QUEUE_NAME = "content-publish";
 
@@ -7,8 +8,7 @@ export type PublishQueueJobPayload = {
   publishId: string;
 };
 
-const resolveRedisUrl = () =>
-  process.env.PUBLISH_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+const resolveRedisUrl = () => resolveRedisPoolUrl("publish-queue");
 
 let queueInstance: Queue<PublishQueueJobPayload> | null = null;
 

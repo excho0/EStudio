@@ -7,6 +7,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import si from "systeminformation";
 import { getLogger } from "@/lib/logging";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -65,8 +66,7 @@ app
       addTrailingSlash: false,
     });
 
-    const socketRedisUrl =
-      process.env.SOCKET_IO_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+    const socketRedisUrl = resolveRedisPoolUrl("socket-io");
     if (socketRedisUrl) {
       try {
         const pubClient = createClient({

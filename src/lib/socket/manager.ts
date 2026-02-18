@@ -9,6 +9,7 @@ import type {
   RenderProgressPayload,
 } from "@/types";
 import {
+  clearRenderProgressSnapshotsForContent,
   clearRenderProgressSnapshot,
   getRenderProgressSnapshot,
   setRenderProgressSnapshot,
@@ -66,6 +67,8 @@ export const emitContentUpdate = (payload: {
 export const emitRenderProgress = (payload: {
   userId?: string | null;
   id: string;
+  mode?: string;
+  key?: string;
   rendered: number;
   total: number;
   progress: number;
@@ -86,10 +89,17 @@ export const emitRenderProgress = (payload: {
 export const emitRenderComplete = (payload: {
   userId?: string | null;
   id: string;
+  mode?: string;
+  key?: string;
   durationSeconds?: number;
   avgFps?: number;
 }) => {
-  void clearRenderProgressSnapshot({ userId: payload.userId, id: payload.id });
+  void clearRenderProgressSnapshot({
+    userId: payload.userId,
+    id: payload.id,
+    mode: payload.mode,
+    key: payload.key,
+  });
   emitDomainEvent("render.completed", payload as RenderCompletePayload);
   const io = getSocketServer();
   if (!io) return;
@@ -155,4 +165,8 @@ export const emitPublishProgress = (payload: {
   io.emit("publish:progress", eventPayload);
 };
 
-export { clearRenderProgressSnapshot, getRenderProgressSnapshot };
+export {
+  clearRenderProgressSnapshot,
+  clearRenderProgressSnapshotsForContent,
+  getRenderProgressSnapshot,
+};

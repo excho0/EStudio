@@ -1,10 +1,10 @@
 import IORedis from "ioredis";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 const inMemoryCancelRequests = new Map<string, number>();
 const CANCEL_TTL_SECONDS = 60 * 30;
 
-const resolveRenderRedisUrl = () =>
-  process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+const resolveRenderRedisUrl = () => resolveRedisPoolUrl("render-queue");
 
 const getCancelKey = (userId: string, id: string) => `render:cancel:${userId}:${id}`;
 
@@ -59,4 +59,3 @@ export const isRenderCancellationRequested = async (userId: string, id: string) 
   const redisValue = await withRedis((client, redisKey) => client.get(redisKey), userId, id);
   return redisValue === "1";
 };
-

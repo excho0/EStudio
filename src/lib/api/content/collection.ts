@@ -156,9 +156,11 @@ export const handleListContent = async (request: Request, userId: string) => {
     limit: searchParams.get("limit") ?? "50",
   });
   const activeProgress = await getRenderProgressSnapshot(userId);
+  const hasActiveProgressForId = (id: string) =>
+    Object.values(activeProgress).some((entry) => entry.id === id);
   const result = await listContentItems(userId, params);
   const items = result.items.map((item) =>
-    activeProgress[item.id] ? { ...item, status: "rendering" as const } : item
+    hasActiveProgressForId(item.id) ? { ...item, status: "rendering" as const } : item
   );
   return NextResponse.json({ ...result, items });
 };

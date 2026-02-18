@@ -49,7 +49,8 @@ export const handleGetContentItem = async (userId: string, id: string) => {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const activeProgress = await getRenderProgressSnapshot(userId);
-  const withEffectiveStatus = activeProgress[id]
+  const hasActiveProgress = Object.values(activeProgress).some((entry) => entry.id === id);
+  const withEffectiveStatus = hasActiveProgress
     ? { ...item, status: "rendering" as const }
     : item;
   return NextResponse.json(withEffectiveStatus);
