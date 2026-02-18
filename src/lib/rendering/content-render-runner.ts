@@ -187,6 +187,7 @@ export const executeRenderForContent = async ({
     await startRenderJob({
       userId,
       id,
+      mode: resolved.mode,
       browserLabel,
       chromeMode,
       serveUrl,

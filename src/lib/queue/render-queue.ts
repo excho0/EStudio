@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import type { RenderBackend } from "@/lib/rendering/backend";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 export const RENDER_QUEUE_NAME = "content-render";
 
@@ -11,8 +12,7 @@ export type RenderQueueJobPayload = {
   mode?: string;
 };
 
-const resolveRedisUrl = () =>
-  process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+const resolveRedisUrl = () => resolveRedisPoolUrl("render-queue");
 
 let queueInstance: Queue<RenderQueueJobPayload> | null = null;
 
@@ -51,7 +51,7 @@ export const enqueueRenderJob = async (payload: RenderQueueJobPayload) => {
   if (!queue) {
     throw new Error("Render queue is not configured");
   }
-  const jobId = `${payload.userId}:${payload.id}`;
+  const jobId = `${payload.userId}:${payload.id}:${payload.mode ?? "__default__"}`;
   const existing = await queue.getJob(jobId);
   if (existing) {
     return existing;
@@ -64,22 +64,32 @@ export const cancelRenderJob = async (userId: string, id: string) => {
   if (!queue) {
     return { ok: false as const, reason: "queue_unavailable" as const };
   }
-  const jobId = `${userId}:${id}`;
-  const job = await queue.getJob(jobId);
-  if (!job) {
+  const prefix = `${userId}:${id}:`;
+  const jobs = await queue.getJobs(
+    ["wait", "delayed", "prioritized", "paused", "active"],
+    0,
+    -1,
+    false
+  );
+  const candidates = jobs.filter((job) => {
+    if (!job?.id) return false;
+    const jobId = String(job.id);
+    return jobId === `${userId}:${id}` || jobId.startsWith(prefix);
+  });
+  if (candidates.length === 0) {
     return { ok: false as const, reason: "not_found" as const };
   }
-  const state = await job.getState();
-  if (state === "active") {
-    return { ok: false as const, reason: "active" as const };
+
+  for (const job of candidates) {
+    const state = await job.getState();
+    if (state === "active") {
+      return { ok: false as const, reason: "active" as const };
+    }
+    if (state === "completed" || state === "failed" || state === "unknown") {
+      continue;
+    }
+    await job.remove();
   }
-  if (
-    state === "completed" ||
-    state === "failed" ||
-    state === "unknown"
-  ) {
-    return { ok: false as const, reason: "not_cancelable" as const };
-  }
-  await job.remove();
+
   return { ok: true as const };
 };

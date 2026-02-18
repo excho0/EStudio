@@ -417,6 +417,7 @@ const cleanupRemotionChromiumProcesses = async () => {
 export const startRenderJob = async ({
   userId,
   id,
+  mode,
   browserLabel,
   chromeMode,
   serveUrl,
@@ -532,6 +533,7 @@ export const startRenderJob = async ({
     emitRenderProgress({
       userId,
       id,
+      mode,
       rendered: 0,
       total: totalFrames,
       progress: 0,
@@ -618,6 +620,7 @@ export const startRenderJob = async ({
           emitRenderProgress({
             userId,
             id,
+            mode,
             rendered,
             total: totalFrames,
             progress: safeProgress,
@@ -708,6 +711,7 @@ export const startRenderJob = async ({
         emitRenderProgress({
           userId,
           id,
+          mode,
           rendered: totalRendered,
           total: totalFrames,
           progress: safeProgress,
@@ -825,14 +829,14 @@ export const startRenderJob = async ({
     lastProgressPercent.delete(id);
     emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
     emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
-    emitRenderComplete({ userId, id, durationSeconds: elapsedSeconds, avgFps });
+    emitRenderComplete({ userId, id, mode, durationSeconds: elapsedSeconds, avgFps });
   } catch (error) {
     if (isCancellationLikeError(error)) {
-      void clearRenderProgressSnapshot({ userId, id });
+      void clearRenderProgressSnapshot({ userId, id, mode });
       lastProgressPercent.delete(id);
       throw new RenderCanceledError();
     }
-    void clearRenderProgressSnapshot({ userId, id });
+    void clearRenderProgressSnapshot({ userId, id, mode });
     await updateContentItem(userId, id, { status: "failed" });
     emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
     const message = error instanceof Error ? error.message : "Render failed";

@@ -196,7 +196,7 @@ const executeLambdaRenderForContent = async ({
         : "uploaded";
       await updateContentItem(userId, id, { status: nextStatus });
       emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
-      await clearRenderProgressSnapshot({ userId, id });
+      await clearRenderProgressSnapshot({ userId, id, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
       throw new RenderCanceledError();
     }
@@ -219,6 +219,7 @@ const executeLambdaRenderForContent = async ({
     emitRenderProgress({
       userId,
       id,
+      mode: resolved.mode,
       rendered: Math.floor(overallProgress * 100),
       total: 100,
       progress: overallProgress,
@@ -255,7 +256,7 @@ const executeLambdaRenderForContent = async ({
       await storage.writeFile(outputKey, outputBuffer);
       await updateContentItem(userId, id, { status: "rendered" });
       emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
-      emitRenderComplete({ userId, id });
+      emitRenderComplete({ userId, id, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
 
       return {

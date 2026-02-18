@@ -215,6 +215,35 @@ export default function LibraryPage() {
     [renderMutation]
   );
 
+  const startRenderAllModes = useCallback(
+    async (item: ContentItem) => {
+      const modes = getConfiguredRenderModes(item);
+      if (modes.length === 0) {
+        toast.error("No configured modes found for this content.");
+        return;
+      }
+      setRenderingId(item.id);
+      const results = await Promise.allSettled(
+        modes.map((mode) => sdk.content.triggerRender(item.id, { mode }))
+      );
+      const failed = results.filter((result) => result.status === "rejected");
+      if (failed.length === 0) {
+        toast.success(`Queued renders for ${modes.length} mode${modes.length > 1 ? "s" : ""}.`);
+      } else {
+        const firstError = failed[0];
+        const reason =
+          firstError && firstError.status === "rejected" && firstError.reason instanceof Error
+            ? firstError.reason.message
+            : "Some modes failed to queue.";
+        toast.error(
+          `Queued ${modes.length - failed.length}/${modes.length} modes. ${reason}`
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    },
+    [getConfiguredRenderModes, queryClient]
+  );
+
   const handleRender = useCallback(
     async (item: ContentItem) => {
       const modes = getConfiguredRenderModes(item);
@@ -227,6 +256,11 @@ export default function LibraryPage() {
       await startRender(item, modes[0]);
     },
     [getConfiguredRenderModes, startRender]
+  );
+
+  const configuredPendingModes = useMemo(
+    () => (pendingRenderItem ? getConfiguredRenderModes(pendingRenderItem) : []),
+    [getConfiguredRenderModes, pendingRenderItem]
   );
 
   const getPageItems = () => {
@@ -719,13 +753,29 @@ export default function LibraryPage() {
                   onValueChange={setPendingRenderMode}
                   placeholder="Select mode"
                   triggerClassName="w-full"
-                  options={getConfiguredRenderModes(pendingRenderItem).map((modeId) => ({
+                  options={configuredPendingModes.map((modeId) => ({
                     value: modeId,
                     label: getContentModeDefinition(modeId).label,
                     icon: contentModeUiRegistry[modeId]?.icon ?? SlidersHorizontal,
                   }))}
                 />
                 <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={async () => {
+                      if (!pendingRenderItem) return;
+                      setRenderModePickerOpen(false);
+                      const itemToRender = pendingRenderItem;
+                      setPendingRenderItem(null);
+                      await startRenderAllModes(itemToRender);
+                    }}
+                    disabled={configuredPendingModes.length === 0}
+                  >
+                    {configuredPendingModes.length > 0
+                      ? `Render all modes (${configuredPendingModes.length})`
+                      : "Render all modes"}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

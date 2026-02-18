@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import IORedis from "ioredis";
 import { eventBus } from "@/lib/event-bus";
 import {
-  clearRenderProgressSnapshot,
+  clearRenderProgressSnapshotsForContent,
   emitContentUpdate,
   getRenderProgressSnapshot,
 } from "@/lib/socket/manager";
@@ -27,23 +27,35 @@ import {
   requestRenderCancellation,
 } from "@/lib/rendering/cancel-store";
 import { getLogger } from "@/lib/logging";
+import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
 const logger = getLogger("api-content-render");
+const inMemoryRenderLocks = new Set<string>();
 
-const resolveRenderRedisUrl = () =>
-  process.env.RENDER_QUEUE_REDIS_URL?.trim() || process.env.REDIS_URL?.trim() || "";
+const resolveRenderRedisUrl = () => resolveRedisPoolUrl("render-queue");
 
 const withRenderRequestLock = async <T>(
   userId: string,
   id: string,
+  mode: string | undefined,
   fn: () => Promise<T>
 ) => {
   const redisUrl = resolveRenderRedisUrl();
+  const lockScope = mode ?? "__default__";
+  const memoryLockKey = `render:lock:${userId}:${id}:${lockScope}`;
   if (!redisUrl) {
-    return fn();
+    if (inMemoryRenderLocks.has(memoryLockKey)) {
+      return null;
+    }
+    inMemoryRenderLocks.add(memoryLockKey);
+    try {
+      return await fn();
+    } finally {
+      inMemoryRenderLocks.delete(memoryLockKey);
+    }
   }
 
-  const lockKey = `render:lock:${userId}:${id}`;
+  const lockKey = memoryLockKey;
   const lockToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const client = new IORedis(redisUrl, {
     maxRetriesPerRequest: 1,
@@ -79,11 +91,6 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const activeProgress = await getRenderProgressSnapshot(userId);
-  if (activeProgress[id]) {
-    return NextResponse.json({ ok: true, status: "rendering", id }, { status: 202 });
-  }
-
   const requestPayload = triggerRenderRequestSchema
     .safeParse(await request.json().catch(() => null))
     .data;
@@ -106,7 +113,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
   const shouldUseQueue = isRenderQueueEnabled();
   if (shouldUseQueue) {
     try {
-      const queued = await withRenderRequestLock(userId, id, async () => {
+      const queued = await withRenderRequestLock(userId, id, requestedMode, async () => {
         await enqueueRenderJob({ id, userId, backend, mode: requestedMode });
         await updateContentItem(userId, id, { status: "rendering" });
         emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
@@ -136,15 +143,35 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     }
   }
 
+  const activeProgress = await getRenderProgressSnapshot(userId);
+  const hasActiveProgress = Object.values(activeProgress).some(
+    (entry) => entry.id === id
+  );
+  if (hasActiveProgress) {
+    return NextResponse.json({ ok: true, status: "rendering", id }, { status: 202 });
+  }
+
   try {
-    const result = await executeRenderForContentWithBackend({
+    const inlineResult = await withRenderRequestLock(
       userId,
       id,
-      backend,
-      mode: requestedMode,
-      requestUrl: request.url,
-    });
-    return NextResponse.json(result, { status: 202 });
+      "__inline__",
+      async () =>
+        executeRenderForContentWithBackend({
+          userId,
+          id,
+          backend,
+          mode: requestedMode,
+          requestUrl: request.url,
+        })
+    );
+    if (!inlineResult) {
+      return NextResponse.json(
+        { ok: true, status: "rendering", id, backend, mode: requestedMode },
+        { status: 202 }
+      );
+    }
+    return NextResponse.json(inlineResult, { status: 202 });
   } catch (error) {
     if (error instanceof ContentRenderError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -163,13 +190,16 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
 
   await requestRenderCancellation(userId, id);
   const activeProgress = await getRenderProgressSnapshot(userId);
-  if (activeProgress[id] || item.status === "rendering") {
-    await clearRenderProgressSnapshot({ userId, id });
+  const hasActiveProgress = Object.values(activeProgress).some(
+    (entry) => entry.id === id
+  );
+  if (hasActiveProgress || item.status === "rendering") {
+    await clearRenderProgressSnapshotsForContent({ userId, id });
     return NextResponse.json({ ok: true, status: "canceling", id }, { status: 202 });
   }
 
   if (!isRenderQueueEnabled()) {
-    await clearRenderProgressSnapshot({ userId, id });
+    await clearRenderProgressSnapshotsForContent({ userId, id });
     return NextResponse.json(
       { ok: true, status: "canceling", id },
       { status: 202 }
@@ -192,7 +222,7 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
     await updateContentItem(userId, id, { status: nextStatus });
     emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
   }
-  await clearRenderProgressSnapshot({ userId, id });
+  await clearRenderProgressSnapshotsForContent({ userId, id });
   await clearRenderCancellation(userId, id);
   return NextResponse.json({ ok: true, status: "canceled", id }, { status: 200 });
 };
