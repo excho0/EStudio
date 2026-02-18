@@ -118,16 +118,16 @@ export const executeRenderForContent = async ({
     nextIndex = 1;
   }
 
-  const slug = getSlug(item.title) || "untitled";
-  const shortId = randomBytes(3).toString("hex");
-  const fileName = `${slug}_${nextIndex}_${shortId}.mp4`;
-  const renderPath = getContentRenderPath(userId, id, fileName);
-  const outputPath = resolveContentPath(renderPath);
-
   const entryPoint = path.join(process.cwd(), "src", "remotion", "index.tsx");
   const resolved = resolveContentSettings(mode ?? item.mode, item.settings ?? {});
   const modeDefinition = getContentMode(resolved.mode);
   const compositionId = modeDefinition.compositionId;
+  const slug = getSlug(item.title) || "untitled";
+  const modeSlug = getSlug(resolved.mode) || "mode";
+  const shortId = randomBytes(3).toString("hex");
+  const fileName = `${slug}_${nextIndex}_${modeSlug}_${shortId}.mp4`;
+  const renderPath = getContentRenderPath(userId, id, fileName);
+  const outputPath = resolveContentPath(renderPath);
 
   const serveUrl = await getServeUrl(entryPoint);
 
