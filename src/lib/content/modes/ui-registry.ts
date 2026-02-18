@@ -452,7 +452,7 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "playbackRate",
         label: "Playback Rate",
-        tooltip: "Speed of the video playback.",
+        tooltip: "Sets video playback speed. Use 1.0 for normal speed.",
         input: "number",
         min: 0.25,
         max: 4,
@@ -461,7 +461,7 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "scalePercent",
         label: "Scale (%)",
-        tooltip: "Zoom the video in or out.",
+        tooltip: "Scales the video layer. 100% keeps the original size.",
         input: "slider",
         min: 0,
         max: 200,
@@ -484,34 +484,30 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "outputConfig.preset",
         label: "Preset",
-        tooltip: "Choose output profile for this mode.",
+        tooltip:
+          "Select a predefined output profile. Each preset sets width, height, and default FPS.",
         input: "select",
         defaultValue: "landscape_hd",
         options: [
-          { label: "Landscape HD (1280x720 @ 30)", value: "landscape_hd" },
-          { label: "Portrait Short (1080x1920 @ 30)", value: "portrait_short" },
+          { label: "Landscape HD (1280x720 @60)", value: "landscape_hd" },
+          { label: "Landscape FHD (1920x1080 @60)", value: "landscape_fhd" },
+          { label: "Landscape QHD (2560x1440 @60)", value: "landscape_qhd" },
+          { label: "Portrait HD (720x1280 @60)", value: "portrait_hd" },
+          { label: "Portrait FHD (1080x1920 @60)", value: "portrait_fhd" },
+          { label: "Portrait QHD (1440x2560 @60)", value: "portrait_qhd" },
           { label: "Custom", value: "custom" },
-        ],
-        resetsOnValue: [
-          {
-            when: "landscape_hd",
-            keys: ["outputConfig.fps", "outputConfig.width", "outputConfig.height"],
-          },
-          {
-            when: "portrait_short",
-            keys: ["outputConfig.fps", "outputConfig.width", "outputConfig.height"],
-          },
         ],
       },
       {
         key: "outputConfig.fps",
         label: "FPS",
-        tooltip: "Used when preset is set to custom.",
+        tooltip:
+          "Frames per second. This field is used only when preset is set to Custom.",
         input: "number",
         min: 12,
         max: 120,
         step: 1,
-        defaultValue: 30,
+        defaultValue: 60,
         disabledWhen: {
           all: [{ key: "outputConfig.preset", notEquals: "custom" }],
         },
@@ -519,7 +515,8 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "outputConfig.width",
         label: "Width",
-        tooltip: "Used when preset is set to custom.",
+        tooltip:
+          "Output width in pixels. This field is used only when preset is set to Custom.",
         input: "number",
         min: 16,
         max: 8192,
@@ -532,7 +529,8 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "outputConfig.height",
         label: "Height",
-        tooltip: "Used when preset is set to custom.",
+        tooltip:
+          "Output height in pixels. This field is used only when preset is set to Custom.",
         input: "number",
         min: 16,
         max: 8192,

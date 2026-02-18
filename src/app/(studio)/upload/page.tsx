@@ -187,27 +187,7 @@ export default function DashboardUploadPage() {
       const settingsMap = normalizeSettingsMap(current.mode, current.settings);
       const currentSettings =
         (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-      let nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
-      if (key === "outputConfig.preset" && typeof value === "string") {
-        const presetOutput = getOutputDefaultsForMode(current.mode, {
-          outputConfig: { preset: value },
-        });
-        const outputConfig =
-          nextSettings.outputConfig &&
-          typeof nextSettings.outputConfig === "object" &&
-          !Array.isArray(nextSettings.outputConfig)
-            ? (nextSettings.outputConfig as Record<string, unknown>)
-            : {};
-        nextSettings = {
-          ...nextSettings,
-          outputConfig: {
-            ...outputConfig,
-            fps: presetOutput.fps,
-            width: presetOutput.width,
-            height: presetOutput.height,
-          },
-        };
-      }
+      const nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
       return {
         ...current,
         settings: {
@@ -258,6 +238,17 @@ export default function DashboardUploadPage() {
       );
     }
     if (field.input === "select") {
+      const normalizedMode = (formValues.mode || "").toLowerCase();
+      const isShortMode =
+        normalizedMode.includes("short") || normalizedMode.includes("portrait");
+      const selectOptions =
+        field.key === "outputConfig.preset"
+          ? (field.options ?? []).filter((option) => {
+              if (option.value === "custom") return true;
+              if (isShortMode) return option.value.startsWith("portrait_");
+              return option.value.startsWith("landscape_");
+            })
+          : (field.options ?? []);
       return (
         <div key={field.key} className="grid gap-2">
           <LabelWithTooltip
@@ -270,7 +261,7 @@ export default function DashboardUploadPage() {
             value={String(getFieldValue(field.key) ?? "")}
             onValueChange={(value) => updateFormValue(field.key, value)}
             triggerClassName={cn("w-full", disabled && "opacity-60")}
-            options={(field.options ?? []).map((option) => ({
+            options={selectOptions.map((option) => ({
               value: option.value,
               label: option.label,
               icon: SlidersHorizontal,

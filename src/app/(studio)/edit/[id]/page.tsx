@@ -193,6 +193,10 @@ const stateTransition = {
   transition: { duration: 0.2, ease: "easeOut" as const },
 };
 
+const PREVIEW_CANVAS_WIDTH = 1920;
+const PREVIEW_CANVAS_HEIGHT = 1080;
+const PREVIEW_CANVAS_ASPECT = PREVIEW_CANVAS_WIDTH / PREVIEW_CANVAS_HEIGHT;
+
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
   const isMobile = useIsMobile();
@@ -363,6 +367,15 @@ export default function EditContentPage() {
     Number.isFinite(resolvedFps) &&
     Number.isFinite(resolvedWidth) &&
     Number.isFinite(resolvedHeight);
+  const previewAspect = resolvedWidth / resolvedHeight;
+  const previewScale =
+    previewAspect >= PREVIEW_CANVAS_ASPECT
+      ? PREVIEW_CANVAS_ASPECT / previewAspect
+      : previewAspect / PREVIEW_CANVAS_ASPECT;
+  const previewWidthPercent =
+    previewAspect >= PREVIEW_CANVAS_ASPECT ? 100 : Math.max(1, previewScale * 100);
+  const previewHeightPercent =
+    previewAspect >= PREVIEW_CANVAS_ASPECT ? Math.max(1, previewScale * 100) : 100;
 
   const modeUi = useMemo(
     () => getContentModeUi(formValues.mode || item?.mode),
@@ -401,27 +414,7 @@ export default function EditContentPage() {
       const settingsMap = normalizeSettingsMap(current.mode, current.settings);
       const currentSettings =
         (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-      let nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
-      if (key === "outputConfig.preset" && typeof value === "string") {
-        const presetOutput = getOutputDefaultsForMode(current.mode, {
-          outputConfig: { preset: value },
-        });
-        const outputConfig =
-          nextSettings.outputConfig &&
-          typeof nextSettings.outputConfig === "object" &&
-          !Array.isArray(nextSettings.outputConfig)
-            ? (nextSettings.outputConfig as Record<string, unknown>)
-            : {};
-        nextSettings = {
-          ...nextSettings,
-          outputConfig: {
-            ...outputConfig,
-            fps: presetOutput.fps,
-            width: presetOutput.width,
-            height: presetOutput.height,
-          },
-        };
-      }
+      const nextSettings = applyFieldValue(fieldMap, currentSettings, key, value);
       return {
         ...current,
         settings: {
@@ -448,6 +441,17 @@ export default function EditContentPage() {
       );
     }
     if (field.input === "select") {
+      const normalizedMode = (formValues.mode || item?.mode || "").toLowerCase();
+      const isShortMode =
+        normalizedMode.includes("short") || normalizedMode.includes("portrait");
+      const selectOptions =
+        field.key === "outputConfig.preset"
+          ? (field.options ?? []).filter((option) => {
+              if (option.value === "custom") return true;
+              if (isShortMode) return option.value.startsWith("portrait_");
+              return option.value.startsWith("landscape_");
+            })
+          : (field.options ?? []);
       return (
         <div key={field.key} className="grid gap-2">
           <LabelWithTooltip
@@ -460,7 +464,7 @@ export default function EditContentPage() {
             value={String(getFieldValue(field.key) ?? "")}
             onValueChange={(value) => updateFormValue(field.key, value)}
             triggerClassName={cn("w-full", disabled && "opacity-60")}
-            options={(field.options ?? []).map((option) => ({
+            options={selectOptions.map((option) => ({
               value: option.value,
               label: option.label,
               icon: SlidersHorizontal,
@@ -941,17 +945,24 @@ export default function EditContentPage() {
                   </motion.div>
                 ) : isReady && resolvedItem ? (
                   <motion.div key="preview-ready" {...stateTransition}>
-                    <Player
-                      acknowledgeRemotionLicense
-                      component={previewComponent}
-                      inputProps={previewProps ?? {}}
-                      durationInFrames={safeDurationInFrames}
-                      fps={resolvedFps}
-                      compositionWidth={resolvedWidth}
-                      compositionHeight={resolvedHeight}
-                      controls
-                      style={{ width: "100%" }}
-                    />
+                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Player
+                          acknowledgeRemotionLicense
+                          component={previewComponent}
+                          inputProps={previewProps ?? {}}
+                          durationInFrames={safeDurationInFrames}
+                          fps={resolvedFps}
+                          compositionWidth={resolvedWidth}
+                          compositionHeight={resolvedHeight}
+                          controls
+                          style={{
+                            width: `${previewWidthPercent}%`,
+                            height: `${previewHeightPercent}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
                   </motion.div>
                 ) : (
                   <motion.div key="preview-empty" {...stateTransition}>

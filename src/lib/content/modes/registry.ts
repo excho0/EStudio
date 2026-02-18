@@ -23,8 +23,12 @@ export type ContentModeDefinition<TSettings extends z.ZodTypeAny, TProps> = {
 };
 
 export const OUTPUT_PRESET_DEFAULTS = {
-  landscape_hd: { fps: 30, width: 1280, height: 720 },
-  portrait_short: { fps: 30, width: 1080, height: 1920 },
+  landscape_hd: { width: 1280, height: 720 },
+  landscape_fhd: { width: 1920, height: 1080 },
+  landscape_qhd: { width: 2560, height: 1440 },
+  portrait_hd: { width: 720, height: 1280 },
+  portrait_fhd: { width: 1080, height: 1920 },
+  portrait_qhd: { width: 1440, height: 2560 },
 } as const;
 
 export type OutputPresetId = keyof typeof OUTPUT_PRESET_DEFAULTS;
@@ -38,7 +42,7 @@ export const getOutputDefaultsForMode = (
   const isShortMode =
     normalizedMode.includes("short") || normalizedMode.includes("portrait");
   const fallbackPreset: OutputPresetId =
-    isShortMode ? "portrait_short" : "landscape_hd";
+    isShortMode ? "portrait_fhd" : "landscape_hd";
   const scoped =
     settings && typeof settings === "object" && !Array.isArray(settings)
       ? (settings as Record<string, unknown>)
@@ -64,7 +68,7 @@ export const getOutputDefaultsForMode = (
   };
   return {
     preset,
-    fps: toPositiveInt(rawOutputConfig.fps, base.fps),
+    fps: toPositiveInt(rawOutputConfig.fps, 60),
     width: toPositiveInt(rawOutputConfig.width, base.width),
     height: toPositiveInt(rawOutputConfig.height, base.height),
   };
@@ -104,7 +108,15 @@ export const videoLoopSettingsSchema = z
     outputConfig: z
       .object({
         preset: z
-          .enum(["landscape_hd", "portrait_short", "custom"])
+          .enum([
+            "landscape_hd",
+            "landscape_fhd",
+            "landscape_qhd",
+            "portrait_hd",
+            "portrait_fhd",
+            "portrait_qhd",
+            "custom",
+          ])
           .default("landscape_hd"),
         fps: z.number().int().positive().optional(),
         width: z.number().int().positive().optional(),
@@ -160,7 +172,7 @@ export const contentModeRegistry = {
     defaults: videoLoopSettingsSchema.parse({
       scalePercent: 110,
       outputConfig: {
-        preset: "portrait_short",
+        preset: "portrait_fhd",
       },
     }),
     compositionId: "ContentLoop",
