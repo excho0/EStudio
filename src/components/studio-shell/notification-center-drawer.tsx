@@ -67,6 +67,19 @@ type ActivityHydratedItem = {
 
 const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
 
+type WindowWithNotificationCenter = Window & {
+  __notificationCenterCompletedKeys?: Set<string>;
+};
+
+const getGlobalCompletedKeys = () => {
+  if (typeof window === "undefined") return null;
+  const win = window as WindowWithNotificationCenter;
+  if (!win.__notificationCenterCompletedKeys) {
+    win.__notificationCenterCompletedKeys = new Set<string>();
+  }
+  return win.__notificationCenterCompletedKeys;
+};
+
 const isActiveStatus = (status: JobStatus) =>
   status === "queued" ||
   status === "processing" ||
@@ -342,10 +355,15 @@ export function NotificationCenterDrawer() {
       id: string;
       mode?: string;
     }) => {
+      const globalCompleted = getGlobalCompletedKeys();
+      if (globalCompleted?.has(job.key)) {
+        return;
+      }
       if (completedNotifiedRef.current.has(job.key)) {
         return;
       }
       completedNotifiedRef.current.add(job.key);
+      globalCompleted?.add(job.key);
       const kindLabel = resolveKindLabel(job.kind);
       const modeSuffix = job.mode ? ` · ${job.mode}` : "";
       const message = `${kindLabel} completed · #${shortId(job.id)}${modeSuffix}`;

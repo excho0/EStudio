@@ -1,6 +1,5 @@
 import { UserNav } from "@/components/studio-shell/user-nav";
 import { SheetMenu } from "@/components/studio-shell/sheet-menu";
-import { NotificationCenterDrawer } from "@/components/studio-shell/notification-center-drawer";
 
 interface NavbarProps {
   title: string;
@@ -15,7 +14,6 @@ export function Navbar({ title }: NavbarProps) {
           <h1 className="font-bold">{title}</h1>
         </div>
         <div className="flex flex-1 items-center justify-end gap-3">
-          <NotificationCenterDrawer />
           <UserNav />
         </div>
       </div>
