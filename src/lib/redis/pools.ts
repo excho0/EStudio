@@ -4,7 +4,8 @@ export type RedisPoolName =
   | "event-bus"
   | "socket-io"
   | "render-queue"
-  | "publish-queue";
+  | "publish-queue"
+  | "caption-queue";
 
 type RedisPoolConfig = {
   envKeys: string[];
@@ -40,6 +41,11 @@ const POOL_CONFIG: Record<RedisPoolName, RedisPoolConfig> = {
   },
   "publish-queue": {
     envKeys: ["PUBLISH_QUEUE_REDIS_URL"],
+    fallbackToDefault: true,
+    optional: false,
+  },
+  "caption-queue": {
+    envKeys: ["CAPTION_QUEUE_REDIS_URL"],
     fallbackToDefault: true,
     optional: false,
   },

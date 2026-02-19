@@ -27,7 +27,8 @@ const children: RuntimeChild[] = [];
 const hasRedisForWorkers =
   hasRedisPoolUrl("default") ||
   hasRedisPoolUrl("render-queue") ||
-  hasRedisPoolUrl("publish-queue");
+  hasRedisPoolUrl("publish-queue") ||
+  hasRedisPoolUrl("caption-queue");
 
 const spawnProc = (
   name: string,

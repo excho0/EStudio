@@ -1,4 +1,9 @@
 export type { ContentItem, ContentListResponse } from "./content";
+export {
+  captionSegmentSchema,
+  captionDocumentSchema,
+} from "./captions";
+export type { CaptionSegment, CaptionDocument } from "./captions";
 export type { MetricsPayload } from "./metrics";
 export type { ContentAssetKind } from "./content/store";
 export type { PostgresDrizzleDb, SqliteDrizzleDb, DrizzleDb } from "./db/drizzle";

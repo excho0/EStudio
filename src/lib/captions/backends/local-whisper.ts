@@ -1,0 +1,283 @@
+import { randomUUID } from "crypto";
+import { spawn } from "child_process";
+import path from "path";
+import {
+  downloadWhisperModel,
+  installWhisperCpp,
+  toCaptions,
+  transcribe,
+  type Language,
+  type WhisperModel,
+} from "@remotion/install-whisper-cpp";
+import { captionDocumentSchema, type CaptionDocument, type CaptionSegment } from "@/types";
+import { getStorage, storageKey } from "@/lib/storage";
+
+const DEFAULT_WHISPER_CPP_VERSION = "1.7.6";
+const DEFAULT_WHISPER_MODEL: WhisperModel = "small";
+
+let setupPromise: Promise<{
+  whisperPathKey: string;
+  modelFolderKey: string;
+  whisperPath: string;
+  modelFolder: string;
+}> | null = null;
+const storage = getStorage();
+
+const resolveWhisperPaths = () => {
+  const whisperPathKey = storageKey(
+    process.env.CAPTION_LOCAL_WHISPER_PATH?.trim() || "cache/whisper-cpp"
+  );
+  const modelFolderKey = storageKey(
+    process.env.CAPTION_LOCAL_WHISPER_MODEL_PATH?.trim() || "cache/whisper-models"
+  );
+  const whisperPath = storage.resolvePath(whisperPathKey);
+  const modelFolder = storage.resolvePath(modelFolderKey);
+  return { whisperPathKey, modelFolderKey, whisperPath, modelFolder };
+};
+
+const resolveWhisperVersion = () =>
+  process.env.CAPTION_LOCAL_WHISPER_CPP_VERSION?.trim() || DEFAULT_WHISPER_CPP_VERSION;
+
+const resolveWhisperModel = (): WhisperModel =>
+  (process.env.CAPTION_LOCAL_WHISPER_MODEL?.trim() as WhisperModel) || DEFAULT_WHISPER_MODEL;
+
+const resolveWhisperLanguage = (language?: string): Language | undefined => {
+  const normalized = language?.trim();
+  if (!normalized) return undefined;
+  return normalized as Language;
+};
+
+const isTruthy = (value?: string | null) => {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+};
+
+const resolveWhisperFlashAttention = () =>
+  isTruthy(process.env.CAPTION_LOCAL_WHISPER_FLASH_ATTENTION);
+
+const resolveWhisperAdditionalArgs = (): string[] => {
+  const raw = process.env.CAPTION_LOCAL_WHISPER_ADDITIONAL_ARGS?.trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+      return parsed;
+    }
+  } catch {
+    // Fallback: whitespace-delimited flags for quick local usage.
+  }
+  return raw.split(/\s+/).filter(Boolean);
+};
+
+const buildWhisperAdditionalArgs = () => {
+  const args = resolveWhisperAdditionalArgs();
+  // Do not auto-inject --gpu-layers: many whisper.cpp builds (including this one)
+  // do not support the flag and fail hard with "unknown argument".
+  // GPU remains enabled by default unless --no-gpu is explicitly passed.
+  void isTruthy(process.env.CAPTION_LOCAL_WHISPER_GPU);
+  return args;
+};
+
+const convertToWhisperWav = async (inputPath: string, outputPath: string) => {
+  const ffmpegBin = process.env.REMOTION_FFMPEG_PATH?.trim() || "ffmpeg";
+  await new Promise<void>((resolve, reject) => {
+    const ffmpeg = spawn(ffmpegBin, [
+      "-y",
+      "-i",
+      inputPath,
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-c:a",
+      "pcm_s16le",
+      outputPath,
+    ]);
+    let stderr = "";
+    ffmpeg.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    ffmpeg.on("error", (error) => {
+      reject(error);
+    });
+    ffmpeg.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `Failed to convert audio for local whisper (ffmpeg exit ${code}). ${stderr.slice(-1200)}`
+        )
+      );
+    });
+  });
+};
+
+const ensureWhisperInstallation = async ({
+  whisperPathKey,
+  whisperPath,
+  whisperCppVersion,
+}: {
+  whisperPathKey: string;
+  whisperPath: string;
+  whisperCppVersion: string;
+}) => {
+  const executableCandidates = [
+    path.join(whisperPath, "build", "bin", "whisper-cli"),
+    path.join(whisperPath, "build", "bin", "whisper-cli.exe"),
+    path.join(whisperPath, "main"),
+    path.join(whisperPath, "main.exe"),
+  ];
+  const hasExecutable = (
+    await Promise.all(
+      executableCandidates.map((candidate) =>
+        storage.exists(storageKey(path.relative(storage.baseDir, candidate)))
+      )
+    )
+  ).some(Boolean);
+  if (!hasExecutable) {
+    // Broken partial install cache: remove and reinstall cleanly.
+    await storage.deleteDir(whisperPathKey);
+  }
+  try {
+    await installWhisperCpp({
+      version: whisperCppVersion,
+      to: whisperPath,
+      // Keep true so install errors are explicit and not silently ignored.
+      printOutput: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const isBrokenExistingFolder =
+      message.includes("exists but the executable") && message.includes("is missing");
+    if (!isBrokenExistingFolder) {
+      throw error;
+    }
+    await storage.deleteDir(whisperPathKey);
+    await installWhisperCpp({
+      version: whisperCppVersion,
+      to: whisperPath,
+      printOutput: true,
+    });
+  }
+};
+
+const ensureWhisperReady = async (): Promise<{
+  whisperPathKey: string;
+  modelFolderKey: string;
+  whisperPath: string;
+  modelFolder: string;
+}> => {
+  if (!setupPromise) {
+    setupPromise = (async () => {
+      const whisperCppVersion = resolveWhisperVersion();
+      const model = resolveWhisperModel();
+      const { whisperPathKey, modelFolderKey, whisperPath, modelFolder } =
+        resolveWhisperPaths();
+
+      await storage.ensureDir(modelFolderKey);
+
+      await ensureWhisperInstallation({
+        whisperPathKey,
+        whisperPath,
+        whisperCppVersion,
+      });
+      await downloadWhisperModel({
+        model,
+        folder: modelFolder,
+        printOutput: process.env.CAPTION_LOCAL_WHISPER_VERBOSE === "true",
+      });
+
+      return { whisperPathKey, modelFolderKey, whisperPath, modelFolder };
+    })().catch((error) => {
+      setupPromise = null;
+      throw error;
+    });
+  }
+  return setupPromise;
+};
+
+export const transcribeWithLocalWhisper = async ({
+  audio,
+  fileName,
+  language,
+}: {
+  userId: string;
+  contentId: string;
+  mode: string;
+  audio: Buffer;
+  fileName: string;
+  language?: string;
+}): Promise<CaptionDocument> => {
+  const whisperCppVersion = resolveWhisperVersion();
+  const model = resolveWhisperModel();
+  const flashAttention = resolveWhisperFlashAttention();
+  const additionalArgs = buildWhisperAdditionalArgs();
+  let { whisperPath, modelFolder } = await ensureWhisperReady();
+
+  const tempRootKey = storageKey("tmp", "caption", randomUUID());
+  await storage.ensureDir(tempRootKey);
+  const tempAudioKey = storageKey(tempRootKey, `${randomUUID()}-${fileName}`);
+  const tempAudioPath = storage.resolvePath(tempAudioKey);
+  const whisperInputKey = storageKey(tempRootKey, `${randomUUID()}-whisper-input.wav`);
+  const whisperInputPath = storage.resolvePath(whisperInputKey);
+
+  try {
+    await storage.writeFile(tempAudioKey, audio);
+    await convertToWhisperWav(tempAudioPath, whisperInputPath);
+
+    const runTranscribe = async () =>
+      transcribe({
+        inputPath: whisperInputPath,
+        whisperPath,
+        whisperCppVersion,
+        model,
+        modelFolder,
+        language: resolveWhisperLanguage(language),
+        tokenLevelTimestamps: true,
+        splitOnWord: true,
+        flashAttention,
+        additionalArgs,
+        printOutput: process.env.CAPTION_LOCAL_WHISPER_VERBOSE === "true",
+      });
+
+    let whisperOutput;
+    try {
+      whisperOutput = await runTranscribe();
+    } catch (error) {
+      // Recover once if whisper binary is missing/corrupted at runtime.
+      const isSpawnMissing =
+        error instanceof Error &&
+        "code" in error &&
+        (error as { code?: string }).code === "ENOENT";
+      if (!isSpawnMissing) {
+        throw error;
+      }
+      setupPromise = null;
+      ({ whisperPath, modelFolder } = await ensureWhisperReady());
+      whisperOutput = await runTranscribe();
+    }
+
+    const captions = toCaptions({ whisperCppOutput: whisperOutput }).captions;
+    const segments: CaptionSegment[] = captions
+      .map((caption) => ({
+        text: caption.text.trim(),
+        startMs: Math.max(0, Math.round(caption.startMs)),
+        endMs: Math.max(
+          Math.max(0, Math.round(caption.startMs)) + 1,
+          Math.round(caption.endMs)
+        ),
+      }))
+      .filter((segment) => segment.text.length > 0);
+
+    return captionDocumentSchema.parse({
+      backend: "local",
+      language: whisperOutput.result.language || language || "en",
+      generatedAt: new Date().toISOString(),
+      segments,
+    });
+  } finally {
+    await storage.deleteDir(tempRootKey);
+  }
+};

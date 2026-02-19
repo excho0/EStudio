@@ -42,6 +42,18 @@ export type ContentCreatePublishResponse = z.infer<typeof createPublishResponseS
 export type ContentRetryPublishResponse = z.infer<typeof retryPublishResponseSchema>;
 export type ContentTriggerRenderResponse = z.infer<typeof triggerRenderResponseSchema>;
 export type TriggerRenderOptions = z.infer<typeof triggerRenderRequestSchema>;
+export type TriggerCaptionsOptions = {
+  mode?: string;
+  backend?: "openai" | "local";
+  language?: string;
+};
+
+const triggerCaptionsResponseSchema = z.object({
+  ok: z.boolean(),
+  status: z.string(),
+  id: z.string(),
+  mode: z.string().optional(),
+});
 
 export const contentSdk = {
   list(query: ContentQuery): Promise<ContentListResponse> {
@@ -100,6 +112,17 @@ export const contentSdk = {
   },
   cancelRender(id: string): Promise<void> {
     return client.del(`/api/content/${id}/render`, "Failed to cancel render.");
+  },
+  triggerCaptions(
+    id: string,
+    options?: TriggerCaptionsOptions
+  ): Promise<z.infer<typeof triggerCaptionsResponseSchema>> {
+    return client.postJson(
+      `/api/content/${id}/captions`,
+      options ?? {},
+      "Caption generation failed.",
+      triggerCaptionsResponseSchema
+    );
   },
   progress(): Promise<ContentProgressResponse> {
     return client.get(

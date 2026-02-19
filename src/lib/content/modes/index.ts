@@ -2,6 +2,7 @@ import { contentModeRegistry, type ContentModeId } from "./registry";
 export { contentModeRegistry, getOutputDefaultsForMode } from "./registry";
 
 export const DEFAULT_CONTENT_MODE: ContentModeId = "video_loop";
+export const SHARED_CONTENT_SETTINGS_KEY = "__shared";
 
 export const getContentMode = (mode?: string) =>
   contentModeRegistry[(mode ?? DEFAULT_CONTENT_MODE) as ContentModeId] ??
@@ -26,26 +27,72 @@ export const normalizeSettingsMap = (mode: string | undefined, settings: unknown
   return { [definition.id]: base };
 };
 
+export const getSharedContentSettings = (settings: unknown) => {
+  const settingsMap = normalizeSettingsMap(undefined, settings);
+  const shared = settingsMap[SHARED_CONTENT_SETTINGS_KEY];
+  if (!shared || typeof shared !== "object" || Array.isArray(shared)) {
+    return {};
+  }
+  return shared as Record<string, unknown>;
+};
+
+export const setSharedContentSettings = (
+  settings: unknown,
+  updates: Record<string, unknown>
+): Record<string, Record<string, unknown>> => {
+  const settingsMap = normalizeSettingsMap(undefined, settings);
+  const currentShared = getSharedContentSettings(settingsMap);
+  return {
+    ...settingsMap,
+    [SHARED_CONTENT_SETTINGS_KEY]: {
+      ...currentShared,
+      ...updates,
+    },
+  };
+};
+
 const parseModeSettings = (
   schema: (typeof contentModeRegistry)[ContentModeId]["schema"],
   input: Record<string, unknown>
 ) => {
   const candidate: Record<string, unknown> = { ...input };
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const parsed = schema.safeParse(candidate);
     if (parsed.success) {
       return parsed;
     }
+    let changed = false;
     const unknownKeys = parsed.error.issues
       .filter((issue) => issue.code === "unrecognized_keys")
       .flatMap((issue) =>
         "keys" in issue && Array.isArray(issue.keys) ? issue.keys : []
       );
-    if (unknownKeys.length === 0) {
-      return parsed;
-    }
     for (const key of unknownKeys) {
+      if (key in candidate) {
+        delete candidate[key];
+        changed = true;
+      }
+    }
+
+    // Accept legacy/invalid scalar values by removing them and allowing schema defaults.
+    for (const issue of parsed.error.issues) {
+      if (
+        issue.code !== "invalid_value" &&
+        issue.code !== "invalid_type" &&
+        issue.code !== "too_small" &&
+        issue.code !== "too_big"
+      ) {
+        continue;
+      }
+      const key = issue.path.length === 1 ? issue.path[0] : null;
+      if (typeof key !== "string") continue;
+      if (!(key in candidate)) continue;
       delete candidate[key];
+      changed = true;
+    }
+
+    if (!changed) {
+      return parsed;
     }
   }
   return schema.safeParse(candidate);

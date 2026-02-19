@@ -23,8 +23,53 @@ import {
   resolveContentSettings,
   normalizeSettingsMap,
 } from "@/lib/content/modes";
+import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
+import { getLogger } from "@/lib/logging";
 
 const storage = getStorage();
+const logger = getLogger("api-content-collection");
+
+const shouldAutoCaption = () =>
+  process.env.CAPTION_AUTO_ON_UPLOAD?.trim().toLowerCase() === "true";
+
+const enqueueCaptionOnCreate = async (params: {
+  id: string;
+  userId: string;
+  mode: string;
+  settings: Record<string, unknown>;
+}) => {
+  if (!shouldAutoCaption()) return;
+  const captionsEnabled = params.settings.captionsEnabled === true;
+  if (!captionsEnabled) return;
+  if (!isCaptionQueueEnabled()) {
+    logger.warn(
+      { id: params.id, mode: params.mode },
+      "Caption auto-generation skipped: caption queue is disabled or missing Redis URL."
+    );
+    return;
+  }
+  try {
+    const requestedBackend =
+      typeof params.settings.captionsBackend === "string"
+        ? params.settings.captionsBackend
+        : undefined;
+    await enqueueCaptionJob({
+      id: params.id,
+      userId: params.userId,
+      mode: params.mode,
+      backend: requestedBackend,
+      language:
+        typeof params.settings.captionsLanguage === "string"
+          ? params.settings.captionsLanguage
+          : undefined,
+    });
+  } catch (error) {
+    logger.warn(
+      { error, id: params.id, mode: params.mode },
+      "Failed to enqueue caption generation on content create."
+    );
+  }
+};
 
 const parseDurationFromFfmpegOutput = (output: string) => {
   const match = output.match(/Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)/);
@@ -227,6 +272,12 @@ export const handleCreateContent = async (request: Request, userId: string) => {
       assets: { thumbnailPath, videoPath, songPath },
     });
     emitContentUpdate({ userId, type: "content:created", item: created });
+    await enqueueCaptionOnCreate({
+      id: created.id,
+      userId,
+      mode: resolved.mode,
+      settings: resolved.settings as Record<string, unknown>,
+    });
     return NextResponse.json(created);
   }
 
@@ -287,5 +338,11 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     assets: { thumbnailPath, videoPath, songPath },
   });
   emitContentUpdate({ userId, type: "content:created", item: created });
+  await enqueueCaptionOnCreate({
+    id: created.id,
+    userId,
+    mode: resolved.mode,
+    settings: resolved.settings as Record<string, unknown>,
+  });
   return NextResponse.json(created);
 };

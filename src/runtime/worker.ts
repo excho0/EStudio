@@ -10,15 +10,21 @@ import { readPublishRow, updatePublish } from "@/lib/publishing/publish-job-runn
 import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { processCaptionJob } from "@/lib/captions/process-caption-job";
 
 const redisUrl =
   resolveRedisPoolUrl("render-queue") ||
   resolveRedisPoolUrl("publish-queue") ||
+  resolveRedisPoolUrl("caption-queue") ||
   resolveRedisPoolUrl("default");
 const concurrency = Math.max(1, Number(process.env.RENDER_WORKER_CONCURRENCY || "1"));
 const publishConcurrency = Math.max(
   1,
   Number(process.env.PUBLISH_WORKER_CONCURRENCY || "2")
+);
+const captionConcurrency = Math.max(
+  1,
+  Number(process.env.CAPTION_WORKER_CONCURRENCY || "1")
 );
 const logger = getLogger("runtime-worker");
 
@@ -68,6 +74,21 @@ const publishWorker = new Worker(
   }
 );
 
+const captionWorker = new Worker(
+  "content-caption",
+  async (job) => {
+    const { id, userId, mode, backend, language } = job.data ?? {};
+    if (!id || !userId || !mode) {
+      throw new Error("Invalid caption payload");
+    }
+    await processCaptionJob({ id, userId, mode, backend, language });
+  },
+  {
+    connection,
+    concurrency: captionConcurrency,
+  }
+);
+
 renderWorker.on("ready", () => {
   logger.info({ queue: "content-render", concurrency }, "Worker ready.");
 });
@@ -79,12 +100,23 @@ publishWorker.on("ready", () => {
   );
 });
 
+captionWorker.on("ready", () => {
+  logger.info(
+    { queue: "content-caption", concurrency: captionConcurrency },
+    "Worker ready."
+  );
+});
+
 renderWorker.on("completed", (job) => {
   logger.info({ queue: "content-render", jobId: job.id }, "Job completed.");
 });
 
 publishWorker.on("completed", (job) => {
   logger.info({ queue: "content-publish", jobId: job.id }, "Job completed.");
+});
+
+captionWorker.on("completed", (job) => {
+  logger.info({ queue: "content-caption", jobId: job.id }, "Job completed.");
 });
 
 renderWorker.on("failed", (job, error) => {
@@ -151,9 +183,20 @@ publishWorker.on("failed", (job, error) => {
   });
 });
 
+captionWorker.on("failed", (job, error) => {
+  logger.error(
+    {
+      queue: "content-caption",
+      jobId: job?.id ?? "unknown",
+      error: error.message,
+    },
+    "Job failed."
+  );
+});
+
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "Worker shutdown signal received.");
-  await Promise.all([renderWorker.close(), publishWorker.close()]);
+  await Promise.all([renderWorker.close(), publishWorker.close(), captionWorker.close()]);
   await connection.quit();
   process.exit(0);
 };

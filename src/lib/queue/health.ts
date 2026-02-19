@@ -1,5 +1,6 @@
 import { getPublishQueue, isPublishQueueEnabled } from "./publish-queue";
 import { getRenderQueue, isRenderQueueEnabled } from "./render-queue";
+import { getCaptionQueue, isCaptionQueueEnabled } from "./caption-queue";
 
 const getQueueCounts = async (queue: {
   getWaitingCount: () => Promise<number>;
@@ -19,9 +20,12 @@ const getQueueCounts = async (queue: {
 };
 
 const describeQueue = async (
-  name: "render" | "publish",
+  name: "render" | "publish" | "caption",
   enabled: boolean,
-  queue: ReturnType<typeof getRenderQueue> | ReturnType<typeof getPublishQueue>
+  queue:
+    | ReturnType<typeof getRenderQueue>
+    | ReturnType<typeof getPublishQueue>
+    | ReturnType<typeof getCaptionQueue>
 ) => {
   if (!enabled) {
     return {
@@ -64,17 +68,21 @@ const describeQueue = async (
 export const getQueueHealth = async () => {
   const renderEnabled = isRenderQueueEnabled();
   const publishEnabled = isPublishQueueEnabled();
+  const captionEnabled = isCaptionQueueEnabled();
   const renderQueue = getRenderQueue();
   const publishQueue = getPublishQueue();
+  const captionQueue = getCaptionQueue();
 
-  const [render, publish] = await Promise.all([
+  const [render, publish, caption] = await Promise.all([
     describeQueue("render", renderEnabled, renderQueue),
     describeQueue("publish", publishEnabled, publishQueue),
+    describeQueue("caption", captionEnabled, captionQueue),
   ]);
 
   return {
     timestamp: new Date().toISOString(),
     render,
     publish,
+    caption,
   };
 };
