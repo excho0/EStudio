@@ -37,6 +37,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Runtime-generated/cache artifacts:
+    "data/cache/**",
+    "data/tmp/**",
   ]),
 ]);
 

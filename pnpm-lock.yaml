@@ -71,6 +71,9 @@ importers:
       '@remotion/bundler':
         specifier: 4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/install-whisper-cpp':
+        specifier: 4.0.409
+        version: 4.0.409
       '@remotion/lambda-client':
         specifier: 4.0.409
         version: 4.0.409
@@ -80,6 +83,9 @@ importers:
       '@remotion/media-utils':
         specifier: 4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/openai-whisper':
+        specifier: 4.0.409
+        version: 4.0.409
       '@remotion/player':
         specifier: ^4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -89,6 +95,9 @@ importers:
       '@remotion/transitions':
         specifier: ^4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/whisper-web':
+        specifier: 4.0.409
+        version: 4.0.409
       '@socket.io/redis-adapter':
         specifier: ^8.3.0
         version: 8.3.0(socket.io-adapter@2.5.6)
@@ -173,6 +182,9 @@ importers:
       nprogress:
         specifier: ^0.2.0
         version: 0.2.0
+      openai:
+        specifier: 6.22.0
+        version: 6.22.0(ws@8.18.3)(zod@4.3.5)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -3145,6 +3157,9 @@ packages:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
 
+  '@remotion/captions@4.0.409':
+    resolution: {integrity: sha512-yT/DDRHbbkYCPVRub+hoRCiWi9xQqCVjlV0LfYvxN8B9T9YDi2aF2pBCg+6jhkCJ+bgTIO5yNviinZbc87rqdg==}
+
   '@remotion/cli@4.0.409':
     resolution: {integrity: sha512-6shfH9NviUQs9Z+lPRJZhkhXIekWU1h+Lbaxwr3Hdal14rWOh5YJro9Z8/9WCqAg9p4tNEOD2kTEQocT6QKQVg==}
     hasBin: true
@@ -3187,6 +3202,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@remotion/install-whisper-cpp@4.0.409':
+    resolution: {integrity: sha512-CtS3LEVytfr28fgsFFh0t3kP3kRuyXngaT8tBLFeZG4XNih7VNPHo6ELicuOa8YcKwzDnGCpKpgZgIxSexEV3g==}
+
   '@remotion/lambda-client@4.0.409':
     resolution: {integrity: sha512-8+skTtW4Z0rGEHaWYxVV++Wv/9PMsavyZ/YKtMiUWCEXhVTGII4XkKczAsiDC1ZvWVSrOYNXsyIR7MBGgKe+2w==}
 
@@ -3207,6 +3225,9 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
+
+  '@remotion/openai-whisper@4.0.409':
+    resolution: {integrity: sha512-Bu9LAeItuu4tsSY0Kvw/PciwV9MZl6T0W2iFMCqzvtTNo7QWYdYkFwxONEPS7ZmHJbX3f2JcXpJMKn+UqQ3PrA==}
 
   '@remotion/paths@4.0.409':
     resolution: {integrity: sha512-EZKCPu7jaf4Jhr4RVpm6InGNx8plvpljtm2pPR1I9dPyBuNukbZKCQct0n7M7/cWC5Cp13WiGZC2shBSnl48wg==}
@@ -3258,6 +3279,9 @@ packages:
 
   '@remotion/webcodecs@4.0.409':
     resolution: {integrity: sha512-IIBv3ncImmsaBTRm46w6rQUJPN7x/mGwIQ4pNjzJVFSgzttPip7oJMUMXifKPbL0XjlO+pnJqghvVcqEZB/V7g==}
+
+  '@remotion/whisper-web@4.0.409':
+    resolution: {integrity: sha512-n8fnZ8AqDYyc8z5EvDY+BoadC2sAIm1UdU9td4d/dOwLS/xK14C2hyGkNhGAOSvkXuks52SoMxRwQ/yMPgCPpw==}
 
   '@remotion/zod-types@4.0.409':
     resolution: {integrity: sha512-8Ct+RnExjDE0zHWpaP8AqqlpAzMEue7Mhm3p1S6jK9vUlB+rzxHV7XM/lX6ilsSCNVXVkiM9ZjzIbumbvf+V3A==}
@@ -6041,6 +6065,18 @@ packages:
   open@8.4.2:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
+
+  openai@6.22.0:
+    resolution: {integrity: sha512-7Yvy17F33Bi9RutWbsaYt5hJEEJ/krRPOrwan+f9aCPuMat1WVsb2VNSII5W1EksKT6fF69TG/xj4XzodK3JZw==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -10684,6 +10720,8 @@ snapshots:
       - utf-8-validate
       - webpack-cli
 
+  '@remotion/captions@4.0.409': {}
+
   '@remotion/cli@4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@remotion/bundler': 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -10728,6 +10766,10 @@ snapshots:
   '@remotion/compositor-win32-x64-msvc@4.0.409':
     optional: true
 
+  '@remotion/install-whisper-cpp@4.0.409':
+    dependencies:
+      '@remotion/captions': 4.0.409
+
   '@remotion/lambda-client@4.0.409': {}
 
   '@remotion/licensing@4.0.409': {}
@@ -10749,6 +10791,10 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
       remotion: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+
+  '@remotion/openai-whisper@4.0.409':
+    dependencies:
+      '@remotion/captions': 4.0.409
 
   '@remotion/paths@4.0.409': {}
 
@@ -10860,6 +10906,10 @@ snapshots:
   '@remotion/webcodecs@4.0.409':
     dependencies:
       '@remotion/media-parser': 4.0.409
+
+  '@remotion/whisper-web@4.0.409':
+    dependencies:
+      '@remotion/captions': 4.0.409
 
   '@remotion/zod-types@4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.22.3)':
     dependencies:
@@ -13977,6 +14027,11 @@ snapshots:
       define-lazy-prop: 2.0.0
       is-docker: 2.2.1
       is-wsl: 2.2.0
+
+  openai@6.22.0(ws@8.18.3)(zod@4.3.5):
+    optionalDependencies:
+      ws: 8.18.3
+      zod: 4.3.5
 
   optionator@0.9.4:
     dependencies:

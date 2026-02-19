@@ -1,12 +1,12 @@
 # AGENTS.md
 
-This document explains the architecture and operational conventions of `excho-engine` for AI coding agents.
+This document explains the architecture and operational conventions of `EStudio` for AI coding agents.
 
 Use this as the primary orientation guide before making changes.
 
 ## 1) Project Purpose
 
-`excho-engine` is a Next.js 16 application for creating, editing, rendering, and publishing media content.
+`EStudio` is a Next.js 16 application for creating, editing, rendering, and publishing media content.
 
 Core capabilities:
 - Create and edit content items with mode-specific settings.
@@ -222,6 +222,16 @@ Important environment variables used in multiple modules:
 Nix/flake notes:
 - Project includes `flake.nix` and may run in Nix shells.
 - Rendering + GPU behavior may vary by GL backend and headless mode.
+
+Whisper (local captions) notes:
+- Local captions backend uses `@remotion/install-whisper-cpp`.
+- Host/dev shell must provide build tools: `git`, `cmake`, `make`, `gcc/g++`.
+- Local transcription input is converted to 16k mono WAV before whisper run.
+- Whisper cache uses storage keys (under local storage base dir): `cache/whisper-cpp`, `cache/whisper-models`.
+- GPU is used automatically when supported by the local whisper.cpp build; no dedicated GPU toggle env is required.
+- Optional local tuning:
+  - `CAPTION_LOCAL_WHISPER_FLASH_ATTENTION=true`
+  - `CAPTION_LOCAL_WHISPER_ADDITIONAL_ARGS='["--beam-size","5"]'`
 
 ## 10) Agent Rules for Safe Changes
 

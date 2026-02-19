@@ -24,7 +24,7 @@ const createBaseLogger = () =>
     {
       level: resolveLogLevel(),
       base: {
-        service: "excho-engine",
+        service: "EStudio",
         env: process.env.NODE_ENV ?? "development",
       },
       timestamp: pino.stdTimeFunctions.isoTime,

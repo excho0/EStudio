@@ -59,6 +59,10 @@
         packages = with pkgs; [
           nodejs_20
           pnpm
+          git
+          cmake
+          gnumake
+          gcc
           chromium
           chromiumXvfb
           mesa-demos
