@@ -17,6 +17,7 @@ type NotificationPersistPayload = {
   progress?: number;
   stage?: string;
   error?: string;
+  updatedAt?: number;
 };
 
 type PersistCheckpoint = {
@@ -48,9 +49,16 @@ const BATCH_SIZE = Math.max(
   10,
   Number.parseInt(process.env.NOTIFICATIONS_PERSIST_BATCH_SIZE ?? "200", 10) || 200
 );
+let lastTimestamp = 0;
+
+const nextMonotonicTimestamp = () => {
+  const now = Date.now();
+  lastTimestamp = now > lastTimestamp ? now : lastTimestamp + 1;
+  return lastTimestamp;
+};
 
 const isTerminal = (status: NotificationStatus) =>
-  status === "completed" || status === "failed";
+  status === "completed" || status === "failed" || status === "canceled";
 
 const normalizeProgress = (value?: number) => {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -92,6 +100,7 @@ const flushBatch = async (entries: NotificationPersistPayload[]) => {
           progress: payload.progress,
           stage: payload.stage,
           error: payload.error,
+          updatedAt: payload.updatedAt,
         });
         rememberPersist(payload);
         if (isTerminal(payload.status)) {
@@ -124,22 +133,30 @@ const scheduleFlush = () => {
 
 export const enqueueNotificationPersist = async (payload: NotificationPersistPayload) => {
   if (!payload.userId) return;
+  const normalizedPayload: NotificationPersistPayload = {
+    ...payload,
+    updatedAt: payload.updatedAt ?? nextMonotonicTimestamp(),
+  };
 
   await setLiveNotificationSnapshot(payload.userId, {
-    key: payload.key,
-    contentId: payload.contentId,
-    mode: payload.mode,
-    kind: payload.kind,
-    status: payload.status,
-    progress: payload.progress,
-    stage: payload.stage,
-    error: payload.error,
+    key: normalizedPayload.key,
+    contentId: normalizedPayload.contentId,
+    mode: normalizedPayload.mode,
+    kind: normalizedPayload.kind,
+    status: normalizedPayload.status,
+    progress: normalizedPayload.progress,
+    stage: normalizedPayload.stage,
+    error: normalizedPayload.error,
+    updatedAt: normalizedPayload.updatedAt,
   });
 
-  if (!shouldPersistNow(payload)) {
+  if (!shouldPersistNow(normalizedPayload)) {
     return;
   }
 
-  pending.set(`${payload.userId}:${payload.key}`, payload);
+  pending.set(
+    `${normalizedPayload.userId}:${normalizedPayload.key}`,
+    normalizedPayload
+  );
   scheduleFlush();
 };

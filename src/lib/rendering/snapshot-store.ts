@@ -3,6 +3,10 @@ import { getRedisClient } from "@/lib/redis/client-manager";
 import { hasRedisPoolUrl } from "@/lib/redis/pools";
 
 type StoreMode = "memory" | "redis";
+type StoreModeResolution = {
+  mode: StoreMode;
+  explicit: boolean;
+};
 
 type SnapshotStoreOptions = {
   keyPrefix: string;
@@ -15,17 +19,20 @@ const GLOBAL_SCOPE = "__global__";
 const resolveScope = (scope?: string | null) =>
   scope && scope.trim().length > 0 ? scope : GLOBAL_SCOPE;
 
-const resolveStoreMode = (pool: RedisPoolName, modeEnvKey?: string): StoreMode => {
+const resolveStoreMode = (
+  pool: RedisPoolName,
+  modeEnvKey?: string
+): StoreModeResolution => {
   const configured =
     modeEnvKey && process.env[modeEnvKey]
       ? process.env[modeEnvKey]?.trim().toLowerCase()
       : process.env.RENDER_PROGRESS_STORE?.trim().toLowerCase();
-  if (configured === "memory") return "memory";
-  if (configured === "redis") return "redis";
+  if (configured === "memory") return { mode: "memory", explicit: true };
+  if (configured === "redis") return { mode: "redis", explicit: true };
   if (hasRedisPoolUrl(pool)) {
-    return "redis";
+    return { mode: "redis", explicit: false };
   }
-  return "memory";
+  return { mode: "memory", explicit: false };
 };
 
 export const createScopedSnapshotStore = <T extends { id: string }>(
@@ -61,12 +68,18 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   const redisKey = (scope?: string | null) => `${options.keyPrefix}:${resolveScope(scope)}`;
 
   const set = async (scope: string | null | undefined, payload: T) => {
-    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
+    const resolved = resolveStoreMode(pool, options.modeEnvKey);
+    if (resolved.mode === "memory") {
       memorySet(scope, payload);
       return;
     }
     const client = await getRedisClient(pool);
     if (!client) {
+      if (resolved.explicit) {
+        throw new Error(
+          `Snapshot store "${options.keyPrefix}" is configured for redis but pool "${pool}" is unavailable.`
+        );
+      }
       memorySet(scope, payload);
       return;
     }
@@ -78,12 +91,18 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   };
 
   const remove = async (scope: string | null | undefined, id: string) => {
-    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
+    const resolved = resolveStoreMode(pool, options.modeEnvKey);
+    if (resolved.mode === "memory") {
       memoryDelete(scope, id);
       return;
     }
     const client = await getRedisClient(pool);
     if (!client) {
+      if (resolved.explicit) {
+        throw new Error(
+          `Snapshot store "${options.keyPrefix}" is configured for redis but pool "${pool}" is unavailable.`
+        );
+      }
       memoryDelete(scope, id);
       return;
     }
@@ -95,11 +114,17 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
   };
 
   const getAll = async (scope: string | null | undefined) => {
-    if (resolveStoreMode(pool, options.modeEnvKey) === "memory") {
+    const resolved = resolveStoreMode(pool, options.modeEnvKey);
+    if (resolved.mode === "memory") {
       return memoryGetAll(scope);
     }
     const client = await getRedisClient(pool);
     if (!client) {
+      if (resolved.explicit) {
+        throw new Error(
+          `Snapshot store "${options.keyPrefix}" is configured for redis but pool "${pool}" is unavailable.`
+        );
+      }
       return memoryGetAll(scope);
     }
     try {
