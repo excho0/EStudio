@@ -42,7 +42,14 @@ const persistNotification = (payload: {
   contentId: string;
   mode?: string;
   kind: "render" | "publish" | "caption";
-  status: "queued" | "processing" | "publishing" | "rendering" | "completed" | "failed";
+  status:
+    | "queued"
+    | "processing"
+    | "publishing"
+    | "rendering"
+    | "canceled"
+    | "completed"
+    | "failed";
   progress?: number;
   stage?: string;
   error?: string;
@@ -193,6 +200,32 @@ export const emitRenderComplete = (payload: {
     return;
   }
   io.emit("render:complete", payload);
+};
+
+export const emitRenderCancelRequested = (payload: {
+  userId?: string | null;
+  id: string;
+  mode?: string;
+  jobId?: string;
+}) => {
+  persistNotification({
+    userId: payload.userId,
+    key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),
+    contentId: payload.id,
+    mode: payload.mode,
+    kind: "render",
+    status: "canceled",
+    progress: 1,
+    stage: "Canceled",
+  });
+  const io = getSocketServer();
+  if (!io) return;
+  const room = resolveRoom(payload.userId);
+  if (room) {
+    io.to(room).emit("render:cancel-requested", payload);
+    return;
+  }
+  io.emit("render:cancel-requested", payload);
 };
 
 export const emitPublishUpdate = (payload: {

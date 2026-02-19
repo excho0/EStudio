@@ -7,6 +7,7 @@ export const notificationStatusSchema = z.enum([
   "processing",
   "publishing",
   "rendering",
+  "canceled",
   "completed",
   "failed",
 ]);

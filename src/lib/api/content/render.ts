@@ -4,9 +4,11 @@ import { eventBus } from "@/lib/event-bus";
 import {
   clearRenderProgressSnapshotsForContent,
   emitContentUpdate,
+  emitRenderCancelRequested,
   getRenderProgressSnapshot,
 } from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
+import { finalizeActiveRenderNotificationsForContent } from "@/lib/data/notifications";
 import {
   cancelRenderJob,
   enqueueRenderJob,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/rendering/status-checkpoint";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { finalizeActiveLiveRenderNotificationsForContent } from "@/lib/notifications/live-store";
 
 const logger = getLogger("api-content-render");
 const inMemoryRenderLocks = new Set<string>();
@@ -207,12 +210,23 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
     (entry) => entry.id === id
   );
   if (hasActiveProgress || item.status === "rendering") {
+    if (item.status === "rendering") {
+      const nextStatus = await resolveRollbackContentStatus(userId, id);
+      await updateContentItem(userId, id, { status: nextStatus });
+      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+    }
     await clearRenderProgressSnapshotsForContent({ userId, id });
+    await finalizeActiveRenderNotificationsForContent(userId, id);
+    await finalizeActiveLiveRenderNotificationsForContent(userId, id);
+    emitRenderCancelRequested({ userId, id });
     return NextResponse.json({ ok: true, status: "canceling", id }, { status: 202 });
   }
 
   if (!isRenderQueueEnabled()) {
     await clearRenderProgressSnapshotsForContent({ userId, id });
+    await finalizeActiveRenderNotificationsForContent(userId, id);
+    await finalizeActiveLiveRenderNotificationsForContent(userId, id);
+    emitRenderCancelRequested({ userId, id });
     return NextResponse.json(
       { ok: true, status: "canceling", id },
       { status: 202 }
@@ -236,5 +250,8 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
   await clearRenderProgressSnapshotsForContent({ userId, id });
   await clearRenderCancellation(userId, id);
   await clearRenderStatusCheckpoint(userId, id);
+  await finalizeActiveRenderNotificationsForContent(userId, id);
+  await finalizeActiveLiveRenderNotificationsForContent(userId, id);
+  emitRenderCancelRequested({ userId, id });
   return NextResponse.json({ ok: true, status: "canceled", id }, { status: 200 });
 };

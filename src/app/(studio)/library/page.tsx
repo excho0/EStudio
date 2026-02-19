@@ -111,8 +111,6 @@ export default function LibraryPage() {
     sortDir,
     enableSocketRefresh: true,
   });
-  const [renderingId, setRenderingId] = useState<string | null>(null);
-  const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [renderModePickerOpen, setRenderModePickerOpen] = useState(false);
   const [pendingRenderItem, setPendingRenderItem] = useState<ContentItem | null>(null);
@@ -191,7 +189,6 @@ export default function LibraryPage() {
       const message =
         error instanceof Error ? error.message : "Render failed. Please check server logs.";
       toast.error(message);
-      setRenderingId(null);
     },
   });
 
@@ -204,7 +201,6 @@ export default function LibraryPage() {
 
   const startRender = useCallback(
     async (item: ContentItem, mode?: string) => {
-      setRenderingId(item.id);
       await renderMutation.mutateAsync({ id: item.id, mode });
     },
     [renderMutation]
@@ -217,7 +213,6 @@ export default function LibraryPage() {
         toast.error("No configured modes found for this content.");
         return;
       }
-      setRenderingId(item.id);
       const results = await Promise.allSettled(
         modes.map((mode) => sdk.content.triggerRender(item.id, { mode }))
       );
@@ -303,28 +298,21 @@ export default function LibraryPage() {
   const handleCancelRender = useCallback(
     async (item: ContentItem) => {
       try {
-        setCancelingId(item.id);
         await sdk.content.cancelRender(item.id);
-        if (renderingId === item.id) {
-          setRenderingId(null);
-        }
-        toast.success("Cancel requested.");
         void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Failed to cancel render.";
         toast.error(message);
-      } finally {
-        setCancelingId(null);
       }
     },
-    [queryClient, renderingId]
+    [queryClient]
   );
 
   const getEffectiveStatus = useCallback(
     (item: ContentItem) =>
-      renderingId === item.id || renderProgress[item.id] ? "rendering" : item.status,
-    [renderProgress, renderingId]
+      renderProgress[item.id] ? "rendering" : item.status,
+    [renderProgress]
   );
 
   const getActionItems = useCallback((item: ContentItem) => [
@@ -360,14 +348,14 @@ export default function LibraryPage() {
     { type: "separator" as const },
     {
       label:
-        renderingId === item.id || effectiveStatus === "rendering"
+        effectiveStatus === "rendering"
           ? "Rendering..."
           : "Render now",
-      icon: renderingId === item.id || effectiveStatus === "rendering" ? Loader2 : Play,
+      icon: effectiveStatus === "rendering" ? Loader2 : Play,
       iconClassName:
-        renderingId === item.id || effectiveStatus === "rendering" ? "animate-spin" : undefined,
+        effectiveStatus === "rendering" ? "animate-spin" : undefined,
       onSelect: () => handleRender(item),
-      disabled: cancelingId === item.id || renderingId === item.id || effectiveStatus === "rendering",
+      disabled: effectiveStatus === "rendering",
     },
     ...(effectiveStatus === "rendered" || effectiveStatus === "rendering"
       ? [
@@ -383,8 +371,8 @@ export default function LibraryPage() {
       ? [
           {
             type: "confirm" as const,
-            label: cancelingId === item.id ? "Canceling..." : "Cancel render",
-            icon: cancelingId === item.id ? Loader2 : XCircle,
+            label: "Cancel render",
+            icon: XCircle,
             description:
               "Cancel the current render job for this item. If it is already running, cancellation will be requested and applied as soon as possible.",
             onConfirm: () => {
@@ -413,12 +401,10 @@ export default function LibraryPage() {
   ];
     })(),
   ], [
-    cancelingId,
     getEffectiveStatus,
     handleCancelRender,
     handleDelete,
     handleRender,
-    renderingId,
   ]);
 
   const getStatusMeta = useCallback((status: string) => {

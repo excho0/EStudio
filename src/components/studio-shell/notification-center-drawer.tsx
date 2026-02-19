@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
+  CircleSlash,
   CheckCircle2,
   Clapperboard,
   Loader2,
@@ -29,8 +30,7 @@ import {
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { sdk } from "@/lib/sdk";
 import { Separator } from "@/components/ui/separator";
-import { toast } from "sonner";
-import { notifyRenderComplete } from "@/lib/notifications";
+import type { LucideIcon } from "lucide-react";
 
 type JobKind = "render" | "publish" | "caption";
 type JobStatus =
@@ -38,12 +38,14 @@ type JobStatus =
   | "processing"
   | "publishing"
   | "rendering"
+  | "canceled"
   | "completed"
   | "failed";
 
 type ActivityJob = {
   key: string;
   id: string;
+  title?: string;
   jobId?: string;
   mode?: string;
   kind: JobKind;
@@ -57,6 +59,7 @@ type ActivityJob = {
 type ActivityHydratedItem = {
   key: string;
   contentId: string;
+  contentTitle?: string;
   jobId?: string;
   mode?: string;
   kind: JobKind;
@@ -67,36 +70,24 @@ type ActivityHydratedItem = {
   updatedAt: number;
 };
 
-const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
-
-type WindowWithNotificationCenter = Window & {
-  __notificationCenterCompletedKeys?: Set<string>;
-  __notificationCenterStartedKeys?: Set<string>;
-};
-
-const getGlobalCompletedKeys = () => {
-  if (typeof window === "undefined") return null;
-  const win = window as WindowWithNotificationCenter;
-  if (!win.__notificationCenterCompletedKeys) {
-    win.__notificationCenterCompletedKeys = new Set<string>();
-  }
-  return win.__notificationCenterCompletedKeys;
-};
-
-const getGlobalStartedKeys = () => {
-  if (typeof window === "undefined") return null;
-  const win = window as WindowWithNotificationCenter;
-  if (!win.__notificationCenterStartedKeys) {
-    win.__notificationCenterStartedKeys = new Set<string>();
-  }
-  return win.__notificationCenterStartedKeys;
-};
-
 const isActiveStatus = (status: JobStatus) =>
   status === "queued" ||
   status === "processing" ||
   status === "publishing" ||
   status === "rendering";
+const isTerminalStatus = (status: JobStatus) =>
+  status === "completed" || status === "failed" || status === "canceled";
+const isCanceledStage = (stage?: string) =>
+  typeof stage === "string" && stage.trim().toLowerCase().startsWith("cancel");
+const normalizeJobStatus = (status: JobStatus, stage?: string): JobStatus => {
+  if (
+    isCanceledStage(stage) &&
+    (status === "queued" || status === "processing" || status === "rendering")
+  ) {
+    return "canceled";
+  }
+  return status;
+};
 
 const toPercent = (value?: number) => {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
@@ -107,32 +98,56 @@ const toPercent = (value?: number) => {
 const shortId = (id: string) => id.slice(0, 8);
 const jobKey = (kind: JobKind, id: string, mode?: string, jobId?: string) =>
   jobId ? `${kind}:${jobId}` : `${kind}:${id}:${mode ?? "default"}`;
-const resolveJobHref = (job: ActivityJob) =>
-  job.kind === "render"
-    ? `/renders/${job.id}`
-    : job.kind === "publish"
-      ? `/publishes/${job.id}`
-      : `/edit/${job.id}`;
 
-const resolveKindLabel = (kind: JobKind) =>
-  kind === "render" ? "Render" : kind === "publish" ? "Publish" : "Captions";
+const JOB_KIND_REGISTRY: Record<
+  JobKind,
+  { label: string; icon: LucideIcon; href: (id: string) => string }
+> = {
+  render: { label: "Render", icon: Clapperboard, href: (id) => `/renders/${id}` },
+  publish: { label: "Publish", icon: Upload, href: (id) => `/publishes/${id}` },
+  caption: { label: "Captions", icon: Sparkles, href: (id) => `/edit/${id}` },
+};
 
-const resolveStatusLabel = (status: JobStatus) => {
-  if (status === "rendering") return "Rendering";
-  if (status === "publishing") return "Publishing";
-  if (status === "processing") return "Processing";
-  if (status === "queued") return "Queued";
-  if (status === "completed") return "Completed";
-  return "Failed";
+const JOB_STATUS_REGISTRY: Record<
+  JobStatus,
+  {
+    label: string;
+    icon: LucideIcon;
+    badgeVariant: "secondary" | "destructive";
+    iconClassName?: string;
+  }
+> = {
+  queued: { label: "Queued", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
+  processing: { label: "Processing", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
+  publishing: { label: "Publishing", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
+  rendering: { label: "Rendering", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
+  canceled: { label: "Canceled", icon: CircleSlash, badgeVariant: "secondary" },
+  completed: { label: "Completed", icon: CheckCircle2, badgeVariant: "secondary" },
+  failed: { label: "Failed", icon: XCircle, badgeVariant: "destructive" },
+};
+
+const resolveKindMeta = (kind: JobKind) => JOB_KIND_REGISTRY[kind];
+const resolveStatusMeta = (status: JobStatus) => JOB_STATUS_REGISTRY[status];
+const resolvePublishStatus = (status: string): JobStatus =>
+  status === "queued"
+    ? "queued"
+    : status === "publishing"
+      ? "publishing"
+      : status === "failed"
+        ? "failed"
+        : "completed";
+const compareJobsByRecency = (left: ActivityJob, right: ActivityJob) => {
+  return right.updatedAt - left.updatedAt;
 };
 
 const toActivityJob = (item: ActivityHydratedItem): ActivityJob => ({
   key: item.key,
   id: item.contentId,
+  title: item.contentTitle,
   jobId: item.jobId,
   mode: item.mode,
   kind: item.kind,
-  status: item.status,
+  status: normalizeJobStatus(item.status, item.stage),
   progress: item.progress,
   stage: item.stage,
   error: item.error,
@@ -167,7 +182,7 @@ const dedupeJobs = (items: ActivityJob[]) => {
     }
     map.set(dedupeKey, pickPreferredJob(existing, item));
   }
-  return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  return Array.from(map.values()).sort(compareJobsByRecency);
 };
 
 const SectionHeader = ({
@@ -194,8 +209,10 @@ const JobCard = ({
   job: ActivityJob;
   onOpen: (href: string) => void;
 }) => {
-  const kindLabel = resolveKindLabel(job.kind);
-  const statusLabel = resolveStatusLabel(job.status);
+  const kindMeta = resolveKindMeta(job.kind);
+  const statusMeta = resolveStatusMeta(job.status);
+  const KindIcon = kindMeta.icon;
+  const StatusIcon = statusMeta.icon;
   const progressValue = toPercent(job.progress);
   const showProgress =
     typeof progressValue === "number" &&
@@ -210,40 +227,27 @@ const JobCard = ({
       transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.7 }}
       type="button"
       className="w-full rounded-xl bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() => onOpen(resolveJobHref(job))}
+      onClick={() => onOpen(kindMeta.href(job.id))}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          {job.kind === "render" ? (
-            <Clapperboard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          ) : job.kind === "publish" ? (
-            <Upload className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
+          <KindIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <p className="truncate text-sm font-medium tracking-tight">
-            {kindLabel} · #{shortId(job.id)}
+            {kindMeta.label} · {job.title?.trim() || `#${shortId(job.id)}`}
           </p>
         </div>
         <Badge
-          variant={job.status === "failed" ? "destructive" : "secondary"}
+          variant={statusMeta.badgeVariant}
           className="h-6 rounded-full px-2 text-xs"
         >
-          {job.status === "failed" ? (
-            <XCircle className="mr-1 h-3 w-3" />
-          ) : isActiveStatus(job.status) ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <CheckCircle2 className="mr-1 h-3 w-3" />
-          )}
-          {statusLabel}
+          <StatusIcon className={`mr-1 h-3 w-3 ${statusMeta.iconClassName ?? ""}`} />
+          {statusMeta.label}
         </Badge>
       </div>
 
-      {/* <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="truncate">{job.mode ?? "default mode"}</span>
-        <span>{formatTime(job.updatedAt)}</span>
-      </div> */}
+      </div>
 
       {showProgress ? (
         <div className="space-y-1.5">
@@ -298,8 +302,7 @@ export function NotificationCenterDrawer() {
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>({});
   const { socket } = useSocketIO();
-  const completedNotifiedRef = useRef(new Set<string>());
-  const startedNotifiedRef = useRef(new Set<string>());
+  const titleByContentIdRef = useRef<Map<string, string>>(new Map());
 
   const bootstrapQuery = useQuery({
     queryKey: ["notification-center", "bootstrap"],
@@ -311,12 +314,43 @@ export function NotificationCenterDrawer() {
         sdk.notifications.list({ limit: 100 }).catch(() => ({ items: [] })),
         sdk.content.progress().catch(() => ({ items: {} })),
       ]);
+      const contentIds = Array.from(
+        new Set(
+          (notifications.items as ActivityHydratedItem[])
+            .map((item) => item.contentId)
+            .filter(Boolean)
+        )
+      );
+      const titleEntries = await Promise.all(
+        contentIds.map(async (contentId) => {
+          try {
+            const content = await sdk.content.get(contentId);
+            return [contentId, content.title] as const;
+          } catch {
+            return [contentId, undefined] as const;
+          }
+        })
+      );
+      const titleMap = new Map<string, string | undefined>(titleEntries);
+      titleEntries.forEach(([contentId, title]) => {
+        if (title) {
+          titleByContentIdRef.current.set(contentId, title);
+        }
+      });
 
       const results: ActivityJob[] = [];
       const activityItems = notifications.items as ActivityHydratedItem[];
       activityItems.forEach((item) => {
-        results.push(toActivityJob(item));
+        results.push(
+          toActivityJob({
+            ...item,
+            contentTitle: titleMap.get(item.contentId),
+          })
+        );
       });
+      const terminalKeys = new Set(
+        results.filter((item) => isTerminalStatus(item.status)).map((item) => item.key)
+      );
 
       Object.values(renderProgress.items ?? {}).forEach((snapshot) => {
         const typed = snapshot as {
@@ -325,9 +359,14 @@ export function NotificationCenterDrawer() {
           mode?: string;
           progress?: number;
         };
+        const key = jobKey("render", typed.id, typed.mode, typed.jobId);
+        if (terminalKeys.has(key)) {
+          return;
+        }
         results.push({
-          key: jobKey("render", typed.id, typed.mode, typed.jobId),
+          key,
           id: typed.id,
+          title: titleMap.get(typed.id),
           jobId: typed.jobId,
           mode: typed.mode,
           kind: "render",
@@ -345,47 +384,17 @@ export function NotificationCenterDrawer() {
     if (!socket) return;
 
     const upsert = (job: ActivityJob) => {
-      setJobs((current) => ({ ...current, [job.key]: job }));
-    };
-
-    const notifyJobCompleted = (job: {
-      key: string;
-      kind: JobKind;
-      id: string;
-      mode?: string;
-    }) => {
-      const globalCompleted = getGlobalCompletedKeys();
-      if (globalCompleted?.has(job.key)) {
-        return;
-      }
-      if (completedNotifiedRef.current.has(job.key)) {
-        return;
-      }
-      completedNotifiedRef.current.add(job.key);
-      globalCompleted?.add(job.key);
-      const kindLabel = resolveKindLabel(job.kind);
-      const modeSuffix = job.mode ? ` · ${job.mode}` : "";
-      const message = `${kindLabel} completed · #${shortId(job.id)}${modeSuffix}`;
-      toast.success(message);
-      notifyRenderComplete(`${kindLabel} complete`, message);
-      const audio = new Audio(COMPLETION_SOUND_SRC);
-      void audio.play().catch(() => undefined);
-    };
-
-    const notifyJobStarted = (job: {
-      key: string;
-      kind: JobKind;
-      id: string;
-      mode?: string;
-    }) => {
-      const globalStarted = getGlobalStartedKeys();
-      if (globalStarted?.has(job.key)) return;
-      if (startedNotifiedRef.current.has(job.key)) return;
-      startedNotifiedRef.current.add(job.key);
-      globalStarted?.add(job.key);
-      const kindLabel = resolveKindLabel(job.kind);
-      const modeSuffix = job.mode ? ` · ${job.mode}` : "";
-      toast.message(`${kindLabel} started · #${shortId(job.id)}${modeSuffix}`);
+      setJobs((current) => {
+        const existing = current[job.key];
+        if (
+          existing &&
+          isTerminalStatus(existing.status) &&
+          !isTerminalStatus(job.status)
+        ) {
+          return current;
+        }
+        return { ...current, [job.key]: job };
+      });
     };
 
     const handleRenderProgress = (payload: {
@@ -414,29 +423,14 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
-        status: isCompleted ? "completed" : "rendering",
+        status: normalizeJobStatus(isCompleted ? "completed" : "rendering"),
         progress: normalizedProgress,
         updatedAt: Date.now(),
       });
-      if (!isCompleted && normalizedProgress > 0) {
-        notifyJobStarted({
-          key,
-          kind: "render",
-          id: payload.id,
-          mode: payload.mode,
-        });
-      }
-      if (isCompleted) {
-        notifyJobCompleted({
-          key,
-          kind: "render",
-          id: payload.id,
-          mode: payload.mode,
-        });
-      }
     };
 
     const handleRenderComplete = (payload: { id: string; jobId?: string; mode?: string }) => {
@@ -444,6 +438,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
@@ -451,11 +446,51 @@ export function NotificationCenterDrawer() {
         progress: 1,
         updatedAt: Date.now(),
       });
-      notifyJobCompleted({
-        key,
-        kind: "render",
-        id: payload.id,
-        mode: payload.mode,
+    };
+
+    const handleRenderCancelRequested = (payload: {
+      id: string;
+      jobId?: string;
+      mode?: string;
+    }) => {
+      const now = Date.now();
+      setJobs((current) => {
+        const next = { ...current };
+        const title = titleByContentIdRef.current.get(payload.id);
+        const hasExactTarget = Boolean(payload.jobId);
+        let matched = false;
+
+        Object.entries(current).forEach(([key, job]) => {
+          if (job.kind !== "render" || job.id !== payload.id) return;
+          if (hasExactTarget && job.jobId !== payload.jobId) return;
+          if (!hasExactTarget && isTerminalStatus(job.status)) return;
+          matched = true;
+          next[key] = {
+            ...job,
+            status: "canceled",
+            stage: "Canceled",
+            progress: 1,
+            updatedAt: now,
+          };
+        });
+
+        if (!matched) {
+          const fallbackKey = jobKey("render", payload.id, payload.mode, payload.jobId);
+          next[fallbackKey] = {
+            key: fallbackKey,
+            id: payload.id,
+            title,
+            jobId: payload.jobId,
+            mode: payload.mode,
+            kind: "render",
+            status: "canceled",
+            progress: 1,
+            stage: "Canceled",
+            updatedAt: now,
+          };
+        }
+
+        return next;
       });
     };
 
@@ -470,6 +505,7 @@ export function NotificationCenterDrawer() {
         upsert({
           key,
           id: payload.id,
+          title: titleByContentIdRef.current.get(payload.id),
           kind: "render",
           status: "failed",
           progress: 1,
@@ -485,17 +521,11 @@ export function NotificationCenterDrawer() {
       error?: string;
     }) => {
       const key = jobKey("publish", payload.id, undefined, payload.jobId);
-      const status: JobStatus =
-        payload.status === "queued"
-          ? "queued"
-          : payload.status === "publishing"
-            ? "publishing"
-            : payload.status === "failed"
-              ? "failed"
-              : "completed";
+      const status = resolvePublishStatus(payload.status);
       upsert({
         key,
         id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
         kind: "publish",
         status,
@@ -503,19 +533,6 @@ export function NotificationCenterDrawer() {
         error: payload.error,
         updatedAt: Date.now(),
       });
-      if (status === "completed") {
-        notifyJobCompleted({
-          key,
-          kind: "publish",
-          id: payload.id,
-        });
-      } else if (status === "queued" || status === "publishing") {
-        notifyJobStarted({
-          key,
-          kind: "publish",
-          id: payload.id,
-        });
-      }
     };
 
     const handlePublishProgress = (payload: {
@@ -528,6 +545,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
         kind: "publish",
         status: "publishing",
@@ -535,11 +553,7 @@ export function NotificationCenterDrawer() {
         stage: payload.stage,
         updatedAt: Date.now(),
       });
-      notifyJobStarted({
-        key,
-        kind: "publish",
-        id: payload.id,
-      });
+      // Progress replay after reconnect should not retrigger start toast.
     };
 
     const handleCaptionUpdate = (payload: {
@@ -554,33 +568,20 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "caption",
-        status: payload.status,
+        status: normalizeJobStatus(payload.status),
         progress: payload.progress,
         error: payload.error,
         updatedAt: Date.now(),
       });
-      if (payload.status === "completed") {
-        notifyJobCompleted({
-          key,
-          kind: "caption",
-          id: payload.id,
-          mode: payload.mode,
-        });
-      } else if (payload.status === "queued" || payload.status === "processing") {
-        notifyJobStarted({
-          key,
-          kind: "caption",
-          id: payload.id,
-          mode: payload.mode,
-        });
-      }
     };
 
     socket.on("render:progress", handleRenderProgress);
     socket.on("render:complete", handleRenderComplete);
+    socket.on("render:cancel-requested", handleRenderCancelRequested);
     socket.on("content:update", handleContentUpdate);
     socket.on("publish:update", handlePublishUpdate);
     socket.on("publish:progress", handlePublishProgress);
@@ -589,6 +590,7 @@ export function NotificationCenterDrawer() {
     return () => {
       socket.off("render:progress", handleRenderProgress);
       socket.off("render:complete", handleRenderComplete);
+      socket.off("render:cancel-requested", handleRenderCancelRequested);
       socket.off("content:update", handleContentUpdate);
       socket.off("publish:update", handlePublishUpdate);
       socket.off("publish:progress", handlePublishProgress);
@@ -606,6 +608,7 @@ export function NotificationCenterDrawer() {
   const activeJobs = sortedJobs.filter((job) => isActiveStatus(job.status));
   const recentJobs = sortedJobs
     .filter((job) => !isActiveStatus(job.status))
+    .sort(compareJobsByRecency)
     .slice(0, 20);
   const showLoadingSkeleton =
     open &&
@@ -650,7 +653,7 @@ export function NotificationCenterDrawer() {
         </DrawerHeader>
         <Separator className="mb-4" />
         <div className="px-4 pb-4">
-          <ScrollArea className="h-[calc(100vh-8rem)] pr-1">
+          <ScrollArea className="h-[calc(100vh-8rem)] pr-3">
             <AnimatePresence mode="wait">
               {showLoadingSkeleton ? (
                 <motion.div

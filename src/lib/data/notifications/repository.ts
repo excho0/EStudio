@@ -225,3 +225,54 @@ export async function markNotificationsRead(userId: string, ids?: string[]) {
     },
   });
 }
+
+export async function finalizeActiveRenderNotificationsForContent(
+  userId: string,
+  contentId: string
+) {
+  const activeStatuses: NotificationStatus[] = ["queued", "processing", "rendering"];
+  return withNotificationsDb({
+    pg: async ({ db, now, table }) => {
+      const result = await db
+        .update(table)
+        .set({
+          status: "canceled",
+          progress: 1,
+          stage: "Canceled",
+          error: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(table.userId, userId),
+            eq(table.kind, "render"),
+            eq(table.contentId, contentId),
+            inArray(table.status, activeStatuses)
+          )
+        )
+        .returning({ id: table.id });
+      return result.length;
+    },
+    sqlite: async ({ db, nowMs, table }) => {
+      const result = await db
+        .update(table)
+        .set({
+          status: "canceled",
+          progress: 1,
+          stage: "Canceled",
+          error: null,
+          updatedAt: new Date(nowMs),
+        })
+        .where(
+          and(
+            eq(table.userId, userId),
+            eq(table.kind, "render"),
+            eq(table.contentId, contentId),
+            inArray(table.status, activeStatuses)
+          )
+        )
+        .returning({ id: table.id });
+      return result.length;
+    },
+  });
+}

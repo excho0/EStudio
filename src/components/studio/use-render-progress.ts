@@ -89,11 +89,13 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
     socket.on("render:progress", handleProgress);
     socket.on("render:complete", handleComplete);
     socket.on("content:update", handleContentUpdate);
+    socket.on("render:cancel-requested", handleComplete);
 
     return () => {
       socket.off("render:progress", handleProgress);
       socket.off("render:complete", handleComplete);
       socket.off("content:update", handleContentUpdate);
+      socket.off("render:cancel-requested", handleComplete);
     };
   }, [socket, paused]);
 

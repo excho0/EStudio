@@ -1,18 +1,25 @@
 import { createScopedSnapshotStore } from "@/lib/rendering/snapshot-store";
-import type { NotificationKind, NotificationStatus } from "@/types";
+import { z } from "zod";
+import { notificationItemSchema } from "@/lib/data/notifications/schemas";
 
-export type LiveNotificationSnapshot = {
-  id: string;
-  key: string;
-  contentId: string;
-  mode?: string;
-  kind: NotificationKind;
-  status: NotificationStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-  updatedAt: number;
-};
+export const liveNotificationSnapshotSchema = notificationItemSchema.pick({
+  id: true,
+  key: true,
+  contentId: true,
+  mode: true,
+  kind: true,
+  status: true,
+  progress: true,
+  stage: true,
+  error: true,
+  updatedAt: true,
+});
+
+export type LiveNotificationSnapshot = z.infer<typeof liveNotificationSnapshotSchema>;
+export type LiveNotificationSnapshotInput = Omit<
+  LiveNotificationSnapshot,
+  "id" | "updatedAt"
+> & { updatedAt?: number };
 
 const liveStore = createScopedSnapshotStore<LiveNotificationSnapshot>({
   keyPrefix: "notifications:live",
@@ -22,7 +29,7 @@ const liveStore = createScopedSnapshotStore<LiveNotificationSnapshot>({
 
 export const setLiveNotificationSnapshot = async (
   userId: string | null | undefined,
-  payload: Omit<LiveNotificationSnapshot, "id" | "updatedAt"> & { updatedAt?: number }
+  payload: LiveNotificationSnapshotInput
 ) => {
   await liveStore.set(userId, {
     id: payload.key,
@@ -47,4 +54,24 @@ export const clearLiveNotificationSnapshot = async (
 
 export const getLiveNotificationSnapshots = async (userId?: string | null) => {
   return liveStore.getAll(userId);
+};
+
+export const finalizeActiveLiveRenderNotificationsForContent = async (
+  userId: string | null | undefined,
+  contentId: string
+) => {
+  const snapshots = await liveStore.getAll(userId);
+  const entries = Object.entries(snapshots);
+  await Promise.all(
+    entries.map(async ([key, snapshot]) => {
+      const isActiveRender =
+        snapshot.kind === "render" &&
+        snapshot.contentId === contentId &&
+        (snapshot.status === "queued" ||
+          snapshot.status === "processing" ||
+          snapshot.status === "rendering");
+      if (!isActiveRender) return;
+      await liveStore.remove(userId, key);
+    })
+  );
 };
