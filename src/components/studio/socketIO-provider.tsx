@@ -24,24 +24,47 @@ type SocketIOContextValue = {
 const SocketIOContext = createContext<SocketIOContextValue | null>(null);
 const MetricsContext = createContext<MetricsPayload | null>(null);
 
+type WindowWithSocket = Window & {
+  __estudioSocket?: Socket;
+};
+
+const getBrowserSocket = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const win = window as WindowWithSocket;
+  if (!win.__estudioSocket) {
+    win.__estudioSocket = io({
+      path: "/api/socket",
+      autoConnect: true,
+      addTrailingSlash: false,
+      transports: ["websocket", "polling"],
+    });
+  }
+  return win.__estudioSocket;
+};
+
 export function SocketIOProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
+  const socket = useMemo(() => getBrowserSocket(), []);
   const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState<
-    "connecting" | "connected" | "disconnected" | "error"
-  >("connecting");
+  const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">(
+    "connecting"
+  );
   const [eventToken, setEventToken] = useState(0);
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
-  const [socket] = useState<Socket>(() => io({ path: "/api/socket" }));
   const registeredUserRef = useRef<string | null>(null);
   const registeredForSocketRef = useRef<string | null>(null);
   const socketIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!socket) {
+      return;
+    }
     const handleUpdate = () => {
       setEventToken((current) => current + 1);
       queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
@@ -96,7 +119,6 @@ export function SocketIOProvider({
       socket.off("render:update");
       socket.off("metrics:update", setMetrics);
       socket.off("connect_error");
-      socket.disconnect();
     };
   }, [queryClient, socket]);
 
@@ -120,6 +142,10 @@ export function useSocketIO() {
     throw new Error("useSocketIO must be used within SocketIOProvider.");
   }
   return context;
+}
+
+export function useOptionalSocketIO() {
+  return useContext(SocketIOContext);
 }
 
 export function useSocketMetrics() {

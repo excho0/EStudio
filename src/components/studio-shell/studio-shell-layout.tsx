@@ -11,6 +11,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { UserNav } from "@/components/studio-shell/user-nav";
+import { NotificationCenterDrawer } from "@/components/studio-shell/notification-center-drawer";
 import {
   RouteTransitionProvider,
   useRouteTransition,
@@ -49,6 +50,7 @@ function StudioShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationCenterDrawer />
             <UserNav />
           </div>
         </div>

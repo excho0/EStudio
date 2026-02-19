@@ -111,6 +111,7 @@ export function UserNav() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.98 }}
           transition={{ duration: 1, ease: "easeInOut" }}
+          className="flex items-center justify-center"
         >
           <DropdownMenu open={open} onOpenChange={setOpen}>
             <TooltipProvider disableHoverableContent>
