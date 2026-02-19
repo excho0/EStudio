@@ -8,9 +8,9 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import type { TemplateVideoProps } from "@/types";
+import type { TemplateVideoProps } from "../types";
 
-export type { TemplateVideoProps } from "@/types";
+export type { TemplateVideoProps } from "../types";
 
 export const TemplateVideo: React.FC<TemplateVideoProps> = ({
   title,

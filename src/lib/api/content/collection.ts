@@ -25,6 +25,7 @@ import {
 } from "@/lib/content/modes";
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { getLogger } from "@/lib/logging";
+import { emitCaptionUpdate } from "@/lib/socket/manager";
 
 const storage = getStorage();
 const logger = getLogger("api-content-collection");
@@ -62,6 +63,13 @@ const enqueueCaptionOnCreate = async (params: {
         typeof params.settings.captionsLanguage === "string"
           ? params.settings.captionsLanguage
           : undefined,
+    });
+    emitCaptionUpdate({
+      userId: params.userId,
+      id: params.id,
+      mode: params.mode,
+      status: "queued",
+      progress: 0,
     });
   } catch (error) {
     logger.warn(

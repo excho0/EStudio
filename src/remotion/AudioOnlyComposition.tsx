@@ -1,8 +1,8 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, Html5Audio } from "remotion";
-import type { AudioOnlyProps } from "@/types";
+import type { AudioOnlyProps } from "../types";
 
-export type { AudioOnlyProps } from "@/types";
+export type { AudioOnlyProps } from "../types";
 
 export const AudioOnlyComposition: React.FC<AudioOnlyProps> = ({
   audioSrc,

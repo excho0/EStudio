@@ -1,5 +1,5 @@
-import type { ContentLoopProps } from "@/types";
-import { captionDocumentSchema } from "@/types";
+import type { ContentLoopProps } from "../types";
+import { captionDocumentSchema } from "../types";
 
 export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   title: "Content Loop",

@@ -7,7 +7,7 @@ import {
   resolveContentLoopMetadata,
 } from "./content-loop-props";
 import { AudioOnlyComposition } from "./AudioOnlyComposition";
-import type { AudioOnlyProps } from "@/types";
+import type { AudioOnlyProps } from "../types";
 import { TemplateVideo } from "./TemplateVideo";
 
 export const RemotionRoot: React.FC = () => {

@@ -19,9 +19,7 @@ import { useAudioData } from "@remotion/media-utils";
 import { getAudioSpectrum } from "../lib/audio/fft";
 import { getLogBands } from "../lib/audio/bands";
 import { processAudioBars } from "../lib/audio/processing";
-import type { ContentLoopProps } from "@/types";
-
-export type { ContentLoopProps } from "@/types";
+import type { ContentLoopProps } from "../types";
 
 type VideoSlice = {
   from: number;

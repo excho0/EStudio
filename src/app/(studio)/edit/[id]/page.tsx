@@ -240,7 +240,6 @@ export default function EditContentPage() {
         ? "ready"
         : "notFound";
   const isReady = pageState === "ready";
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!contentQuery.data) return;
     const data = contentQuery.data;
@@ -607,7 +606,6 @@ export default function EditContentPage() {
   };
 
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!thumbnailFile) {
       setThumbnailPreview(null);
