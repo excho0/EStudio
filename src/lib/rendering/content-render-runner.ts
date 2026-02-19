@@ -4,7 +4,6 @@ import {
   ensureContentStore,
   getContentRenderDir,
   getContentRenderPath,
-  hasAnyRenderedOutput,
   resolveContentPath,
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
@@ -28,6 +27,11 @@ import {
   type InputProps,
 } from "./execute-render-job";
 import { clearRenderCancellation } from "@/lib/rendering/cancel-store";
+import {
+  clearRenderStatusCheckpoint,
+  resolveRollbackContentStatus,
+  setRenderStatusCheckpoint,
+} from "@/lib/rendering/status-checkpoint";
 
 const storage = getStorage();
 const logger = getLogger("content-render-runner");
@@ -102,6 +106,7 @@ export const executeRenderForContent = async ({
   }
 
   await ensureContentStore(userId);
+  await setRenderStatusCheckpoint(userId, id, item.status);
   await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
@@ -197,12 +202,11 @@ export const executeRenderForContent = async ({
     });
   } catch (error) {
     if (error instanceof RenderCanceledError) {
-      const nextStatus = (await hasAnyRenderedOutput(userId, id))
-        ? "rendered"
-        : "uploaded";
+      const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
       emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
       await clearRenderCancellation(userId, id);
+      await clearRenderStatusCheckpoint(userId, id);
       return {
         ok: true,
         status: "canceled",
@@ -214,8 +218,10 @@ export const executeRenderForContent = async ({
 
   const latest = await getContentItem(userId, id);
   if (latest?.status === "failed") {
+    await clearRenderStatusCheckpoint(userId, id);
     throw new ContentRenderError("Render failed. Please check server logs.", 500);
   }
+  await clearRenderStatusCheckpoint(userId, id);
 
   return {
     ok: true,

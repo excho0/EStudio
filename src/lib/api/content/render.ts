@@ -14,7 +14,6 @@ import {
 } from "@/lib/queue/render-queue";
 import { triggerRenderRequestSchema } from "@/lib/data/render";
 import { contentModeRegistry, normalizeSettingsMap } from "@/lib/content/modes";
-import { hasAnyRenderedOutput } from "@/lib/content/store";
 import {
   ContentRenderError,
 } from "@/lib/rendering/content-render-runner";
@@ -26,6 +25,11 @@ import {
   clearRenderCancellation,
   requestRenderCancellation,
 } from "@/lib/rendering/cancel-store";
+import {
+  clearRenderStatusCheckpoint,
+  resolveRollbackContentStatus,
+  setRenderStatusCheckpoint,
+} from "@/lib/rendering/status-checkpoint";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 
@@ -114,6 +118,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
   if (shouldUseQueue) {
     try {
       const queued = await withRenderRequestLock(userId, id, requestedMode, async () => {
+        await setRenderStatusCheckpoint(userId, id, item.status);
         await enqueueRenderJob({ id, userId, backend, mode: requestedMode });
         await updateContentItem(userId, id, { status: "rendering" });
         emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
@@ -216,13 +221,12 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
 
   const latest = await getContentItem(userId, id);
   if (latest?.status === "rendering") {
-    const nextStatus = (await hasAnyRenderedOutput(userId, id))
-      ? "rendered"
-      : "uploaded";
+    const nextStatus = await resolveRollbackContentStatus(userId, id);
     await updateContentItem(userId, id, { status: nextStatus });
     emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
   }
   await clearRenderProgressSnapshotsForContent({ userId, id });
   await clearRenderCancellation(userId, id);
+  await clearRenderStatusCheckpoint(userId, id);
   return NextResponse.json({ ok: true, status: "canceled", id }, { status: 200 });
 };

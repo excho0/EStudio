@@ -11,6 +11,10 @@ import {
 import { updateContentItem } from "@/lib/data/content";
 import { getLogger } from "@/lib/logging";
 import { isRenderCancellationRequested } from "@/lib/rendering/cancel-store";
+import {
+  clearRenderStatusCheckpoint,
+  resolveRollbackContentStatus,
+} from "@/lib/rendering/status-checkpoint";
 import type {
   BundleFn,
   CombineChunksFn,
@@ -826,6 +830,7 @@ export const startRenderJob = async ({
     const updated = await updateContentItem(userId, id, {
       status: "rendered",
     });
+    await clearRenderStatusCheckpoint(userId, id);
     lastProgressPercent.delete(id);
     emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
     emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
@@ -834,11 +839,14 @@ export const startRenderJob = async ({
     if (isCancellationLikeError(error)) {
       void clearRenderProgressSnapshot({ userId, id, mode });
       lastProgressPercent.delete(id);
+      await clearRenderStatusCheckpoint(userId, id);
       throw new RenderCanceledError();
     }
     void clearRenderProgressSnapshot({ userId, id, mode });
-    await updateContentItem(userId, id, { status: "failed" });
-    emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
+    const nextStatus = await resolveRollbackContentStatus(userId, id);
+    await updateContentItem(userId, id, { status: nextStatus });
+    await clearRenderStatusCheckpoint(userId, id);
+    emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
     const message = error instanceof Error ? error.message : "Render failed";
     renderLogger.error({
       event: "render-failed",

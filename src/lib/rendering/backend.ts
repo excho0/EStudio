@@ -5,7 +5,6 @@ import {
   ensureContentStore,
   getContentRenderDir,
   getContentRenderPath,
-  hasAnyRenderedOutput,
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
 import { getSlug } from "@/lib/shared/helpers";
@@ -25,6 +24,11 @@ import {
   clearRenderCancellation,
   isRenderCancellationRequested,
 } from "@/lib/rendering/cancel-store";
+import {
+  clearRenderStatusCheckpoint,
+  resolveRollbackContentStatus,
+  setRenderStatusCheckpoint,
+} from "@/lib/rendering/status-checkpoint";
 import { randomBytes } from "crypto";
 
 export const renderBackendSchema = z.enum(["local", "lambda"]);
@@ -149,6 +153,7 @@ const executeLambdaRenderForContent = async ({
   const region = rawRegion as RemotionLambdaClient.AwsRegion;
 
   await ensureContentStore(userId);
+  await setRenderStatusCheckpoint(userId, id, item.status);
   await updateContentItem(userId, id, { status: "rendering" });
   emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
 
@@ -191,13 +196,12 @@ const executeLambdaRenderForContent = async ({
   while (Date.now() < deadline) {
     const cancelRequested = await isRenderCancellationRequested(userId, id);
     if (cancelRequested) {
-      const nextStatus = (await hasAnyRenderedOutput(userId, id))
-        ? "rendered"
-        : "uploaded";
+      const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
       emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
       await clearRenderProgressSnapshot({ userId, id, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
+      await clearRenderStatusCheckpoint(userId, id);
       throw new RenderCanceledError();
     }
     const progress = await lambdaModule.getRenderProgress({
@@ -226,8 +230,10 @@ const executeLambdaRenderForContent = async ({
     });
 
     if (fatalError) {
-      await updateContentItem(userId, id, { status: "failed" });
-      emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
+      const nextStatus = await resolveRollbackContentStatus(userId, id);
+      await updateContentItem(userId, id, { status: nextStatus });
+      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+      await clearRenderStatusCheckpoint(userId, id);
       throw new ContentRenderError(`Lambda render failed: ${fatalError}`, 500);
     }
 
@@ -237,15 +243,19 @@ const executeLambdaRenderForContent = async ({
           ? progress.outputFile
           : null;
       if (!outputFile) {
-        await updateContentItem(userId, id, { status: "failed" });
-        emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
+        const nextStatus = await resolveRollbackContentStatus(userId, id);
+        await updateContentItem(userId, id, { status: nextStatus });
+        emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+        await clearRenderStatusCheckpoint(userId, id);
         throw new ContentRenderError("Lambda render completed without output file URL.", 500);
       }
 
       const outputResponse = await fetch(outputFile);
       if (!outputResponse.ok) {
-        await updateContentItem(userId, id, { status: "failed" });
-        emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
+        const nextStatus = await resolveRollbackContentStatus(userId, id);
+        await updateContentItem(userId, id, { status: nextStatus });
+        emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+        await clearRenderStatusCheckpoint(userId, id);
         throw new ContentRenderError(
           `Failed to download lambda output: HTTP ${outputResponse.status}`,
           500
@@ -258,6 +268,7 @@ const executeLambdaRenderForContent = async ({
       emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
       emitRenderComplete({ userId, id, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
+      await clearRenderStatusCheckpoint(userId, id);
 
       return {
         ok: true,
@@ -270,8 +281,10 @@ const executeLambdaRenderForContent = async ({
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  await updateContentItem(userId, id, { status: "failed" });
-  emitContentUpdate({ userId, type: "content:status", id, status: "failed" });
+  const nextStatus = await resolveRollbackContentStatus(userId, id);
+  await updateContentItem(userId, id, { status: nextStatus });
+  emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+  await clearRenderStatusCheckpoint(userId, id);
   throw new ContentRenderError("Lambda render timed out while waiting for completion.", 504);
 };
 
@@ -306,5 +319,7 @@ export const executeRenderForContentWithBackend = async ({
       };
     }
     throw error;
+  } finally {
+    await clearRenderStatusCheckpoint(userId, id);
   }
 };
