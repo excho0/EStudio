@@ -5,6 +5,12 @@ export {
 } from "./captions";
 export type { CaptionSegment, CaptionDocument } from "./captions";
 export type { MetricsPayload } from "./metrics";
+export type {
+  NotificationKind,
+  NotificationStatus,
+  NotificationItem,
+  NotificationListResponse,
+} from "./notifications";
 export type { ContentAssetKind } from "./content/store";
 export type { PostgresDrizzleDb, SqliteDrizzleDb, DrizzleDb } from "./db/drizzle";
 export type {
@@ -56,6 +62,7 @@ export type {
 export type { RenderProgress } from "./render";
 export type {
   AppEventMap,
+  CaptionUpdatePayload,
   ContentUpdatePayload,
   RenderProgressPayload,
   RenderCompletePayload,

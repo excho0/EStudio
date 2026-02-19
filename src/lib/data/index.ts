@@ -2,6 +2,7 @@ export * from "./content";
 export * from "./events";
 export * from "./meta";
 export * from "./metrics";
+export * from "./notifications";
 export * from "./publish";
 export * from "./render";
 export * from "./settings";

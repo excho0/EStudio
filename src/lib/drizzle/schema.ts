@@ -182,6 +182,34 @@ export const publishes = sqliteTable(
   ]
 );
 
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    contentId: text("contentId").notNull(),
+    mode: text("mode"),
+    kind: text("kind").notNull(),
+    status: text("status").notNull(),
+    progress: real("progress"),
+    stage: text("stage"),
+    error: text("error"),
+    metadata: text("metadata"),
+    readAt: integer("readAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("notifications_user_id_idx").on(table.userId),
+    index("notifications_user_updated_at_idx").on(table.userId, table.updatedAt),
+    index("notifications_user_read_at_idx").on(table.userId, table.readAt),
+    index("notifications_user_key_idx").on(table.userId, table.key),
+  ]
+);
+
 export const contentItemsPg = pgTable(
   "content_items",
   {
@@ -245,6 +273,34 @@ export const publishesPg = pgTable(
     pgIndex("publishes_provider_account_idx").on(table.provider, table.providerAccountId),
     pgIndex("publishes_provider_asset_idx").on(table.provider, table.providerAssetId),
     pgIndex("publishes_status_idx").on(table.status),
+  ]
+);
+
+export const notificationsPg = pgTable(
+  "notifications",
+  {
+    id: pgText("id").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    key: pgText("key").notNull(),
+    contentId: pgText("contentId").notNull(),
+    mode: pgText("mode"),
+    kind: pgText("kind").notNull(),
+    status: pgText("status").notNull(),
+    progress: pgReal("progress"),
+    stage: pgText("stage"),
+    error: pgText("error"),
+    metadata: pgJsonb("metadata"),
+    readAt: pgTimestamp("readAt", { mode: "date" }),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("notifications_user_id_idx").on(table.userId),
+    pgIndex("notifications_user_updated_at_idx").on(table.userId, table.updatedAt),
+    pgIndex("notifications_user_read_at_idx").on(table.userId, table.readAt),
+    pgIndex("notifications_user_key_idx").on(table.userId, table.key),
   ]
 );
 
@@ -352,6 +408,7 @@ export const sqliteSchema = {
   appTokens,
   contentItems,
   publishes,
+  notifications,
 };
 
 export const schema = {
@@ -363,6 +420,7 @@ export const schema = {
   appTokens: appTokensPg,
   contentItems: contentItemsPg,
   publishes: publishesPg,
+  notifications: notificationsPg,
 };
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -371,6 +429,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   authenticators: many(authenticators),
   appTokens: many(appTokens),
   publishes: many(publishes),
+  notifications: many(notifications),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -402,6 +461,10 @@ export const publishesRelations = relations(publishes, ({ one }) => ({
   }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
+}));
+
 export const usersPgRelations = relations(usersPg, ({ many }) => ({
   accounts: many(accountsPg),
   sessions: many(sessionsPg),
@@ -409,6 +472,7 @@ export const usersPgRelations = relations(usersPg, ({ many }) => ({
   appTokens: many(appTokensPg),
   contentItems: many(contentItemsPg),
   publishes: many(publishesPg),
+  notifications: many(notificationsPg),
 }));
 
 export const accountsPgRelations = relations(accountsPg, ({ one }) => ({
@@ -440,5 +504,12 @@ export const publishesPgRelations = relations(publishesPg, ({ one }) => ({
   contentItem: one(contentItemsPg, {
     fields: [publishesPg.contentId],
     references: [contentItemsPg.id],
+  }),
+}));
+
+export const notificationsPgRelations = relations(notificationsPg, ({ one }) => ({
+  user: one(usersPg, {
+    fields: [notificationsPg.userId],
+    references: [usersPg.id],
   }),
 }));
