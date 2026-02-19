@@ -202,6 +202,7 @@ export const transcribeWithLocalWhisper = async ({
   audio,
   fileName,
   language,
+  onProgress,
 }: {
   userId: string;
   contentId: string;
@@ -209,6 +210,7 @@ export const transcribeWithLocalWhisper = async ({
   audio: Buffer;
   fileName: string;
   language?: string;
+  onProgress?: (progress: number) => void;
 }): Promise<CaptionDocument> => {
   const whisperCppVersion = resolveWhisperVersion();
   const model = resolveWhisperModel();
@@ -240,6 +242,7 @@ export const transcribeWithLocalWhisper = async ({
         flashAttention,
         additionalArgs,
         printOutput: process.env.CAPTION_LOCAL_WHISPER_VERBOSE === "true",
+        onProgress,
       });
 
     let whisperOutput;

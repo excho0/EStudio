@@ -4,6 +4,7 @@ import { getContentItem } from "@/lib/data/content";
 import { contentModeRegistry, normalizeSettingsMap } from "@/lib/content/modes";
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { processCaptionJob } from "@/lib/captions/process-caption-job";
+import { emitCaptionUpdate } from "@/lib/socket/manager";
 
 const triggerCaptionsRequestSchema = z.object({
   mode: z.string().min(1).optional(),
@@ -58,6 +59,7 @@ export const handleTriggerCaptions = async (
           ? modeSettings.captionsLanguage
           : undefined),
     });
+    emitCaptionUpdate({ userId, id, mode, status: "queued", progress: 0 });
     return NextResponse.json({ ok: true, status: "queued", id, mode }, { status: 202 });
   }
 

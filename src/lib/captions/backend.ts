@@ -16,6 +16,7 @@ export type CaptionBackendInput = {
   audio: Buffer;
   fileName: string;
   language?: string;
+  onProgress?: (progress: number) => void;
 };
 
 export type CaptionBackendRunner = (

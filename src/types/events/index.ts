@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type {
   contentUpdatePayloadSchema,
+  captionUpdatePayloadSchema,
   providerConnectionPayloadSchema,
   publishProgressPayloadSchema,
   publishQueuedPayloadSchema,
@@ -20,6 +21,7 @@ export type RenderCompletePayload = z.infer<typeof renderCompletePayloadSchema>;
 export type PublishUpdatePayload = z.infer<typeof publishUpdatePayloadSchema>;
 export type PublishProgressPayload = z.infer<typeof publishProgressPayloadSchema>;
 export type PublishQueuedPayload = z.infer<typeof publishQueuedPayloadSchema>;
+export type CaptionUpdatePayload = z.infer<typeof captionUpdatePayloadSchema>;
 export type ProviderConnectionPayload = z.infer<typeof providerConnectionPayloadSchema>;
 export type UserProfileUpdatedPayload = z.infer<typeof userProfileUpdatedPayloadSchema>;
 
@@ -40,6 +42,11 @@ export type AppEventMap = {
   "publish.completed": PublishUpdatePayload;
   "publish.failed": PublishUpdatePayload;
   "publish.update": PublishUpdatePayload;
+  "caption.queued": CaptionUpdatePayload;
+  "caption.started": CaptionUpdatePayload;
+  "caption.completed": CaptionUpdatePayload;
+  "caption.failed": CaptionUpdatePayload;
+  "caption.update": CaptionUpdatePayload;
   "provider.connection.created": ProviderConnectionPayload;
   "provider.connection.deleted": ProviderConnectionPayload;
   "user.profile.updated": UserProfileUpdatedPayload;

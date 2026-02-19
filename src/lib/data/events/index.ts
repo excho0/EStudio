@@ -68,6 +68,16 @@ export const publishQueuedPayloadSchema = z.object({
   provider: z.string(),
 }).describe("Publish queued payload.");
 
+/** Caption update event payload. */
+export const captionUpdatePayloadSchema = z.object({
+  userId: z.string().nullable().optional(),
+  id: z.string(),
+  mode: z.string().optional(),
+  status: z.enum(["queued", "processing", "completed", "failed"]),
+  progress: z.number().optional(),
+  error: z.string().optional(),
+}).describe("Caption update payload.");
+
 /** Provider connection event payload. */
 export const providerConnectionPayloadSchema = z.object({
   userId: z.string(),

@@ -9,6 +9,7 @@ export const transcribeWithOpenAiWhisper = async ({
   audio,
   fileName,
   language,
+  onProgress: _onProgress,
 }: {
   userId: string;
   contentId: string;
@@ -16,7 +17,9 @@ export const transcribeWithOpenAiWhisper = async ({
   audio: Buffer;
   fileName: string;
   language?: string;
+  onProgress?: (progress: number) => void;
 }): Promise<CaptionDocument> => {
+  void _onProgress;
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY for OpenAI caption backend.");
