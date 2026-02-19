@@ -19,6 +19,7 @@ import {
   Settings2,
   CircleAlert,
   Eye,
+  Subtitles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -60,6 +61,7 @@ import {
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
+  resolveFieldActionState,
 } from "@/lib/content/modes/ui-helpers";
 import { sdk } from "@/lib/sdk";
 
@@ -224,6 +226,40 @@ export default function DashboardUploadPage() {
 
   const renderModeField = (field: ContentModeField) => {
     const disabled = isFieldDisabled(fieldMap, currentSettings, field);
+    if (field.input === "action") {
+      const actionState = resolveFieldActionState({
+        field,
+        disabled: true,
+      });
+      if (!actionState) return null;
+      const { action } = actionState;
+      const ActionIcon = action.icon ?? Subtitles;
+      return (
+        <div key={field.key} className="grid gap-2">
+          <LabelWithTooltip
+            htmlFor={field.key}
+            text={field.label}
+            tip={field.tooltip ?? ""}
+          />
+          <Button
+            type="button"
+            id={field.key}
+            variant={action.variant ?? "outline"}
+            size={action.size ?? "sm"}
+            loading={actionState.loading}
+            loadingText={action.loadingLabel}
+            disabled={actionState.disabled}
+            className="justify-start"
+            onClick={() =>
+              toast.info("Caption generation is available after content is created.")
+            }
+          >
+            <ActionIcon className="h-4 w-4" />
+            {action.label ?? field.label}
+          </Button>
+        </div>
+      );
+    }
     if (field.input === "toggle") {
       return (
         <SettingToggleRow
@@ -264,7 +300,7 @@ export default function DashboardUploadPage() {
             options={selectOptions.map((option) => ({
               value: option.value,
               label: option.label,
-              icon: SlidersHorizontal,
+              icon: option.icon ?? SlidersHorizontal,
               disabled,
             }))}
           />

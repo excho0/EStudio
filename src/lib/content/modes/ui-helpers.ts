@@ -201,3 +201,32 @@ export const isFieldDisabled = (
     );
   return allMatched || anyMatched;
 };
+
+export type FieldActionHandler = (
+  field: ContentModeField
+) => void | Promise<void>;
+
+export type ResolveFieldActionInput = {
+  field: ContentModeField;
+  disabled: boolean;
+  loadingMap?: Record<string, boolean>;
+  handlers?: Record<string, FieldActionHandler | undefined>;
+};
+
+export const resolveFieldActionState = ({
+  field,
+  disabled,
+  loadingMap,
+  handlers,
+}: ResolveFieldActionInput) => {
+  if (field.input !== "action" || !field.action) {
+    return null;
+  }
+  const action = field.action;
+  return {
+    action,
+    loading: Boolean(loadingMap?.[action.id]),
+    disabled,
+    handler: handlers?.[action.id],
+  };
+};

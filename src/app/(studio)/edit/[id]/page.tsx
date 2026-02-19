@@ -18,6 +18,7 @@ import {
   RotateCw,
   Save,
   AlertCircle,
+  Subtitles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,8 @@ import {
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
+  resolveFieldActionState,
+  type FieldActionHandler,
 } from "@/lib/content/modes/ui-helpers";
 import { ModeSettingsRenderer } from "@/components/content-settings/mode-settings";
 import {
@@ -210,6 +213,9 @@ export default function EditContentPage() {
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
+  const [fieldActionLoading, setFieldActionLoading] = useState<
+    Record<string, boolean>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<{
     formValues: FormValues;
@@ -425,8 +431,92 @@ export default function EditContentPage() {
     });
   };
 
+  const setModeActionLoading = (actionId: string, loading: boolean) => {
+    setFieldActionLoading((current) => ({
+      ...current,
+      [actionId]: loading,
+    }));
+  };
+
+  const handleGenerateCaptions: FieldActionHandler = async () => {
+    if (!item) {
+      toast.error("Load the content item first.");
+      return;
+    }
+
+    const mode = formValues.mode || item.mode || DEFAULT_CONTENT_MODE;
+    const backend = String(getFieldValue("captionsBackend") || "openai") as
+      | "openai"
+      | "local";
+    const language = String(getFieldValue("captionsLanguage") || "en");
+    setModeActionLoading("captions.generate", true);
+    try {
+      const result = await sdk.content.triggerCaptions(item.id, {
+        mode,
+        backend,
+        language,
+      });
+      toast.success(
+        result.status === "queued"
+          ? "Caption generation queued."
+          : "Captions generated."
+      );
+
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.contentItem(item.id),
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to generate captions."
+      );
+    } finally {
+      setModeActionLoading("captions.generate", false);
+    }
+  };
+
+  const fieldActionHandlers: Record<string, FieldActionHandler> = {
+    "captions.generate": handleGenerateCaptions,
+  };
+
   const renderModeField = (field: ContentModeField) => {
     const disabled = isFieldDisabled(fieldMap, currentSettings, field);
+    if (field.input === "action") {
+      const actionState = resolveFieldActionState({
+        field,
+        disabled: disabled || !item,
+        loadingMap: fieldActionLoading,
+        handlers: fieldActionHandlers,
+      });
+      if (!actionState) return null;
+      const { action, loading, handler } = actionState;
+      const ActionIcon = action.icon ?? Subtitles;
+      return (
+        <div key={field.key} className="grid gap-2">
+          <LabelWithTooltip
+            htmlFor={field.key}
+            text={field.label}
+            tip={field.tooltip ?? ""}
+          />
+          <Button
+            type="button"
+            id={field.key}
+            variant={action.variant ?? "outline"}
+            size={action.size ?? "sm"}
+            loading={loading}
+            loadingText={action.loadingLabel}
+            disabled={actionState.disabled}
+            className="justify-start"
+            onClick={() => {
+              if (!handler) return;
+              void handler(field);
+            }}
+          >
+            <ActionIcon className="h-4 w-4" />
+            {action.label ?? field.label}
+          </Button>
+        </div>
+      );
+    }
     if (field.input === "toggle") {
       return (
         <SettingToggleRow
@@ -467,7 +557,7 @@ export default function EditContentPage() {
             options={selectOptions.map((option) => ({
               value: option.value,
               label: option.label,
-              icon: SlidersHorizontal,
+              icon: option.icon ?? SlidersHorizontal,
               disabled,
             }))}
           />

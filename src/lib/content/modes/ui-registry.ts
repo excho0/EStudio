@@ -5,11 +5,17 @@ import {
   SlidersHorizontal,
   Video,
   Monitor,
+  Cloud,
+  HardDrive,
+  Languages,
+  Captions,
+  MessageSquareText,
   ChartNoAxesColumn,
   Spotlight,
   Timer,
   Atom,
   Blend,
+  Subtitles,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
@@ -21,7 +27,8 @@ export type ContentModeFieldInput =
   | "number"
   | "slider"
   | "toggle"
-  | "select";
+  | "select"
+  | "action";
 
 export type ContentModeField = {
   key: string;
@@ -32,7 +39,7 @@ export type ContentModeField = {
   min?: number;
   max?: number;
   step?: number;
-  options?: Array<{ label: string; value: string }>;
+  options?: Array<{ label: string; value: string; icon?: LucideIcon }>;
   suffix?: string;
   disabledWhen?: {
     all?: Array<{
@@ -52,6 +59,14 @@ export type ContentModeField = {
   }>;
   serialize?: (value: unknown) => number | string | boolean;
   deserialize?: (value: number | string | boolean) => unknown;
+  action?: {
+    id: string;
+    label?: string;
+    loadingLabel?: string;
+    icon?: LucideIcon;
+    variant?: "default" | "secondary" | "outline" | "ghost" | "destructive";
+    size?: "default" | "sm" | "lg";
+  };
 };
 
 export type ContentModeSection = {
@@ -163,6 +178,84 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+      },
+    ],
+  },
+  {
+    id: "captions",
+    title: "Captions",
+    description: "Automatic subtitle generation and style.",
+    icon: Subtitles,
+    layout: "list",
+    fields: [
+      {
+        key: "captionsEnabled",
+        label: "Enable Captions",
+        tooltip: "Generate and render captions for this mode.",
+        input: "toggle",
+      },
+      {
+        key: "captionsBackend",
+        label: "Caption Backend",
+        tooltip: "Select transcription provider backend.",
+        input: "select",
+        defaultValue: "openai",
+        options: [
+          { label: "OpenAI Whisper", value: "openai", icon: Cloud },
+          { label: "Local Whisper.cpp", value: "local", icon: HardDrive },
+        ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsLanguage",
+        label: "Language",
+        tooltip: "ISO language hint sent to caption backend (for example: en, es).",
+        input: "select",
+        defaultValue: "en",
+        options: [
+          { label: "English", value: "en", icon: Languages },
+          { label: "Spanish", value: "es", icon: Languages },
+          { label: "Portuguese", value: "pt", icon: Languages },
+          { label: "French", value: "fr", icon: Languages },
+          { label: "German", value: "de", icon: Languages },
+        ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsStyle",
+        label: "Caption Style",
+        tooltip: "Choose subtitle rendering style for future caption overlay components.",
+        input: "select",
+        defaultValue: "subtitle",
+        options: [
+          { label: "Subtitle", value: "subtitle", icon: Captions },
+          { label: "TikTok-style", value: "tiktok", icon: MessageSquareText },
+        ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsGenerate",
+        label: "Captions",
+        tooltip:
+          "Generate captions now using the selected backend.",
+        input: "action",
+        action: {
+          id: "captions.generate",
+          label: "Generate Captions",
+          loadingLabel: "Generating captions...",
+          icon: Subtitles,
+          variant: "outline",
+          size: "sm",
+        },
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
       },
     ],
   },

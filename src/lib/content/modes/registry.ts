@@ -3,6 +3,21 @@ import type { ContentItem } from "@/types";
 import type { ContentLoopProps } from "@/types";
 import { buildContentLoopPropsFromItem } from "@/remotion/content-loop-props";
 
+const getSharedCaptionsData = (settings: unknown): ContentLoopProps["captionsData"] => {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return null;
+  }
+  const shared = (settings as Record<string, unknown>).__shared;
+  if (!shared || typeof shared !== "object" || Array.isArray(shared)) {
+    return null;
+  }
+  return (
+    (shared as Record<string, unknown>).captionsData as
+      | ContentLoopProps["captionsData"]
+      | undefined
+  ) ?? null;
+};
+
 export type ContentModeDefinition<TSettings extends z.ZodTypeAny, TProps> = {
   id: string;
   label: string;
@@ -123,6 +138,12 @@ export const videoLoopSettingsSchema = z
         height: z.number().int().positive().optional(),
       })
       .default({ preset: "landscape_hd" }),
+    captionsEnabled: z.boolean().default(false),
+    captionsBackend: z.enum(["openai", "local"]).default("openai"),
+    captionsLanguage: z.string().min(2).max(16).default("en"),
+    captionsStyle: z
+      .enum(["subtitle", "tiktok"])
+      .default("subtitle"),
     paletteModeOverride: z.enum(["auto", "manual"]).optional(),
     paletteOverride: z.array(z.string()).optional(),
   })
@@ -137,8 +158,9 @@ export const contentModeRegistry = {
     schema: videoLoopSettingsSchema,
     defaults: videoLoopSettingsSchema.parse({}),
     compositionId: "ContentLoop",
-    buildProps: ({ item, settings, assets }) =>
-      buildContentLoopPropsFromItem(
+    buildProps: ({ item, settings, assets }) => {
+      const sharedCaptionsData = getSharedCaptionsData(item.settings ?? {});
+      return buildContentLoopPropsFromItem(
         {
           ...item,
           settings: settings as Record<string, unknown>,
@@ -160,8 +182,10 @@ export const contentModeRegistry = {
             (settings as z.infer<typeof videoLoopSettingsSchema>).paletteOverride ??
             item.colorPalette ??
             undefined,
+          captionsData: sharedCaptionsData,
         }
-      ) as ContentLoopProps,
+      ) as ContentLoopProps;
+    },
   },
   video_loop_short: {
     id: "video_loop_short",
@@ -176,8 +200,9 @@ export const contentModeRegistry = {
       },
     }),
     compositionId: "ContentLoop",
-    buildProps: ({ item, settings, assets }) =>
-      buildContentLoopPropsFromItem(
+    buildProps: ({ item, settings, assets }) => {
+      const sharedCaptionsData = getSharedCaptionsData(item.settings ?? {});
+      return buildContentLoopPropsFromItem(
         {
           ...item,
           settings: settings as Record<string, unknown>,
@@ -199,8 +224,10 @@ export const contentModeRegistry = {
             (settings as z.infer<typeof videoLoopSettingsSchema>).paletteOverride ??
             item.colorPalette ??
             undefined,
+          captionsData: sharedCaptionsData,
         }
-      ) as ContentLoopProps,
+      ) as ContentLoopProps;
+    },
   },
 } satisfies Record<string, ContentModeDefinition<z.ZodTypeAny, unknown>>;
 
