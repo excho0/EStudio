@@ -1,4 +1,5 @@
 import type { ContentLoopProps } from "@/types";
+import { captionDocumentSchema } from "@/types";
 
 export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   title: "Content Loop",
@@ -35,6 +36,9 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   videoDurationSeconds: 4,
   playbackRate: 1,
   overlapRatio: 0.25,
+  captionsEnabled: false,
+  captionsStyle: "subtitle",
+  captionsData: null,
   renderShaderEnabled: false,
   renderShaderDebugMode: "none",
   songDurationSeconds: 30,
@@ -81,6 +85,9 @@ type ContentLoopItemLike = {
   overlapRatio?: number | null;
   playbackRate?: number | null;
   scalePercent?: number | null;
+  captionsEnabled?: boolean | null;
+  captionsStyle?: "subtitle" | "tiktok" | null;
+  captionsData?: unknown;
   colorPalette?: string[] | null;
   paletteMode?: "auto" | "manual" | null;
   songDurationSeconds?: number | null;
@@ -92,8 +99,22 @@ export const buildContentLoopPropsFromItem = (
   overrides: Partial<ContentLoopProps> = {}
 ): ContentLoopProps => {
   const settings = (item.settings ?? {}) as Record<string, unknown>;
+  const sharedSettings =
+    settings.__shared && typeof settings.__shared === "object"
+      ? (settings.__shared as Record<string, unknown>)
+      : {};
   const getSetting = <T>(key: string, fallback?: T) =>
     (settings[key] as T | undefined) ?? fallback;
+
+  const rawCaptionsData =
+    sharedSettings.captionsData ??
+    getSetting<unknown>("captionsData") ??
+    item.captionsData ??
+    null;
+  const parsedCaptionsData = captionDocumentSchema
+    .nullable()
+    .safeParse(rawCaptionsData);
+  const captionsData = parsedCaptionsData.success ? parsedCaptionsData.data : null;
 
   return buildContentLoopProps({
     title: item.title ?? CONTENT_LOOP_DEFAULTS.title,
@@ -207,6 +228,16 @@ export const buildContentLoopPropsFromItem = (
       getSetting<number>("overlapRatio") ??
       item.overlapRatio ??
       CONTENT_LOOP_DEFAULTS.overlapRatio,
+    captionsEnabled:
+      getSetting<boolean>("captionsEnabled") ??
+      item.captionsEnabled ??
+      CONTENT_LOOP_DEFAULTS.captionsEnabled,
+    captionsStyle:
+      getSetting<"subtitle" | "tiktok">("captionsStyle") ??
+      item.captionsStyle ??
+      CONTENT_LOOP_DEFAULTS.captionsStyle,
+    captionsData:
+      captionsData ?? CONTENT_LOOP_DEFAULTS.captionsData,
     playbackRate:
       getSetting<number>("playbackRate") ??
       item.playbackRate ??

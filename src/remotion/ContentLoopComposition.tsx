@@ -251,6 +251,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   videoDurationSeconds,
   playbackRate = 1,
   overlapRatio = null,
+  captionsEnabled = false,
+  captionsStyle = "subtitle",
+  captionsData = null,
 }) => {
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
@@ -679,6 +682,16 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
+  const activeCaption = useMemo(() => {
+    if (!captionsEnabled || !captionsData?.segments?.length) {
+      return null;
+    }
+    const timeMs = (frame / fps) * 1000;
+    const segment = captionsData.segments.find(
+      (item) => timeMs >= item.startMs && timeMs < item.endMs
+    );
+    return segment?.text?.trim() || null;
+  }, [captionsData?.segments, captionsEnabled, fps, frame]);
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
       return 1;
@@ -912,6 +925,51 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         </AbsoluteFill>
       )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
+      {captionsEnabled && activeCaption ? (
+        <AbsoluteFill
+          style={{
+            pointerEvents: "none",
+            justifyContent: "flex-end",
+            alignItems: "center",
+            padding: captionsStyle === "tiktok" ? "0 24px 84px" : "0 24px 64px",
+            zIndex: 30,
+          }}
+        >
+          <div
+            style={
+              captionsStyle === "tiktok"
+                ? {
+                    maxWidth: "92%",
+                    fontSize: 54,
+                    fontWeight: 900,
+                    lineHeight: 1.06,
+                    letterSpacing: 0.4,
+                    textAlign: "center",
+                    textTransform: "uppercase",
+                    color: "#FFFFFF",
+                    textShadow:
+                      "0 3px 10px rgba(0,0,0,0.78), 0 0 28px rgba(0,0,0,0.5)",
+                  }
+                : {
+                    maxWidth: "86%",
+                    fontSize: 40,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    textAlign: "center",
+                    color: "#FFFFFF",
+                    backgroundColor: "rgba(0,0,0,0.58)",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    borderRadius: 12,
+                    padding: "12px 18px",
+                    textShadow: "0 2px 8px rgba(0,0,0,0.75)",
+                    backdropFilter: "blur(2px)",
+                  }
+            }
+          >
+            {activeCaption}
+          </div>
+        </AbsoluteFill>
+      ) : null}
       {visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{

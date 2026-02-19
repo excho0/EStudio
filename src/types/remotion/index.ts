@@ -1,3 +1,5 @@
+import type { CaptionDocument } from "../captions";
+
 export type ContentLoopProps = {
   title: string;
   thumbnailSrc?: string;
@@ -33,6 +35,9 @@ export type ContentLoopProps = {
   videoDurationSeconds?: number;
   playbackRate?: number;
   overlapRatio?: number | null;
+  captionsEnabled?: boolean;
+  captionsStyle?: "subtitle" | "tiktok";
+  captionsData?: CaptionDocument | null;
   renderShaderEnabled?: boolean;
   renderShaderDebugMode?: "none" | "passthrough" | "uv" | "solid";
   songDurationSeconds?: number;
