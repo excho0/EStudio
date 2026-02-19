@@ -476,7 +476,6 @@ export function PublishDrawer({
     setSubmitting(true);
     try {
       const publishId = await publishMutation.mutateAsync();
-      toast.success("Publish draft created.");
       if (publishId) {
         setActivePublishId(publishId);
         setPublishStatus("queued");

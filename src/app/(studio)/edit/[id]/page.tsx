@@ -450,16 +450,11 @@ export default function EditContentPage() {
     const language = String(getFieldValue("captionsLanguage") || "en");
     setModeActionLoading("captions.generate", true);
     try {
-      const result = await sdk.content.triggerCaptions(item.id, {
+      await sdk.content.triggerCaptions(item.id, {
         mode,
         backend,
         language,
       });
-      toast.success(
-        result.status === "queued"
-          ? "Caption generation queued."
-          : "Captions generated."
-      );
 
       await queryClient.invalidateQueries({
         queryKey: queryKeys.contentItem(item.id),
