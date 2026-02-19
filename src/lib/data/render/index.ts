@@ -13,6 +13,7 @@ export const triggerRenderRequestSchema = z.object({
 /** Per-content render progress snapshot payload. */
 export const renderProgressSchema = z.object({
   id: z.string(),
+  jobId: z.string().optional(),
   mode: z.string().optional(),
   key: z.string().optional(),
   rendered: z.number(),
@@ -54,6 +55,7 @@ export const triggerRenderResponseSchema = z.object({
   ok: z.boolean(),
   status: z.string(),
   id: z.string(),
+  jobId: z.string().optional(),
   backend: renderBackendSchema.optional(),
   mode: z.string().optional(),
 }).describe("Trigger render response.");

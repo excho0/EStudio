@@ -105,7 +105,12 @@ export const runPublishJob = async (job: PublishJob) => {
     error: null,
     publishAttempts: nextAttempt,
   });
-  emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "publishing" });
+  emitPublishUpdate({
+    userId: publish.userId,
+    id: job.publishId,
+    jobId: job.publishId,
+    status: "publishing",
+  });
 
   const adapter = getProviderAdapter(publish.provider);
   if (!adapter) {
@@ -113,7 +118,12 @@ export const runPublishJob = async (job: PublishJob) => {
       status: "failed",
       error: "Unknown provider.",
     });
-    emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "failed" });
+    emitPublishUpdate({
+      userId: publish.userId,
+      id: job.publishId,
+      jobId: job.publishId,
+      status: "failed",
+    });
     return;
   }
 
@@ -140,7 +150,12 @@ export const runPublishJob = async (job: PublishJob) => {
       status: "failed",
       error: "Render file not found.",
     });
-    emitPublishUpdate({ userId: publish.userId, id: job.publishId, status: "failed" });
+    emitPublishUpdate({
+      userId: publish.userId,
+      id: job.publishId,
+      jobId: job.publishId,
+      status: "failed",
+    });
     return;
   }
   const thumbnailRelative = await findContentAssetPath(
@@ -189,6 +204,7 @@ export const runPublishJob = async (job: PublishJob) => {
           emitPublishProgress({
             userId: publish.userId,
             id: job.publishId,
+            jobId: job.publishId,
             stage,
           });
           return;
@@ -201,6 +217,7 @@ export const runPublishJob = async (job: PublishJob) => {
         emitPublishProgress({
           userId: publish.userId,
           id: job.publishId,
+          jobId: job.publishId,
           stage: progress.stage,
           progress:
             percent !== null ? Math.min(1, Math.max(0, percent / 100)) : undefined,
@@ -222,6 +239,7 @@ export const runPublishJob = async (job: PublishJob) => {
     emitPublishUpdate({
       userId: publish.userId,
       id: job.publishId,
+      jobId: job.publishId,
       status: result.status ?? "published",
       providerAssetId: result.providerAssetId,
       error: result.warning ?? undefined,
@@ -240,6 +258,7 @@ export const runPublishJob = async (job: PublishJob) => {
     emitPublishUpdate({
       userId: publish.userId,
       id: job.publishId,
+      jobId: job.publishId,
       status: "failed",
       error: `${attemptLabel} failed: ${message}`,
     });

@@ -54,9 +54,11 @@ const enqueueCaptionOnCreate = async (params: {
       typeof params.settings.captionsBackend === "string"
         ? params.settings.captionsBackend
         : undefined;
+    const jobId = randomUUID();
     await enqueueCaptionJob({
       id: params.id,
       userId: params.userId,
+      jobId,
       mode: params.mode,
       backend: requestedBackend,
       language:
@@ -67,6 +69,7 @@ const enqueueCaptionOnCreate = async (params: {
     emitCaptionUpdate({
       userId: params.userId,
       id: params.id,
+      jobId,
       mode: params.mode,
       status: "queued",
       progress: 0,

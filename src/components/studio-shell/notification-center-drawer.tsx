@@ -44,6 +44,7 @@ type JobStatus =
 type ActivityJob = {
   key: string;
   id: string;
+  jobId?: string;
   mode?: string;
   kind: JobKind;
   status: JobStatus;
@@ -56,6 +57,7 @@ type ActivityJob = {
 type ActivityHydratedItem = {
   key: string;
   contentId: string;
+  jobId?: string;
   mode?: string;
   kind: JobKind;
   status: JobStatus;
@@ -69,6 +71,7 @@ const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
 
 type WindowWithNotificationCenter = Window & {
   __notificationCenterCompletedKeys?: Set<string>;
+  __notificationCenterStartedKeys?: Set<string>;
 };
 
 const getGlobalCompletedKeys = () => {
@@ -78,6 +81,15 @@ const getGlobalCompletedKeys = () => {
     win.__notificationCenterCompletedKeys = new Set<string>();
   }
   return win.__notificationCenterCompletedKeys;
+};
+
+const getGlobalStartedKeys = () => {
+  if (typeof window === "undefined") return null;
+  const win = window as WindowWithNotificationCenter;
+  if (!win.__notificationCenterStartedKeys) {
+    win.__notificationCenterStartedKeys = new Set<string>();
+  }
+  return win.__notificationCenterStartedKeys;
 };
 
 const isActiveStatus = (status: JobStatus) =>
@@ -93,8 +105,8 @@ const toPercent = (value?: number) => {
 };
 
 const shortId = (id: string) => id.slice(0, 8);
-const jobKey = (kind: JobKind, id: string, mode?: string) =>
-  `${kind}:${id}:${mode ?? "default"}`;
+const jobKey = (kind: JobKind, id: string, mode?: string, jobId?: string) =>
+  jobId ? `${kind}:${jobId}` : `${kind}:${id}:${mode ?? "default"}`;
 const resolveJobHref = (job: ActivityJob) =>
   job.kind === "render"
     ? `/renders/${job.id}`
@@ -117,6 +129,7 @@ const resolveStatusLabel = (status: JobStatus) => {
 const toActivityJob = (item: ActivityHydratedItem): ActivityJob => ({
   key: item.key,
   id: item.contentId,
+  jobId: item.jobId,
   mode: item.mode,
   kind: item.kind,
   status: item.status,
@@ -144,26 +157,9 @@ const pickPreferredJob = (left: ActivityJob, right: ActivityJob): ActivityJob =>
 };
 
 const dedupeJobs = (items: ActivityJob[]) => {
-  const hasScopedModeFor = new Set<string>();
-  for (const item of items) {
-    if ((item.kind === "render" || item.kind === "caption") && item.mode?.trim()) {
-      hasScopedModeFor.add(`${item.kind}:${item.id}`);
-    }
-  }
-
   const map = new Map<string, ActivityJob>();
   for (const item of items) {
-    const baseKey = `${item.kind}:${item.id}`;
-    const mode = item.mode?.trim();
-    const dedupeKey =
-      item.kind === "publish"
-        ? baseKey
-        : mode
-          ? `${baseKey}:${mode}`
-          : `${baseKey}:__unscoped__`;
-    if (!mode && hasScopedModeFor.has(baseKey) && item.kind !== "publish") {
-      continue;
-    }
+    const dedupeKey = item.key;
     const existing = map.get(dedupeKey);
     if (!existing) {
       map.set(dedupeKey, item);
@@ -303,6 +299,7 @@ export function NotificationCenterDrawer() {
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>({});
   const { socket } = useSocketIO();
   const completedNotifiedRef = useRef(new Set<string>());
+  const startedNotifiedRef = useRef(new Set<string>());
 
   const bootstrapQuery = useQuery({
     queryKey: ["notification-center", "bootstrap"],
@@ -324,12 +321,14 @@ export function NotificationCenterDrawer() {
       Object.values(renderProgress.items ?? {}).forEach((snapshot) => {
         const typed = snapshot as {
           id: string;
+          jobId?: string;
           mode?: string;
           progress?: number;
         };
         results.push({
-          key: jobKey("render", typed.id, typed.mode),
+          key: jobKey("render", typed.id, typed.mode, typed.jobId),
           id: typed.id,
+          jobId: typed.jobId,
           mode: typed.mode,
           kind: "render",
           status: "rendering",
@@ -373,8 +372,25 @@ export function NotificationCenterDrawer() {
       void audio.play().catch(() => undefined);
     };
 
+    const notifyJobStarted = (job: {
+      key: string;
+      kind: JobKind;
+      id: string;
+      mode?: string;
+    }) => {
+      const globalStarted = getGlobalStartedKeys();
+      if (globalStarted?.has(job.key)) return;
+      if (startedNotifiedRef.current.has(job.key)) return;
+      startedNotifiedRef.current.add(job.key);
+      globalStarted?.add(job.key);
+      const kindLabel = resolveKindLabel(job.kind);
+      const modeSuffix = job.mode ? ` · ${job.mode}` : "";
+      toast.message(`${kindLabel} started · #${shortId(job.id)}${modeSuffix}`);
+    };
+
     const handleRenderProgress = (payload: {
       id: string;
+      jobId?: string;
       mode?: string;
       progress?: number;
       rendered?: number;
@@ -394,16 +410,25 @@ export function NotificationCenterDrawer() {
       const isCompleted =
         normalizedProgress >= 1 ||
         (rendered !== null && total !== null && total > 0 && rendered >= total);
-      const key = jobKey("render", payload.id, payload.mode);
+      const key = jobKey("render", payload.id, payload.mode, payload.jobId);
       upsert({
         key,
         id: payload.id,
+        jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
         status: isCompleted ? "completed" : "rendering",
         progress: normalizedProgress,
         updatedAt: Date.now(),
       });
+      if (!isCompleted && normalizedProgress > 0) {
+        notifyJobStarted({
+          key,
+          kind: "render",
+          id: payload.id,
+          mode: payload.mode,
+        });
+      }
       if (isCompleted) {
         notifyJobCompleted({
           key,
@@ -414,11 +439,12 @@ export function NotificationCenterDrawer() {
       }
     };
 
-    const handleRenderComplete = (payload: { id: string; mode?: string }) => {
-      const key = jobKey("render", payload.id, payload.mode);
+    const handleRenderComplete = (payload: { id: string; jobId?: string; mode?: string }) => {
+      const key = jobKey("render", payload.id, payload.mode, payload.jobId);
       upsert({
         key,
         id: payload.id,
+        jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
         status: "completed",
@@ -454,10 +480,11 @@ export function NotificationCenterDrawer() {
 
     const handlePublishUpdate = (payload: {
       id: string;
+      jobId?: string;
       status: string;
       error?: string;
     }) => {
-      const key = jobKey("publish", payload.id);
+      const key = jobKey("publish", payload.id, undefined, payload.jobId);
       const status: JobStatus =
         payload.status === "queued"
           ? "queued"
@@ -469,6 +496,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
+        jobId: payload.jobId,
         kind: "publish",
         status,
         progress: status === "completed" ? 1 : undefined,
@@ -481,37 +509,52 @@ export function NotificationCenterDrawer() {
           kind: "publish",
           id: payload.id,
         });
+      } else if (status === "queued" || status === "publishing") {
+        notifyJobStarted({
+          key,
+          kind: "publish",
+          id: payload.id,
+        });
       }
     };
 
     const handlePublishProgress = (payload: {
       id: string;
+      jobId?: string;
       stage?: string;
       progress?: number;
     }) => {
-      const key = jobKey("publish", payload.id);
+      const key = jobKey("publish", payload.id, undefined, payload.jobId);
       upsert({
         key,
         id: payload.id,
+        jobId: payload.jobId,
         kind: "publish",
         status: "publishing",
         progress: payload.progress,
         stage: payload.stage,
         updatedAt: Date.now(),
       });
+      notifyJobStarted({
+        key,
+        kind: "publish",
+        id: payload.id,
+      });
     };
 
     const handleCaptionUpdate = (payload: {
       id: string;
+      jobId?: string;
       mode?: string;
       status: "queued" | "processing" | "completed" | "failed";
       progress?: number;
       error?: string;
     }) => {
-      const key = jobKey("caption", payload.id, payload.mode);
+      const key = jobKey("caption", payload.id, payload.mode, payload.jobId);
       upsert({
         key,
         id: payload.id,
+        jobId: payload.jobId,
         mode: payload.mode,
         kind: "caption",
         status: payload.status,
@@ -521,6 +564,13 @@ export function NotificationCenterDrawer() {
       });
       if (payload.status === "completed") {
         notifyJobCompleted({
+          key,
+          kind: "caption",
+          id: payload.id,
+          mode: payload.mode,
+        });
+      } else if (payload.status === "queued" || payload.status === "processing") {
+        notifyJobStarted({
           key,
           kind: "caption",
           id: payload.id,
@@ -571,9 +621,10 @@ export function NotificationCenterDrawer() {
     <Drawer open={open} onOpenChange={setOpen} direction="right">
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="icon"
         aria-label="Open notification center"
+        className="rounded-full border"
         onClick={() => setOpen(true)}
       >
         <Bell className="h-4 w-4" />

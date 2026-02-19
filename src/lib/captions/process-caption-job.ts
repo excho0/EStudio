@@ -17,12 +17,14 @@ const storage = getStorage();
 export const processCaptionJob = async ({
   id,
   userId,
+  jobId,
   mode,
   backend,
   language,
 }: {
   id: string;
   userId: string;
+  jobId: string;
   mode: string;
   backend?: string;
   language?: string;
@@ -50,6 +52,7 @@ export const processCaptionJob = async ({
     emitCaptionUpdate({
       userId,
       id,
+      jobId,
       mode: activeMode,
       status: "processing",
       progress: normalized / 100,
@@ -109,6 +112,7 @@ export const processCaptionJob = async ({
     emitCaptionUpdate({
       userId,
       id,
+      jobId,
       mode: activeMode,
       status: "completed",
       progress: 1,
@@ -122,6 +126,7 @@ export const processCaptionJob = async ({
     emitCaptionUpdate({
       userId,
       id,
+      jobId,
       mode: activeMode,
       status: "failed",
       progress: 1,

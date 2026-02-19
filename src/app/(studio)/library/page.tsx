@@ -184,12 +184,7 @@ export default function LibraryPage() {
     mutationFn: async ({ id, mode }: { id: string; mode?: string }) => {
       await sdk.content.triggerRender(id, mode ? { mode } : undefined);
     },
-    onMutate: (variables) => {
-      const modeText = variables.mode ? ` (${getContentModeDefinition(variables.mode).label})` : "";
-      toast.message(`Starting render${modeText}...`);
-    },
     onSuccess: () => {
-      toast.message("Render started.");
       void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
     },
     onError: (error) => {
@@ -227,9 +222,7 @@ export default function LibraryPage() {
         modes.map((mode) => sdk.content.triggerRender(item.id, { mode }))
       );
       const failed = results.filter((result) => result.status === "rejected");
-      if (failed.length === 0) {
-        toast.success(`Queued renders for ${modes.length} mode${modes.length > 1 ? "s" : ""}.`);
-      } else {
+      if (failed.length > 0) {
         const firstError = failed[0];
         const reason =
           firstError && firstError.status === "rejected" && firstError.reason instanceof Error

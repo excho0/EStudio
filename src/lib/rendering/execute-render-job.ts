@@ -421,6 +421,7 @@ const cleanupRemotionChromiumProcesses = async () => {
 export const startRenderJob = async ({
   userId,
   id,
+  jobId,
   mode,
   browserLabel,
   chromeMode,
@@ -429,6 +430,7 @@ export const startRenderJob = async ({
   outputPath,
   inputProps,
 }: RenderJob) => {
+  const progressKey = `${id}:${jobId}`;
   let cancelMonitor: ReturnType<typeof setInterval> | null = null;
   try {
     const {
@@ -533,11 +535,13 @@ export const startRenderJob = async ({
     }
     logChromiumProcessSnapshot("before-render");
 
-    lastProgressPercent.set(id, -1);
+    lastProgressPercent.set(progressKey, -1);
     emitRenderProgress({
       userId,
       id,
+      jobId,
       mode,
+      key: progressKey,
       rendered: 0,
       total: totalFrames,
       progress: 0,
@@ -603,11 +607,11 @@ export const startRenderJob = async ({
                 ? Math.min(1, Math.max(0, rendered / totalFrames))
                 : 0;
           const percent = Math.floor(safeProgress * 100);
-          const lastPercent = lastProgressPercent.get(id) ?? -1;
+          const lastPercent = lastProgressPercent.get(progressKey) ?? -1;
           if (percent === lastPercent) {
             return;
           }
-          lastProgressPercent.set(id, percent);
+          lastProgressPercent.set(progressKey, percent);
           if (percent % 10 === 0 && percent !== lastChromiumSnapshotPercent) {
             lastChromiumSnapshotPercent = percent;
             logChromiumProcessSnapshot(`progress-${percent}%`);
@@ -624,7 +628,9 @@ export const startRenderJob = async ({
           emitRenderProgress({
             userId,
             id,
+            jobId,
             mode,
+            key: progressKey,
             rendered,
             total: totalFrames,
             progress: safeProgress,
@@ -709,13 +715,15 @@ export const startRenderJob = async ({
         const totalRendered = chunkRendered.reduce((sum, v) => sum + v, 0);
         const safeProgress = Math.min(1, totalRendered / totalFrames);
         const percent = Math.floor(safeProgress * 100);
-        const lastPercent = lastProgressPercent.get(id) ?? -1;
+        const lastPercent = lastProgressPercent.get(progressKey) ?? -1;
         if (percent === lastPercent) return;
-        lastProgressPercent.set(id, percent);
+        lastProgressPercent.set(progressKey, percent);
         emitRenderProgress({
           userId,
           id,
+          jobId,
           mode,
+          key: progressKey,
           rendered: totalRendered,
           total: totalFrames,
           progress: safeProgress,
@@ -831,22 +839,30 @@ export const startRenderJob = async ({
       status: "rendered",
     });
     await clearRenderStatusCheckpoint(userId, id);
-    lastProgressPercent.delete(id);
-    emitContentUpdate({ userId, type: "content:status", id, status: "rendered" });
+    lastProgressPercent.delete(progressKey);
+    emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendered" });
     emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
-    emitRenderComplete({ userId, id, mode, durationSeconds: elapsedSeconds, avgFps });
+    emitRenderComplete({
+      userId,
+      id,
+      jobId,
+      mode,
+      key: progressKey,
+      durationSeconds: elapsedSeconds,
+      avgFps,
+    });
   } catch (error) {
     if (isCancellationLikeError(error)) {
-      void clearRenderProgressSnapshot({ userId, id, mode });
-      lastProgressPercent.delete(id);
+      void clearRenderProgressSnapshot({ userId, id, mode, key: progressKey });
+      lastProgressPercent.delete(progressKey);
       await clearRenderStatusCheckpoint(userId, id);
       throw new RenderCanceledError();
     }
-    void clearRenderProgressSnapshot({ userId, id, mode });
+    void clearRenderProgressSnapshot({ userId, id, mode, key: progressKey });
     const nextStatus = await resolveRollbackContentStatus(userId, id);
     await updateContentItem(userId, id, { status: nextStatus });
     await clearRenderStatusCheckpoint(userId, id);
-    emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+    emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
     const message = error instanceof Error ? error.message : "Render failed";
     renderLogger.error({
       event: "render-failed",
@@ -856,6 +872,7 @@ export const startRenderJob = async ({
       message,
     });
   } finally {
+    lastProgressPercent.delete(progressKey);
     if (cancelMonitor) {
       clearInterval(cancelMonitor);
     }

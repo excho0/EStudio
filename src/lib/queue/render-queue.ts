@@ -8,6 +8,7 @@ export const RENDER_QUEUE_NAME = "content-render";
 export type RenderQueueJobPayload = {
   id: string;
   userId: string;
+  jobId: string;
   backend: RenderBackend;
   mode?: string;
 };
@@ -51,12 +52,7 @@ export const enqueueRenderJob = async (payload: RenderQueueJobPayload) => {
   if (!queue) {
     throw new Error("Render queue is not configured");
   }
-  const jobId = `${payload.userId}:${payload.id}:${payload.mode ?? "__default__"}`;
-  const existing = await queue.getJob(jobId);
-  if (existing) {
-    return existing;
-  }
-  return queue.add("render", payload, { jobId });
+  return queue.add("render", payload, { jobId: payload.jobId });
 };
 
 export const cancelRenderJob = async (userId: string, id: string) => {

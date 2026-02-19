@@ -4,6 +4,7 @@
 export type RenderJob = {
   userId: string;
   id: string;
+  jobId: string;
   mode?: string;
   browserLabel: string;
   chromeMode: "chrome-for-testing" | "headless-shell";

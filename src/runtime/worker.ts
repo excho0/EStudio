@@ -41,14 +41,14 @@ const connection = new IORedis(redisUrl, {
 const renderWorker = new Worker(
   "content-render",
   async (job) => {
-    const { id, userId, backend: requestedBackend, mode } = job.data ?? {};
-    if (!id || !userId) {
+    const { id, userId, backend: requestedBackend, mode, jobId } = job.data ?? {};
+    if (!id || !userId || !jobId) {
       throw new Error("Invalid render payload");
     }
     const backend = resolveRenderBackend(
       typeof requestedBackend === "string" ? requestedBackend : undefined
     );
-    await executeRenderForContentWithBackend({ userId, id, backend, mode });
+    await executeRenderForContentWithBackend({ userId, id, backend, mode, jobId });
   },
   {
     connection,
@@ -77,11 +77,11 @@ const publishWorker = new Worker(
 const captionWorker = new Worker(
   "content-caption",
   async (job) => {
-    const { id, userId, mode, backend, language } = job.data ?? {};
-    if (!id || !userId || !mode) {
+    const { id, userId, mode, backend, language, jobId } = job.data ?? {};
+    if (!id || !userId || !mode || !jobId) {
       throw new Error("Invalid caption payload");
     }
-    await processCaptionJob({ id, userId, mode, backend, language });
+    await processCaptionJob({ id, userId, mode, backend, language, jobId });
   },
   {
     connection,
@@ -157,6 +157,7 @@ publishWorker.on("failed", (job, error) => {
       emitPublishUpdate({
         userId: publish.userId,
         id: publishId,
+        jobId: publishId,
         status: "queued",
         error: retryMessage,
       });
@@ -168,6 +169,7 @@ publishWorker.on("failed", (job, error) => {
     emitPublishUpdate({
       userId: publish.userId,
       id: publishId,
+      jobId: publishId,
       status: "failed",
       error: finalMessage,
     });

@@ -17,6 +17,7 @@ export const setRenderProgressSnapshot = async (
   await progressStore.set(payload.userId, {
     key,
     id: payload.id,
+    jobId: payload.jobId,
     mode: payload.mode,
     rendered: payload.rendered,
     total: payload.total,

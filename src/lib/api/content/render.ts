@@ -100,6 +100,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     .data;
   await clearRenderCancellation(userId, id);
   const backend = resolveRenderBackend(requestPayload?.backend);
+  const jobId = crypto.randomUUID();
   const requestedMode = requestPayload?.mode?.trim();
   if (requestedMode) {
     if (!(requestedMode in contentModeRegistry)) {
@@ -119,9 +120,15 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
     try {
       const queued = await withRenderRequestLock(userId, id, requestedMode, async () => {
         await setRenderStatusCheckpoint(userId, id, item.status);
-        await enqueueRenderJob({ id, userId, backend, mode: requestedMode });
+        await enqueueRenderJob({ id, userId, backend, mode: requestedMode, jobId });
         await updateContentItem(userId, id, { status: "rendering" });
-        emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
+        emitContentUpdate({
+          userId,
+          type: "content:status",
+          id,
+          jobId,
+          status: "rendering",
+        });
         void eventBus.emit("render.queued", {
           userId,
           id,
@@ -132,12 +139,12 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
       });
       if (queued) {
         return NextResponse.json(
-          { ok: true, status: "queued", id, backend, mode: requestedMode },
+          { ok: true, status: "queued", id, backend, mode: requestedMode, jobId },
           { status: 202 }
         );
       }
       return NextResponse.json(
-        { ok: true, status: "rendering", id, backend, mode: requestedMode },
+        { ok: true, status: "rendering", id, backend, mode: requestedMode, jobId },
         { status: 202 }
       );
     } catch (error) {
@@ -166,13 +173,14 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
           userId,
           id,
           backend,
+          jobId,
           mode: requestedMode,
           requestUrl: request.url,
         })
     );
     if (!inlineResult) {
       return NextResponse.json(
-        { ok: true, status: "rendering", id, backend, mode: requestedMode },
+        { ok: true, status: "rendering", id, backend, mode: requestedMode, jobId },
         { status: 202 }
       );
     }

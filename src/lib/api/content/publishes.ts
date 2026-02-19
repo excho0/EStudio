@@ -236,6 +236,7 @@ const failStalePublishes = async (
     emitPublishUpdate({
       userId,
       id: publishId,
+      jobId: publishId,
       status: "failed",
       error: "Marked failed due to stale publish timeout.",
     });

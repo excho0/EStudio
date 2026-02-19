@@ -32,8 +32,9 @@ const emitDomainEvent = <TTopic extends keyof AppEventMap>(
 const getNotificationKey = (
   kind: "render" | "publish" | "caption",
   id: string,
-  mode?: string
-) => `${kind}:${id}:${mode?.trim() || "default"}`;
+  mode?: string,
+  jobId?: string
+) => (jobId ? `${kind}:${jobId}` : `${kind}:${id}:${mode?.trim() || "default"}`);
 
 const persistNotification = (payload: {
   userId?: string | null;
@@ -55,6 +56,7 @@ export const emitContentUpdate = (payload: {
   userId?: string | null;
   type: string;
   id?: string;
+  jobId?: string;
   status?: string;
   item?: unknown;
 }) => {
@@ -73,7 +75,7 @@ export const emitContentUpdate = (payload: {
       if (payload.id) {
         persistNotification({
           userId: payload.userId,
-          key: getNotificationKey("render", payload.id),
+          key: getNotificationKey("render", payload.id, undefined, payload.jobId),
           contentId: payload.id,
           kind: "render",
           status: "rendering",
@@ -90,7 +92,7 @@ export const emitContentUpdate = (payload: {
       if (payload.id) {
         persistNotification({
           userId: payload.userId,
-          key: getNotificationKey("render", payload.id),
+          key: getNotificationKey("render", payload.id, undefined, payload.jobId),
           contentId: payload.id,
           kind: "render",
           status: "completed",
@@ -108,7 +110,7 @@ export const emitContentUpdate = (payload: {
       if (payload.id) {
         persistNotification({
           userId: payload.userId,
-          key: getNotificationKey("render", payload.id),
+          key: getNotificationKey("render", payload.id, undefined, payload.jobId),
           contentId: payload.id,
           kind: "render",
           status: "failed",
@@ -129,6 +131,7 @@ export const emitContentUpdate = (payload: {
 export const emitRenderProgress = (payload: {
   userId?: string | null;
   id: string;
+  jobId?: string;
   mode?: string;
   key?: string;
   rendered: number;
@@ -139,7 +142,7 @@ export const emitRenderProgress = (payload: {
   void setRenderProgressSnapshot(payload);
   persistNotification({
     userId: payload.userId,
-    key: getNotificationKey("render", payload.id, payload.mode),
+    key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),
     contentId: payload.id,
     mode: payload.mode,
     kind: "render",
@@ -160,6 +163,7 @@ export const emitRenderProgress = (payload: {
 export const emitRenderComplete = (payload: {
   userId?: string | null;
   id: string;
+  jobId?: string;
   mode?: string;
   key?: string;
   durationSeconds?: number;
@@ -173,7 +177,7 @@ export const emitRenderComplete = (payload: {
   });
   persistNotification({
     userId: payload.userId,
-    key: getNotificationKey("render", payload.id, payload.mode),
+    key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),
     contentId: payload.id,
     mode: payload.mode,
     kind: "render",
@@ -194,6 +198,7 @@ export const emitRenderComplete = (payload: {
 export const emitPublishUpdate = (payload: {
   userId?: string | null;
   id: string;
+  jobId?: string;
   status: string;
   providerAssetId?: string;
   error?: string;
@@ -211,7 +216,7 @@ export const emitPublishUpdate = (payload: {
   }
   persistNotification({
     userId: payload.userId,
-    key: getNotificationKey("publish", payload.id),
+    key: getNotificationKey("publish", payload.id, undefined, payload.jobId),
     contentId: payload.id,
     kind: "publish",
     status:
@@ -241,6 +246,7 @@ export const emitPublishUpdate = (payload: {
 export const emitPublishProgress = (payload: {
   userId?: string | null;
   id: string;
+  jobId?: string;
   stage: string;
   progress?: number;
   bytesUploaded?: number;
@@ -248,7 +254,7 @@ export const emitPublishProgress = (payload: {
 }) => {
   persistNotification({
     userId: payload.userId,
-    key: getNotificationKey("publish", payload.id),
+    key: getNotificationKey("publish", payload.id, undefined, payload.jobId),
     contentId: payload.id,
     kind: "publish",
     status: "publishing",
@@ -261,6 +267,7 @@ export const emitPublishProgress = (payload: {
   const room = resolveRoom(payload.userId);
   const eventPayload = {
     id: payload.id,
+    jobId: payload.jobId,
     stage: payload.stage,
     progress: payload.progress,
     bytesUploaded: payload.bytesUploaded,
@@ -276,6 +283,7 @@ export const emitPublishProgress = (payload: {
 export const emitCaptionUpdate = (payload: {
   userId?: string | null;
   id: string;
+  jobId?: string;
   mode?: string;
   status: "queued" | "processing" | "completed" | "failed";
   progress?: number;
@@ -283,7 +291,7 @@ export const emitCaptionUpdate = (payload: {
 }) => {
   persistNotification({
     userId: payload.userId,
-    key: getNotificationKey("caption", payload.id, payload.mode),
+    key: getNotificationKey("caption", payload.id, payload.mode, payload.jobId),
     contentId: payload.id,
     mode: payload.mode,
     kind: "caption",

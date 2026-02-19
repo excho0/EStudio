@@ -7,6 +7,7 @@ export const CAPTION_QUEUE_NAME = "content-caption";
 export type CaptionQueueJobPayload = {
   id: string;
   userId: string;
+  jobId: string;
   mode: string;
   language?: string;
   backend?: string;
@@ -51,9 +52,5 @@ export const enqueueCaptionJob = async (payload: CaptionQueueJobPayload) => {
   if (!queue) {
     throw new Error("Caption queue is not configured");
   }
-  const jobId = `${payload.userId}:${payload.id}:${payload.mode}`;
-  const existing = await queue.getJob(jobId);
-  if (existing) return existing;
-  return queue.add("caption", payload, { jobId });
+  return queue.add("caption", payload, { jobId: payload.jobId });
 };
-

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { getContentItem } from "@/lib/data/content";
@@ -25,6 +26,7 @@ export const handleTriggerCaptions = async (
   const parsed = triggerCaptionsRequestSchema
     .safeParse(await request.json().catch(() => null))
     .data;
+  const jobId = crypto.randomUUID();
   const mode = parsed?.mode?.trim() || item.mode;
   if (!mode || !(mode in contentModeRegistry)) {
     return NextResponse.json({ error: "Invalid caption mode." }, { status: 400 });
@@ -51,6 +53,7 @@ export const handleTriggerCaptions = async (
     await enqueueCaptionJob({
       id,
       userId,
+      jobId,
       mode,
       backend: parsed?.backend,
       language:
@@ -59,13 +62,14 @@ export const handleTriggerCaptions = async (
           ? modeSettings.captionsLanguage
           : undefined),
     });
-    emitCaptionUpdate({ userId, id, mode, status: "queued", progress: 0 });
-    return NextResponse.json({ ok: true, status: "queued", id, mode }, { status: 202 });
+    emitCaptionUpdate({ userId, id, jobId, mode, status: "queued", progress: 0 });
+    return NextResponse.json({ ok: true, status: "queued", id, mode, jobId }, { status: 202 });
   }
 
   await processCaptionJob({
     id,
     userId,
+    jobId,
     mode,
     backend: parsed?.backend,
     language:

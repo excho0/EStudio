@@ -7,6 +7,7 @@ export const contentUpdatePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   type: z.string(),
   id: z.string().optional(),
+  jobId: z.string().optional(),
   status: z.string().optional(),
   item: z.unknown().optional(),
 }).describe("Content update payload.");
@@ -23,6 +24,7 @@ export const renderQueuedPayloadSchema = z.object({
 export const renderProgressPayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  jobId: z.string().optional(),
   mode: z.string().optional(),
   key: z.string().optional(),
   rendered: z.number(),
@@ -35,6 +37,7 @@ export const renderProgressPayloadSchema = z.object({
 export const renderCompletePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  jobId: z.string().optional(),
   mode: z.string().optional(),
   key: z.string().optional(),
   durationSeconds: z.number().optional(),
@@ -45,6 +48,7 @@ export const renderCompletePayloadSchema = z.object({
 export const publishUpdatePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  jobId: z.string().optional(),
   status: z.string(),
   providerAssetId: z.string().optional(),
   error: z.string().optional(),
@@ -54,6 +58,7 @@ export const publishUpdatePayloadSchema = z.object({
 export const publishProgressPayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  jobId: z.string().optional(),
   stage: z.string(),
   progress: z.number().optional(),
   bytesUploaded: z.number().optional(),
@@ -72,6 +77,7 @@ export const publishQueuedPayloadSchema = z.object({
 export const captionUpdatePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
+  jobId: z.string().optional(),
   mode: z.string().optional(),
   status: z.enum(["queued", "processing", "completed", "failed"]),
   progress: z.number().optional(),

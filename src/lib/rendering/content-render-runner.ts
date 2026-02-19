@@ -57,11 +57,13 @@ const resolveAssetBaseUrl = (requestUrl?: string) => {
 export const executeRenderForContent = async ({
   userId,
   id,
+  jobId,
   mode,
   requestUrl,
 }: {
   userId: string;
   id: string;
+  jobId: string;
   mode?: string;
   requestUrl?: string;
 }) => {
@@ -108,7 +110,7 @@ export const executeRenderForContent = async ({
   await ensureContentStore(userId);
   await setRenderStatusCheckpoint(userId, id, item.status);
   await updateContentItem(userId, id, { status: "rendering" });
-  emitContentUpdate({ userId, type: "content:status", id, status: "rendering" });
+  emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendering" });
 
   const renderDirKey = getContentRenderDir(userId, id);
   await storage.ensureDir(renderDirKey);
@@ -192,6 +194,7 @@ export const executeRenderForContent = async ({
     await startRenderJob({
       userId,
       id,
+      jobId,
       mode: resolved.mode,
       browserLabel,
       chromeMode,
