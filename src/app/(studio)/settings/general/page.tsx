@@ -1,22 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Bell,
-  FolderOpen,
-  HardDrive,
-  RotateCcw,
-  Globe,
-} from "lucide-react";
-import {
-  getNotificationEnabled,
-  requestNotificationPermission,
-  setNotificationEnabled,
-} from "@/lib/notifications";
+import { FolderOpen, HardDrive, RotateCcw, Globe } from "lucide-react";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { SettingsResponse } from "@/types";
@@ -46,9 +35,6 @@ export default function DashboardSettingsPage() {
       );
     },
   });
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
-    getNotificationEnabled()
-  );
   const data = settingsQuery.data ?? null;
   const loading = settingsQuery.isLoading || settingsQuery.isFetching;
   const rescanLoading = rescanMutation.isPending;
@@ -194,49 +180,6 @@ export default function DashboardSettingsPage() {
                 </span>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-xl border border-slate-200 p-4 text-sm text-slate-600 shadow-sm dark:border-white/10 dark:text-zinc-300">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-            <Bell className="h-3.5 w-3.5" />
-            Notifications
-          </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-zinc-400">
-            Get a desktop alert and sound when a render completes.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant={notificationsEnabled ? "secondary" : "default"}
-              onClick={async () => {
-                if (notificationsEnabled) {
-                  setNotificationEnabled(false);
-                  setNotificationsEnabled(false);
-                  toast.message("Render notifications disabled.");
-                  return;
-                }
-                const permission = await requestNotificationPermission();
-                if (permission === "granted") {
-                  setNotificationEnabled(true);
-                  setNotificationsEnabled(true);
-                  toast.success("Render notifications enabled.");
-                  return;
-                }
-                if (permission === "denied") {
-                  toast.error("Browser notifications are blocked.");
-                  return;
-                }
-                toast.error("Notifications not supported in this browser.");
-              }}
-            >
-              {notificationsEnabled ? "Disable notifications" : "Enable notifications"}
-            </Button>
-            <span className="text-xs text-slate-500 dark:text-zinc-500">
-              {typeof window === "undefined" || !("Notification" in window)
-                ? "Not supported"
-                : `Permission: ${Notification.permission}`}
-            </span>
           </div>
         </div>
       </Card>

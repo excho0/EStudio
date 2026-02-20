@@ -6,9 +6,11 @@ import {
   Upload,
   LucideIcon,
   Globe,
+  AppWindow,
   User,
   Palette,
   Cable,
+  Bell,
 } from "lucide-react";
 
 type Submenu = {
@@ -80,6 +82,11 @@ export function getMenuList(): Group[] {
               icon: Globe,
             },
             {
+              href: "/settings/application",
+              label: "Application",
+              icon: AppWindow,
+            },
+            {
               href: "/settings/profile",
               label: "Profile",
               icon: User,
@@ -95,6 +102,11 @@ export function getMenuList(): Group[] {
               href: "/settings/appearance",
               label: "Appearance",
               icon: Palette,
+            },
+            {
+              href: "/settings/notifications",
+              label: "Notifications",
+              icon: Bell,
             }
           ],
         },
