@@ -1,0 +1,109 @@
+name: estudio
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure services
+  # ---------------------------------------------------------------------------
+  redis:
+    container_name: estudio-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    container_name: estudio-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: excho_engine
+      POSTGRES_USER: excho
+      POSTGRES_PASSWORD:
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excho -d excho_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Application services
+  # ---------------------------------------------------------------------------
+  api:
+    container_name: estudio-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.example
+    environment:
+      # Runtime
+      NODE_ENV: production
+      PORT: 3000
+
+      # Database
+      DB_DRIVER: postgres
+      DATABASE_URL:
+
+      # Redis (single shared URL; queue/socket modules can use this fallback)
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/app:/app/data
+    command: ["pnpm", "start"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    container_name: estudio-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    env_file:
+      - .env.example
+    environment:
+      # Runtime
+      NODE_ENV: production
+
+      # Database
+      DB_DRIVER: postgres
+      DATABASE_URL:
+
+      # Redis (single shared URL; queue modules can use this fallback)
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./data/app:/app/data
+    command: ["pnpm", "start:worker"]
