@@ -1,12 +1,12 @@
 # AGENTS.md
 
-This document explains the architecture and operational conventions of `EStudio` for AI coding agents.
+This document explains the architecture and operational conventions of `excho-engine` for AI coding agents.
 
 Use this as the primary orientation guide before making changes.
 
 ## 1) Project Purpose
 
-`EStudio` is a Next.js 16 application for creating, editing, rendering, and publishing media content.
+`excho-engine` is a Next.js 16 application for creating, editing, rendering, publishing, and tracking media workflows.
 
 Core capabilities:
 - Create and edit content items with mode-specific settings.
@@ -15,6 +15,8 @@ Core capabilities:
 - Queue render and publish jobs via BullMQ workers.
 - Track progress in real-time with Socket.IO (optionally Redis adapter for multi-instance sync).
 - Publish rendered outputs to provider integrations (currently YouTube-focused flow).
+- Persist/render/publish/caption activity through a Notification Center domain.
+- Manage global application settings (DB-backed) separately from system/general settings.
 
 ## 2) Runtime Topology
 
@@ -55,12 +57,14 @@ Important runtime files:
 - Per-domain request logic, input normalization, orchestration.
 - Delegates persistence to `src/lib/data/*`.
 - Delegates rendering/publishing to `src/lib/rendering/*`, `src/lib/publishing/*`, queues.
+- Delegates notifications and settings persistence to dedicated domain modules under `src/lib/data/*`.
 
 ### Data/Persistence Layer
 - `src/lib/data/*`
 - Domain-organized data modules with schemas, codecs, repository methods.
 - Drizzle client/schema under `src/lib/drizzle/*`.
 - SQLite is local default (`better-sqlite3` in stack).
+- Global app settings are persisted in `app_settings` as JSON (`id = "global"` singleton row).
 
 ### Content Domain Layer
 - `src/lib/content/*`
@@ -78,6 +82,7 @@ Important runtime files:
 - `src/lib/socket/*`: app-level event emission to Socket.IO channels/rooms.
 - `src/lib/event-bus/*`: Redis event bus abstraction for cross-instance events.
 - `src/lib/redis/*`: Redis client/manager utilities.
+- Includes typed settings update propagation (`settings.updated` + `settings:updated`).
 
 ## 4) Folder-by-Folder Guide
 
@@ -86,6 +91,7 @@ Important runtime files:
 - API routes live under `src/app/api` and should not contain heavy business logic.
 - Studio pages:
   - `upload`, `edit/[id]`, `library`, `renders/[id]`, `publishes/[id]`, `settings/*`, `metrics`.
+  - Settings pages currently include `general`, `application`, `notifications`, `profile`, `connections`, `appearance`.
 
 ### `src/lib/content`
 - `store.ts`: content asset path generation and filesystem interactions.
@@ -101,7 +107,9 @@ Domain data boundaries:
 - `content/`: content schemas, codec, db/repository access.
 - `publish/`: publish records and related persistence schemas.
 - `render/`: render records/query persistence.
-- `settings/`, `user/`, `meta/`: respective domain data logic.
+- `notifications/`: notification schemas, repository, DB access.
+- `settings/`: global app settings schemas, repository/service, DB access.
+- `user/`, `meta/`: respective domain data logic.
 - `index.ts`: domain exports for server-side consumers.
 
 ### `src/lib/api`
@@ -114,12 +122,14 @@ Service handlers per domain:
 - `content/asset.ts`: secure asset streaming.
 - `user/*`: profile/connections/avatar/confirm-email.
 - `publish/*`: provider metadata and provider item handlers.
+- `notifications/*`: list + mark-read handlers.
 - `settings.ts`, `meta/providers.ts`, `uploads/index.ts`, debug endpoints.
 
 ### `src/lib/sdk`
 - `facade.ts`: instantiate and expose `sdk` object with domain clients.
 - `client.ts`: base HTTP client wrappers (get/post/put/patch/del) + schema-aware parse.
 - `domains/*`: typed methods matching backend route contracts.
+- Includes `sdk.notifications` and `sdk.settings` for notification center and application settings flows.
 
 ### `src/lib/queue`
 - `render-queue.ts`: enqueue and health utilities for render queue (includes backend in payload).
@@ -139,6 +149,7 @@ Service handlers per domain:
 ### `src/lib/socket`
 - centralized websocket emission helpers.
 - used by API/worker/render/publish flows to notify client in real-time.
+- also emits settings updates and drives notification persistence snapshots.
 
 ### `src/remotion`
 - Composition components and render logic.
@@ -158,6 +169,12 @@ Service handlers per domain:
   - `width`
   - `height`
   - plus identity/state fields (`id`, `userId`, `title`, `status`, `mode`, timestamps, etc.)
+
+### Global application settings model
+- Global application settings are persisted in DB (`app_settings`) as JSON.
+- Use singleton row `id = "global"` for read/write.
+- Current global settings include caption backend selection.
+- Do not reintroduce ad-hoc file-backed app settings.
 
 ### Legacy handling policy
 - Legacy flat settings bridge was removed.
@@ -211,6 +228,7 @@ Important environment variables used in multiple modules:
 - `REDIS_URL` (shared default redis)
 - `RENDER_QUEUE_REDIS_URL` / `PUBLISH_QUEUE_REDIS_URL` (queue-specific)
 - `SOCKET_IO_REDIS_URL` (socket adapter)
+- `CAPTION_BACKEND` (env fallback only when global settings do not set caption backend)
 - `RENDER_BACKEND` (`local` default, `lambda` optional)
 - `REMOTION_LAMBDA_FUNCTION_NAME` / `REMOTION_LAMBDA_REGION` / `REMOTION_LAMBDA_SERVE_URL`
   (required for direct lambda backend)
@@ -260,6 +278,8 @@ Whisper (local captions) notes:
 7. Realtime updates
 - emit consistent events from one place (`src/lib/socket/manager.ts` / event bus).
 - avoid scattering socket event names across unrelated modules.
+8. Client/server import boundaries
+- client code must import client-safe schema modules (for example `src/lib/data/*/schemas.ts`) and avoid server barrels that export DB/storage code.
 
 ## 11) Common Extension Playbooks
 
