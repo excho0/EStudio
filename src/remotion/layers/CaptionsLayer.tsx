@@ -7,6 +7,7 @@ type CaptionsLayerProps = {
   captionsStyle: "subtitle" | "tiktok";
   effectiveCaptionsStyle: "subtitle" | "tiktok";
   captionPages: CaptionPage[];
+  hasActiveCaption: boolean;
   fps: number;
   timelineMs: number;
   captionOpacity: number;
@@ -20,6 +21,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsStyle,
   effectiveCaptionsStyle,
   captionPages,
+  hasActiveCaption,
   fps,
   timelineMs,
   captionOpacity,
@@ -27,7 +29,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionBlur,
   captionHighlightColor,
 }) => {
-  if (!captionsEnabled) {
+  if (!captionsEnabled || !hasActiveCaption) {
     return null;
   }
 

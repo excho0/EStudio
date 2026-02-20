@@ -615,6 +615,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const {
     effectiveCaptionsStyle,
     captionPages,
+    hasActiveCaption,
     captionOpacity,
     captionTransform,
     captionBlur,
@@ -875,6 +876,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         captionsStyle={captionsStyle}
         effectiveCaptionsStyle={effectiveCaptionsStyle}
         captionPages={captionPages}
+        hasActiveCaption={hasActiveCaption}
         fps={fps}
         timelineMs={timelineMs}
         captionOpacity={captionOpacity}

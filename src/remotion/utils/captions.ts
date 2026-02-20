@@ -210,6 +210,7 @@ export const resolveCaptionRuntime = ({
       activeCaptionSegment: null as CaptionSegment | null,
       activeCaptionPage: null as CaptionPage | null,
       activeCaption: null as string | null,
+      hasActiveCaption: false,
       captionOpacity: 0,
       captionTransform: "translate3d(0px, 0px, 0px) rotate(0deg) scale(1)",
       captionBlur: 0,
@@ -237,6 +238,7 @@ export const resolveCaptionRuntime = ({
     effectiveCaptionsStyle === "tiktok"
       ? activeCaptionPage?.text ?? null
       : activeCaptionPage?.text ?? activeCaptionSegment?.text?.trim() ?? null;
+  const hasActiveCaption = Boolean(activeCaption && activeCaption.trim().length > 0);
 
   const { enterMs, exitMs } = getCaptionEnterExitMs(
     captionsAnimationPreset,
@@ -283,6 +285,7 @@ export const resolveCaptionRuntime = ({
     activeCaptionSegment,
     activeCaptionPage,
     activeCaption,
+    hasActiveCaption,
     captionOpacity,
     captionTransform,
     captionBlur,

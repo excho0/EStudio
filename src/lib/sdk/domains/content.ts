@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { captionDocumentSchema } from "@/types";
 import { ApiClient } from "@/lib/sdk/client";
 import {
   contentItemSchema,
@@ -47,12 +48,21 @@ export type TriggerCaptionsOptions = {
   backend?: "openai" | "local";
   language?: string;
 };
+export type SaveCaptionsOptions = {
+  captionsData: z.infer<typeof captionDocumentSchema> | null;
+};
 
 const triggerCaptionsResponseSchema = z.object({
   ok: z.boolean(),
   status: z.string(),
   id: z.string(),
   mode: z.string().optional(),
+});
+
+const saveCaptionsResponseSchema = z.object({
+  ok: z.boolean(),
+  id: z.string(),
+  captionsData: captionDocumentSchema.nullable(),
 });
 
 export const contentSdk = {
@@ -122,6 +132,17 @@ export const contentSdk = {
       options ?? {},
       "Caption generation failed.",
       triggerCaptionsResponseSchema
+    );
+  },
+  saveCaptions(
+    id: string,
+    options: SaveCaptionsOptions
+  ): Promise<z.infer<typeof saveCaptionsResponseSchema>> {
+    return client.putJson(
+      `/api/content/${id}/captions`,
+      options,
+      "Failed to save captions.",
+      saveCaptionsResponseSchema
     );
   },
   progress(): Promise<ContentProgressResponse> {

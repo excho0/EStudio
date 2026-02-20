@@ -17,6 +17,7 @@ import {
   Atom,
   Blend,
   Subtitles,
+  Pencil,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
@@ -267,6 +268,22 @@ const videoLoopSections: ContentModeSection[] = [
           label: "Generate Captions",
           loadingLabel: "Generating captions...",
           icon: Subtitles,
+          variant: "outline",
+          size: "sm",
+        },
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsEdit",
+        label: "Edit Captions",
+        tooltip: "Open the interactive caption editor to tweak words and timing.",
+        input: "action",
+        action: {
+          id: "captions.edit",
+          label: "Edit Captions",
+          icon: Pencil,
           variant: "outline",
           size: "sm",
         },

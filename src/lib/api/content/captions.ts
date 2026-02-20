@@ -1,11 +1,12 @@
 import crypto from "crypto";
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { getContentItem } from "@/lib/data/content";
+import { captionDocumentSchema } from "@/types";
+import { getContentItem, updateContentItem } from "@/lib/data/content";
 import { contentModeRegistry, normalizeSettingsMap } from "@/lib/content/modes";
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { processCaptionJob } from "@/lib/captions/process-caption-job";
-import { emitCaptionUpdate } from "@/lib/socket/manager";
+import { emitCaptionUpdate, emitContentUpdate } from "@/lib/socket/manager";
 import { resolveCaptionBackendSetting } from "@/lib/data/settings";
 
 const resolveDefaultCaptionLanguage = () => {
@@ -17,6 +18,10 @@ const triggerCaptionsRequestSchema = z.object({
   mode: z.string().min(1).optional(),
   backend: z.enum(["openai", "local"]).optional(),
   language: z.string().min(2).max(16).optional(),
+});
+
+const saveCaptionsRequestSchema = z.object({
+  captionsData: captionDocumentSchema.nullable(),
 });
 
 export const handleTriggerCaptions = async (
@@ -87,4 +92,52 @@ export const handleTriggerCaptions = async (
         : resolveDefaultCaptionLanguage()),
   });
   return NextResponse.json({ ok: true, status: "done", id, mode }, { status: 200 });
+};
+
+export const handleSaveCaptions = async (
+  request: Request,
+  userId: string,
+  id: string
+) => {
+  const item = await getContentItem(userId, id);
+  if (!item) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const parsed = saveCaptionsRequestSchema.safeParse(
+    await request.json().catch(() => null)
+  );
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.message }, { status: 400 });
+  }
+
+  const mode = item.mode;
+  const settingsMap = normalizeSettingsMap(mode, item.settings ?? {});
+  const shared =
+    settingsMap.__shared &&
+    typeof settingsMap.__shared === "object" &&
+    !Array.isArray(settingsMap.__shared)
+      ? (settingsMap.__shared as Record<string, unknown>)
+      : {};
+
+  const updated = await updateContentItem(userId, id, {
+    settings: {
+      ...settingsMap,
+      __shared: {
+        ...shared,
+        captionsData: parsed.data.captionsData,
+      },
+    },
+  });
+
+  if (!updated) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  emitContentUpdate({ userId, type: "content:updated", id });
+  return NextResponse.json({
+    ok: true,
+    id,
+    captionsData: parsed.data.captionsData,
+  });
 };
