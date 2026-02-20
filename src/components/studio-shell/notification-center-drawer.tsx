@@ -653,7 +653,11 @@ export function NotificationCenterDrawer() {
         </DrawerHeader>
         <Separator className="mb-4" />
         <div className="px-4 pb-4">
-          <ScrollArea className="h-[calc(100vh-8rem)] pr-3">
+          <ScrollArea
+            className="h-[calc(100svh-5.5rem)]"
+            contentGap="0.5rem"
+
+          >
             <AnimatePresence mode="wait">
               {showLoadingSkeleton ? (
                 <motion.div

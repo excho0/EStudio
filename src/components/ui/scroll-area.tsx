@@ -9,9 +9,13 @@ function ScrollArea({
   className,
   children,
   viewportRef,
+  viewportClassName,
+  contentGap = "0.3rem",
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   viewportRef?: React.Ref<HTMLDivElement>;
+  viewportClassName?: string;
+  contentGap?: string;
 }) {
   return (
     <ScrollAreaPrimitive.Root
@@ -21,7 +25,11 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        className={cn(
+          "focus-visible:ring-ring/50 size-full rounded-[inherit] pr-(--scroll-area-content-gap) [&>div]:pr-(--scroll-area-content-gap) transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1",
+          viewportClassName
+        )}
+        style={{ "--scroll-area-content-gap": contentGap } as React.CSSProperties}
         ref={viewportRef}
       >
         {children}
