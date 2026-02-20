@@ -25,7 +25,7 @@ export type {
   PublishMetadata as StudioPublishMetadata,
 } from "./studio/publishes";
 export type { RenderItem, RenderListResponse } from "./studio/renders";
-export type { SettingsResponse } from "./studio/settings";
+export type { SettingsResponse } from "./settings";
 export type { ProfilePayload, ConnectionsResponse } from "./user/profile";
 export type { ProviderConnectionState } from "./publishing/connections";
 export type { AssetCacheEntry } from "./api/asset";
@@ -61,6 +61,12 @@ export type {
 } from "./remotion";
 export type { RenderProgress } from "./render";
 export type {
+  AppSettings,
+  AppSettingsUpdate,
+  SettingsUpdateRequest,
+  SettingsUpdateResponse,
+} from "./settings";
+export type {
   AppEventMap,
   CaptionUpdatePayload,
   ContentUpdatePayload,
@@ -70,6 +76,7 @@ export type {
   PublishProgressPayload,
   PublishQueuedPayload,
   ProviderConnectionPayload,
+  SettingsUpdatedPayload,
   UserProfileUpdatedPayload,
 } from "./events";
 export type { StorageAdapter, StorageStat } from "./storage";

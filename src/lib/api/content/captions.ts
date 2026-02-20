@@ -6,6 +6,12 @@ import { contentModeRegistry, normalizeSettingsMap } from "@/lib/content/modes";
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { processCaptionJob } from "@/lib/captions/process-caption-job";
 import { emitCaptionUpdate } from "@/lib/socket/manager";
+import { resolveCaptionBackendSetting } from "@/lib/data/settings";
+
+const resolveDefaultCaptionLanguage = () => {
+  const value = process.env.CAPTION_DEFAULT_LANGUAGE?.trim();
+  return value && value.length >= 2 ? value : undefined;
+};
 
 const triggerCaptionsRequestSchema = z.object({
   mode: z.string().min(1).optional(),
@@ -49,18 +55,20 @@ export const handleTriggerCaptions = async (
     );
   }
 
+  const backend = parsed?.backend ?? (await resolveCaptionBackendSetting());
+
   if (isCaptionQueueEnabled()) {
     await enqueueCaptionJob({
       id,
       userId,
       jobId,
       mode,
-      backend: parsed?.backend,
+      backend,
       language:
         parsed?.language ??
         (typeof modeSettings.captionsLanguage === "string"
           ? modeSettings.captionsLanguage
-          : undefined),
+          : resolveDefaultCaptionLanguage()),
     });
     emitCaptionUpdate({ userId, id, jobId, mode, status: "queued", progress: 0 });
     return NextResponse.json({ ok: true, status: "queued", id, mode, jobId }, { status: 202 });
@@ -71,12 +79,12 @@ export const handleTriggerCaptions = async (
     userId,
     jobId,
     mode,
-    backend: parsed?.backend,
+    backend,
     language:
       parsed?.language ??
       (typeof modeSettings.captionsLanguage === "string"
         ? modeSettings.captionsLanguage
-        : undefined),
+        : resolveDefaultCaptionLanguage()),
   });
   return NextResponse.json({ ok: true, status: "done", id, mode }, { status: 200 });
 };

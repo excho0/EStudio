@@ -26,12 +26,17 @@ import {
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { getLogger } from "@/lib/logging";
 import { emitCaptionUpdate } from "@/lib/socket/manager";
+import { resolveCaptionBackendSetting } from "@/lib/data/settings";
 
 const storage = getStorage();
 const logger = getLogger("api-content-collection");
 
 const shouldAutoCaption = () =>
   process.env.CAPTION_AUTO_ON_UPLOAD?.trim().toLowerCase() === "true";
+const resolveDefaultCaptionLanguage = () => {
+  const value = process.env.CAPTION_DEFAULT_LANGUAGE?.trim();
+  return value && value.length >= 2 ? value : undefined;
+};
 
 const enqueueCaptionOnCreate = async (params: {
   id: string;
@@ -50,21 +55,18 @@ const enqueueCaptionOnCreate = async (params: {
     return;
   }
   try {
-    const requestedBackend =
-      typeof params.settings.captionsBackend === "string"
-        ? params.settings.captionsBackend
-        : undefined;
     const jobId = randomUUID();
+    const backend = await resolveCaptionBackendSetting();
     await enqueueCaptionJob({
       id: params.id,
       userId: params.userId,
       jobId,
       mode: params.mode,
-      backend: requestedBackend,
+      backend,
       language:
         typeof params.settings.captionsLanguage === "string"
           ? params.settings.captionsLanguage
-          : undefined,
+          : resolveDefaultCaptionLanguage(),
     });
     emitCaptionUpdate({
       userId: params.userId,

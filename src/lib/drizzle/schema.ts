@@ -210,6 +210,22 @@ export const notifications = sqliteTable(
   ]
 );
 
+export const appSettings = sqliteTable(
+  "app_settings",
+  {
+    id: text("id").primaryKey(),
+    data: text("data", { mode: "json" }).notNull(),
+    version: integer("version").notNull().default(1),
+    updatedBy: text("updatedBy").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("app_settings_updated_at_idx").on(table.updatedAt),
+    index("app_settings_updated_by_idx").on(table.updatedBy),
+  ]
+);
+
 export const contentItemsPg = pgTable(
   "content_items",
   {
@@ -301,6 +317,22 @@ export const notificationsPg = pgTable(
     pgIndex("notifications_user_updated_at_idx").on(table.userId, table.updatedAt),
     pgIndex("notifications_user_read_at_idx").on(table.userId, table.readAt),
     pgIndex("notifications_user_key_idx").on(table.userId, table.key),
+  ]
+);
+
+export const appSettingsPg = pgTable(
+  "app_settings",
+  {
+    id: pgText("id").primaryKey(),
+    data: pgJsonb("data").notNull(),
+    version: pgInteger("version").notNull().default(1),
+    updatedBy: pgText("updatedBy").references(() => usersPg.id, { onDelete: "set null" }),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("app_settings_updated_at_idx").on(table.updatedAt),
+    pgIndex("app_settings_updated_by_idx").on(table.updatedBy),
   ]
 );
 
@@ -409,6 +441,7 @@ export const sqliteSchema = {
   contentItems,
   publishes,
   notifications,
+  appSettings,
 };
 
 export const schema = {
@@ -421,6 +454,7 @@ export const schema = {
   contentItems: contentItemsPg,
   publishes: publishesPg,
   notifications: notificationsPg,
+  appSettings: appSettingsPg,
 };
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -430,6 +464,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   appTokens: many(appTokens),
   publishes: many(publishes),
   notifications: many(notifications),
+  appSettingsUpdates: many(appSettings),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -465,6 +500,13 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
+export const appSettingsRelations = relations(appSettings, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [appSettings.updatedBy],
+    references: [users.id],
+  }),
+}));
+
 export const usersPgRelations = relations(usersPg, ({ many }) => ({
   accounts: many(accountsPg),
   sessions: many(sessionsPg),
@@ -473,6 +515,7 @@ export const usersPgRelations = relations(usersPg, ({ many }) => ({
   contentItems: many(contentItemsPg),
   publishes: many(publishesPg),
   notifications: many(notificationsPg),
+  appSettingsUpdates: many(appSettingsPg),
 }));
 
 export const accountsPgRelations = relations(accountsPg, ({ one }) => ({
@@ -510,6 +553,13 @@ export const publishesPgRelations = relations(publishesPg, ({ one }) => ({
 export const notificationsPgRelations = relations(notificationsPg, ({ one }) => ({
   user: one(usersPg, {
     fields: [notificationsPg.userId],
+    references: [usersPg.id],
+  }),
+}));
+
+export const appSettingsPgRelations = relations(appSettingsPg, ({ one }) => ({
+  updatedByUser: one(usersPg, {
+    fields: [appSettingsPg.updatedBy],
     references: [usersPg.id],
   }),
 }));

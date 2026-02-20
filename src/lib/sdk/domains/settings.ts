@@ -1,9 +1,16 @@
 import { ApiClient } from "@/lib/sdk/client";
-import { z } from "zod";
-import { settingsResponseSchema } from "@/lib/data/settings";
+import {
+  settingsResponseSchema,
+  settingsUpdateRequestSchema,
+  settingsUpdateResponseSchema,
+} from "@/lib/data/settings/schemas";
+import type {
+  SettingsResponse,
+  SettingsUpdateRequest,
+  SettingsUpdateResponse,
+} from "@/types";
 
 const client = new ApiClient();
-export type SettingsResponse = z.infer<typeof settingsResponseSchema>;
 
 export const settingsSdk = {
   get(): Promise<SettingsResponse> {
@@ -11,6 +18,15 @@ export const settingsSdk = {
       "/api/settings",
       "Failed to load settings",
       settingsResponseSchema
+    );
+  },
+  update(payload: SettingsUpdateRequest): Promise<SettingsUpdateResponse> {
+    const parsed = settingsUpdateRequestSchema.parse(payload);
+    return client.patchJson(
+      "/api/settings",
+      parsed,
+      "Failed to update settings.",
+      settingsUpdateResponseSchema
     );
   },
 };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { renderBackendSchema } from "@/lib/data/render";
+import { appSettingsSchema } from "@/lib/data/settings";
 
 /** Generic content update event payload. */
 export const contentUpdatePayloadSchema = z.object({
@@ -98,3 +99,9 @@ export const userProfileUpdatedPayloadSchema = z.object({
   email: z.string(),
   pendingEmail: z.string().nullable(),
 }).describe("User profile updated payload.");
+
+/** Settings updated event payload. */
+export const settingsUpdatedPayloadSchema = z.object({
+  userId: z.string(),
+  settings: appSettingsSchema,
+}).describe("Settings updated payload.");

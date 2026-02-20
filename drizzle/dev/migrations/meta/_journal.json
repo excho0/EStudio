@@ -57,6 +57,13 @@
       "when": 1771536987170,
       "tag": "0007_tricky_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1771546929748,
+      "tag": "0008_stormy_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

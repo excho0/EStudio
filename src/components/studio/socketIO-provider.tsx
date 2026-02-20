@@ -189,6 +189,9 @@ export function SocketIOProvider({
     socket.on("render:update", () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.rendersBase });
     });
+    socket.on("settings:updated", () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    });
     socket.on("metrics:update", setMetrics);
 
     const handleRenderProgressToast = (payload: {
@@ -282,6 +285,7 @@ export function SocketIOProvider({
       socket.off("content:update", handleUpdate);
       socket.off("publish:update");
       socket.off("render:update");
+      socket.off("settings:updated");
       socket.off("metrics:update", setMetrics);
       socket.off("connect_error");
       socket.off("render:progress", handleRenderProgressToast);

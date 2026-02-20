@@ -9,6 +9,7 @@ import type {
   renderCompletePayloadSchema,
   renderProgressPayloadSchema,
   renderQueuedPayloadSchema,
+  settingsUpdatedPayloadSchema,
   userProfileUpdatedPayloadSchema,
 } from "@/lib/data/events";
 import type { renderBackendSchema } from "@/lib/data/render";
@@ -24,6 +25,7 @@ export type PublishQueuedPayload = z.infer<typeof publishQueuedPayloadSchema>;
 export type CaptionUpdatePayload = z.infer<typeof captionUpdatePayloadSchema>;
 export type ProviderConnectionPayload = z.infer<typeof providerConnectionPayloadSchema>;
 export type UserProfileUpdatedPayload = z.infer<typeof userProfileUpdatedPayloadSchema>;
+export type SettingsUpdatedPayload = z.infer<typeof settingsUpdatedPayloadSchema>;
 
 export type AppEventMap = {
   "content.update": ContentUpdatePayload;
@@ -50,4 +52,5 @@ export type AppEventMap = {
   "provider.connection.created": ProviderConnectionPayload;
   "provider.connection.deleted": ProviderConnectionPayload;
   "user.profile.updated": UserProfileUpdatedPayload;
+  "settings.updated": SettingsUpdatedPayload;
 };

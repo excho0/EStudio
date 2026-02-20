@@ -7,6 +7,12 @@ import {
   getUserVideosDir,
 } from "@/lib/content/store";
 import { getContentStats } from "@/lib/data/content";
+import {
+  resolveCaptionBackendSetting,
+  settingsUpdateRequestSchema,
+  updateSettings,
+} from "@/lib/data/settings";
+import { emitSettingsUpdated } from "@/lib/socket/manager";
 import { getStorage } from "@/lib/storage";
 
 const storage = getStorage();
@@ -25,6 +31,8 @@ export const handleGetSettings = async (userId: string) => {
     countFiles(getUserManifestsDir(userId)),
   ]);
 
+  const captionBackend = await resolveCaptionBackendSetting();
+
   return NextResponse.json({
     storage: {
       baseDir: contentPaths.baseDir,
@@ -36,5 +44,36 @@ export const handleGetSettings = async (userId: string) => {
       manifestsCount,
     },
     stats,
+    captions: {
+      backend: captionBackend,
+      defaultLanguage: process.env.CAPTION_DEFAULT_LANGUAGE?.trim() || "en",
+      autoOnUpload:
+        process.env.CAPTION_AUTO_ON_UPLOAD?.trim().toLowerCase() === "true",
+      localModel: process.env.CAPTION_LOCAL_WHISPER_MODEL?.trim() || undefined,
+    },
   });
+};
+
+export const handleUpdateSettings = async (request: Request, userId: string) => {
+  const payload = settingsUpdateRequestSchema
+    .safeParse(await request.json().catch(() => null))
+    .data;
+  if (!payload) {
+    return NextResponse.json({ error: "Invalid settings payload." }, { status: 400 });
+  }
+  const updatedSettings = await updateSettings(
+    {
+      captions: {
+        backend: payload.captions.backend,
+      },
+    },
+    userId
+  );
+  emitSettingsUpdated({
+    userId,
+    settings: updatedSettings,
+  });
+  const response = await handleGetSettings(userId);
+  const body = await response.json();
+  return NextResponse.json({ ok: true, settings: body });
 };

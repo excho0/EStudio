@@ -8,6 +8,7 @@ import type {
   PublishUpdatePayload,
   RenderCompletePayload,
   RenderProgressPayload,
+  SettingsUpdatedPayload,
 } from "@/types";
 import {
   clearRenderProgressSnapshotsForContent,
@@ -358,6 +359,20 @@ export const emitCaptionUpdate = (payload: {
     return;
   }
   io.emit("caption:update", payload);
+};
+
+export const emitSettingsUpdated = (payload: {
+  userId: string;
+  settings: {
+    captions: {
+      backend?: "openai" | "local";
+    };
+  };
+}) => {
+  emitDomainEvent("settings.updated", payload as SettingsUpdatedPayload);
+  const io = getSocketServer();
+  if (!io) return;
+  io.to(`user:${payload.userId}`).emit("settings:updated", payload);
 };
 
 export {
