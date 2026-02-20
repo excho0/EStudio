@@ -8,6 +8,9 @@ import {
   Languages,
   Captions,
   MessageSquareText,
+  Film,
+  Zap,
+  Minus,
   ChartNoAxesColumn,
   Spotlight,
   Timer,
@@ -212,13 +215,43 @@ const videoLoopSections: ContentModeSection[] = [
       {
         key: "captionsStyle",
         label: "Caption Style",
-        tooltip: "Choose subtitle rendering style for future caption overlay components.",
+        tooltip: "Choose visual treatment for captions.",
         input: "select",
         defaultValue: "subtitle",
         options: [
           { label: "Subtitle", value: "subtitle", icon: Captions },
           { label: "TikTok-style", value: "tiktok", icon: MessageSquareText },
         ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsAnimationPreset",
+        label: "Animation Preset",
+        tooltip: "Choose how captions animate independently of caption style.",
+        input: "select",
+        defaultValue: "smooth",
+        options: [
+          { label: "Smooth", value: "smooth", icon: Sparkles },
+          { label: "Cinematic", value: "cinematic", icon: Film },
+          { label: "Punch", value: "punch", icon: Zap },
+          { label: "Minimal", value: "minimal", icon: Minus },
+        ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsWordsPerPage",
+        label: "Words Per Page",
+        tooltip:
+          "How many words are shown together before advancing to the next caption page.",
+        input: "slider",
+        min: 1,
+        max: 12,
+        step: 1,
+        defaultValue: 4,
         disabledWhen: {
           all: [{ key: "captionsEnabled", equals: false }],
         },

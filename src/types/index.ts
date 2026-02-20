@@ -1,4 +1,5 @@
 export type { ContentItem, ContentListResponse } from "./content";
+export type { VideoLoopSettings } from "./content/modes";
 export {
   captionSegmentSchema,
   captionDocumentSchema,

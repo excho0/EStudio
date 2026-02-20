@@ -71,6 +71,9 @@ importers:
       '@remotion/bundler':
         specifier: 4.0.409
         version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/captions':
+        specifier: 4.0.409
+        version: 4.0.409
       '@remotion/install-whisper-cpp':
         specifier: 4.0.409
         version: 4.0.409

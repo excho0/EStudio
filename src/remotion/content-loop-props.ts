@@ -1,4 +1,4 @@
-import type { ContentLoopProps } from "../types";
+import type { ContentLoopProps, VideoLoopSettings } from "../types";
 import { captionDocumentSchema } from "../types";
 
 export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
@@ -38,6 +38,8 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   overlapRatio: 0.25,
   captionsEnabled: false,
   captionsStyle: "subtitle",
+  captionsAnimationPreset: "smooth",
+  captionsWordsPerPage: 4,
   captionsData: null,
   renderShaderEnabled: false,
   renderShaderDebugMode: "none",
@@ -54,39 +56,8 @@ export const buildContentLoopProps = (
   ...overrides,
 });
 
-type ContentLoopItemLike = {
+type ContentLoopItemLike = Partial<VideoLoopSettings> & {
   title?: string | null;
-  segmentDurationSeconds?: number | null;
-  fadeDurationSeconds?: number | null;
-  introFadeSeconds?: number | null;
-  outroFadeSeconds?: number | null;
-  audioFadeInSeconds?: number | null;
-  audioFadeOutSeconds?: number | null;
-  audioFadeInOffsetSeconds?: number | null;
-  audioFadeOutOffsetSeconds?: number | null;
-  visualizationEnabled?: boolean | null;
-  visualizationBars?: number | null;
-  edgeRaysEnabled?: boolean | null;
-  edgeRaysIntensity?: number | null;
-  edgeRaysVocalBalance?: number | null;
-  motionEnabled?: boolean | null;
-  motionAmountPx?: number | null;
-  motionSpeed?: number | null;
-  motionAttack?: number | null;
-  motionRelease?: number | null;
-  sharpenEnabled?: boolean | null;
-  sharpenAmount?: number | null;
-  sharpenUseMaster?: boolean | null;
-  sharpenMaster?: number | null;
-  sharpenContrastWeight?: number | null;
-  sharpenSaturationWeight?: number | null;
-  sharpenBrightnessWeight?: number | null;
-  videoDurationSeconds?: number | null;
-  overlapRatio?: number | null;
-  playbackRate?: number | null;
-  scalePercent?: number | null;
-  captionsEnabled?: boolean | null;
-  captionsStyle?: "subtitle" | "tiktok" | null;
   captionsData?: unknown;
   colorPalette?: string[] | null;
   paletteMode?: "auto" | "manual" | null;
@@ -236,6 +207,16 @@ export const buildContentLoopPropsFromItem = (
       getSetting<"subtitle" | "tiktok">("captionsStyle") ??
       item.captionsStyle ??
       CONTENT_LOOP_DEFAULTS.captionsStyle,
+    captionsAnimationPreset:
+      getSetting<"smooth" | "cinematic" | "punch" | "minimal">(
+        "captionsAnimationPreset"
+      ) ??
+      item.captionsAnimationPreset ??
+      CONTENT_LOOP_DEFAULTS.captionsAnimationPreset,
+    captionsWordsPerPage:
+      getSetting<number>("captionsWordsPerPage") ??
+      item.captionsWordsPerPage ??
+      CONTENT_LOOP_DEFAULTS.captionsWordsPerPage,
     captionsData:
       captionsData ?? CONTENT_LOOP_DEFAULTS.captionsData,
     playbackRate:

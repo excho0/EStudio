@@ -1,42 +1,12 @@
 import type { CaptionDocument } from "../captions";
+import type { VideoLoopSettings } from "../content/modes";
 
-export type ContentLoopProps = {
+type ContentLoopRuntimeProps = {
   title: string;
   thumbnailSrc?: string;
   videoSrc: string;
   audioSrc: string;
-  visualizationEnabled?: boolean;
-  visualizationBars?: number;
-  edgeRaysEnabled?: boolean;
-  edgeRaysIntensity?: number;
-  edgeRaysVocalBalance?: number;
-  motionEnabled?: boolean;
-  motionAmountPx?: number;
-  motionSpeed?: number;
-  motionAttack?: number;
-  motionRelease?: number;
-  sharpenEnabled?: boolean;
-  sharpenAmount?: number;
-  sharpenUseMaster?: boolean;
-  sharpenMaster?: number;
-  sharpenContrastWeight?: number;
-  sharpenSaturationWeight?: number;
-  sharpenBrightnessWeight?: number;
   colorPalette?: string[];
-  scalePercent?: number;
-  segmentDurationSeconds: number;
-  fadeDurationSeconds: number;
-  introFadeSeconds?: number;
-  outroFadeSeconds?: number;
-  audioFadeInSeconds?: number;
-  audioFadeOutSeconds?: number;
-  audioFadeInOffsetSeconds?: number;
-  audioFadeOutOffsetSeconds?: number;
-  videoDurationSeconds?: number;
-  playbackRate?: number;
-  overlapRatio?: number | null;
-  captionsEnabled?: boolean;
-  captionsStyle?: "subtitle" | "tiktok";
   captionsData?: CaptionDocument | null;
   renderShaderEnabled?: boolean;
   renderShaderDebugMode?: "none" | "passthrough" | "uv" | "solid";
@@ -45,6 +15,9 @@ export type ContentLoopProps = {
   width?: number;
   height?: number;
 };
+
+export type ContentLoopProps = ContentLoopRuntimeProps &
+  Omit<VideoLoopSettings, "outputConfig" | "captionsLanguage" | "paletteModeOverride">;
 
 export type ContentLoopInput = ContentLoopProps;
 

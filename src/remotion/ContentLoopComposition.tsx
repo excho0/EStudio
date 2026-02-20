@@ -20,12 +20,17 @@ import { getAudioSpectrum } from "../lib/audio/fft";
 import { getLogBands } from "../lib/audio/bands";
 import { processAudioBars } from "../lib/audio/processing";
 import type { ContentLoopProps } from "../types";
-
-type VideoSlice = {
-  from: number;
-  startFrom: number;
-  duration: number;
-};
+import { CaptionsLayer } from "./layers/CaptionsLayer";
+import {
+  buildVideoSlices,
+  clamp,
+  DEFAULT_PALETTE,
+  hexToRgba,
+  lerp,
+  mixHex,
+  normalizeHex,
+  resolveCaptionRuntime,
+} from "./utils";
 
 type LoopVideoProps = {
   src: string;
@@ -36,65 +41,6 @@ type LoopVideoProps = {
   style?: React.CSSProperties;
 };
 
-const DEFAULT_PALETTE = ["#7CC2FF", "#4F86FF", "#4E56FF"];
-
-const normalizeHex = (value: string) => {
-  const trimmed = value.trim().toUpperCase();
-  if (/^#[0-9A-F]{6}$/.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^[0-9A-F]{6}$/.test(trimmed)) {
-    return `#${trimmed}`;
-  }
-  return null;
-};
-
-const hexToRgba = (hex: string, alpha: number) => {
-  const normalized = normalizeHex(hex);
-  if (!normalized) return `rgba(124,194,255,${alpha})`;
-  const r = Number.parseInt(normalized.slice(1, 3), 16);
-  const g = Number.parseInt(normalized.slice(3, 5), 16);
-  const b = Number.parseInt(normalized.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const mixHex = (first: string, second: string, amount: number) => {
-  const a = normalizeHex(first);
-  const b = normalizeHex(second);
-  if (!a || !b) return first;
-  const t = Math.max(0, Math.min(1, amount));
-  const toLinear = (value: number) => {
-    const c = value / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  };
-  const toSrgb = (value: number) => {
-    const c = value <= 0.0031308 ? value * 12.92 : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
-    return Math.round(Math.max(0, Math.min(1, c)) * 255);
-  };
-  const ar = toLinear(Number.parseInt(a.slice(1, 3), 16));
-  const ag = toLinear(Number.parseInt(a.slice(3, 5), 16));
-  const ab = toLinear(Number.parseInt(a.slice(5, 7), 16));
-  const br = toLinear(Number.parseInt(b.slice(1, 3), 16));
-  const bg = toLinear(Number.parseInt(b.slice(3, 5), 16));
-  const bb = toLinear(Number.parseInt(b.slice(5, 7), 16));
-  const r = toSrgb(ar + (br - ar) * t);
-  const g = toSrgb(ag + (bg - ag) * t);
-  const b2 = toSrgb(ab + (bb - ab) * t);
-  return `#${r.toString(16).padStart(2, "0")}${g
-    .toString(16)
-    .padStart(2, "0")}${b2.toString(16).padStart(2, "0")}`;
-};
-
-const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const hashString = (value: string) => {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-};
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
   const { isRendering } = useRemotionEnvironment();
@@ -104,35 +50,6 @@ const LoopVideo: React.FC<LoopVideoProps> = (props) => {
   }
 
   return <Html5Video {...props} />;
-};
-
-const buildVideoSlices = (
-  startFrom: number,
-  duration: number,
-  videoFrames: number
-) => {
-  const slices: VideoSlice[] = [];
-  let remaining = duration;
-  let currentStart = startFrom;
-  let offset = 0;
-
-  while (remaining > 0) {
-    if (currentStart >= videoFrames) {
-      currentStart = 0;
-    }
-    const available = Math.max(0, videoFrames - currentStart);
-    const sliceDuration = Math.min(remaining, available || remaining);
-    slices.push({ from: offset, startFrom: currentStart, duration: sliceDuration });
-    remaining -= sliceDuration;
-    offset += sliceDuration;
-    currentStart = 0;
-
-    if (slices.length > 1000) {
-      break;
-    }
-  }
-
-  return slices;
 };
 
 const SegmentLayer: React.FC<{
@@ -259,6 +176,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   overlapRatio = null,
   captionsEnabled = false,
   captionsStyle = "subtitle",
+  captionsAnimationPreset = "smooth",
+  captionsWordsPerPage = 4,
   captionsData = null,
 }) => {
   const frame = useCurrentFrame();
@@ -402,6 +321,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const secondary = paletteColors[1] ?? primary;
     const blended = mixHex(primary, secondary, 0.5);
     return mixHex(blended, "#FFFFFF", 0.4);
+  }, [paletteColors]);
+  const captionHighlightColor = useMemo(() => {
+    const primary = paletteColors[0] ?? DEFAULT_PALETTE[0];
+    return mixHex(primary, "#FFFFFF", 0.18);
   }, [paletteColors]);
 
 
@@ -689,112 +612,31 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
   const timelineMs = (frame / fps) * 1000;
-  const activeCaptionSegment = useMemo(() => {
-    if (!captionsEnabled || !captionsData?.segments?.length) {
-      return null;
-    }
-    const segment = captionsData.segments.find(
-      (item) => timelineMs >= item.startMs && timelineMs < item.endMs
-    );
-    return segment ?? null;
-  }, [captionsData?.segments, captionsEnabled, timelineMs]);
-  const activeCaption = activeCaptionSegment?.text?.trim() || null;
-  const captionEnterMs = captionsStyle === "tiktok" ? 180 : 140;
-  const captionExitMs = captionsStyle === "tiktok" ? 140 : 120;
-  const captionElapsedMs = activeCaptionSegment
-    ? Math.max(0, timelineMs - activeCaptionSegment.startMs)
-    : 0;
-  const captionRemainingMs = activeCaptionSegment
-    ? Math.max(0, activeCaptionSegment.endMs - timelineMs)
-    : 0;
-  const captionEnterProgress = interpolate(
-    captionElapsedMs,
-    [0, captionEnterMs],
-    [0, 1],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    }
+  const {
+    effectiveCaptionsStyle,
+    captionPages,
+    captionOpacity,
+    captionTransform,
+    captionBlur,
+  } = useMemo(
+    () =>
+      resolveCaptionRuntime({
+        captionsEnabled,
+        captionsStyle,
+        captionsAnimationPreset,
+        captionsWordsPerPage,
+        captionsSegments: captionsData?.segments ?? [],
+        timelineMs,
+      }),
+    [
+      captionsAnimationPreset,
+      captionsData?.segments,
+      captionsEnabled,
+      captionsWordsPerPage,
+      captionsStyle,
+      timelineMs,
+    ]
   );
-  const captionExitProgress = interpolate(
-    captionRemainingMs,
-    [0, captionExitMs],
-    [0, 1],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    }
-  );
-  const captionPresence = Math.min(captionEnterProgress, captionExitProgress);
-  const captionVariant = useMemo(() => {
-    if (!activeCaptionSegment) return 0;
-    const token = `${activeCaptionSegment.startMs}:${activeCaptionSegment.endMs}:${activeCaptionSegment.text}`;
-    return hashString(token) % 4;
-  }, [activeCaptionSegment]);
-  const captionFromY =
-    captionVariant === 0
-      ? 18
-      : captionVariant === 1
-        ? 26
-        : captionVariant === 2
-          ? 14
-          : 20;
-  const captionFromX =
-    captionVariant === 0
-      ? 0
-      : captionVariant === 1
-        ? -12
-        : captionVariant === 2
-          ? 10
-          : 0;
-  const captionFromScale =
-    captionVariant === 0
-      ? 0.985
-      : captionVariant === 1
-        ? 0.97
-        : captionVariant === 2
-          ? 1.015
-          : 0.98;
-  const captionFromRotate =
-    captionVariant === 0
-      ? 0
-      : captionVariant === 1
-        ? -0.8
-        : captionVariant === 2
-          ? 0.6
-          : 0;
-  const captionTranslateY = interpolate(captionPresence, [0, 1], [captionFromY, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionTranslateX = interpolate(captionPresence, [0, 1], [captionFromX, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionScale = interpolate(captionPresence, [0, 1], [captionFromScale, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionRotate = interpolate(captionPresence, [0, 1], [captionFromRotate, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionBlur = interpolate(captionPresence, [0, 1], [4, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionEase = captionPresence * captionPresence * (3 - 2 * captionPresence);
-  const captionPulse = 1 + Math.sin(captionEnterProgress * Math.PI) * 0.018 * captionEase;
-  const captionDepth = interpolate(captionEase, [0, 1], [32, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const captionOpacity = Math.max(0, Math.min(1, captionEase));
-  const captionTransform = `translate3d(${captionTranslateX.toFixed(2)}px, ${captionTranslateY.toFixed(
-    2
-  )}px, ${captionDepth.toFixed(2)}px) rotate(${captionRotate.toFixed(2)}deg) scale(${(
-    captionScale * captionPulse
-  ).toFixed(3)})`;
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
       return 1;
@@ -1028,63 +870,18 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         </AbsoluteFill>
       )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
-      {captionsEnabled && activeCaption ? (
-        <AbsoluteFill
-          style={{
-            pointerEvents: "none",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            padding: captionsStyle === "tiktok" ? "0 24px 84px" : "0 24px 64px",
-            zIndex: 30,
-          }}
-        >
-          <div
-            style={
-              captionsStyle === "tiktok"
-                ? {
-                    maxWidth: "92%",
-                    fontSize: 54,
-                    fontWeight: 900,
-                    lineHeight: 1.06,
-                    letterSpacing: 0.4,
-                    textAlign: "center",
-                    textTransform: "uppercase",
-                    color: "#FFFFFF",
-                    textShadow:
-                      "0 3px 10px rgba(0,0,0,0.78), 0 0 28px rgba(0,0,0,0.5), 0 0 38px rgba(255,255,255,0.14)",
-                    WebkitTextStroke: "1px rgba(0,0,0,0.45)",
-                    opacity: captionOpacity,
-                    transform: captionTransform,
-                    filter: `blur(${captionBlur.toFixed(2)}px)`,
-                    willChange: "transform, opacity, filter",
-                  }
-                : {
-                    maxWidth: "86%",
-                    fontSize: 40,
-                    fontWeight: 700,
-                    lineHeight: 1.2,
-                    textAlign: "center",
-                    color: "#FFFFFF",
-                    background:
-                      "linear-gradient(180deg, rgba(18,22,32,0.68) 0%, rgba(8,10,16,0.56) 100%)",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    borderRadius: 14,
-                    padding: "12px 20px",
-                    textShadow: "0 2px 8px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.35)",
-                    backdropFilter: "blur(5px)",
-                    boxShadow:
-                      "0 14px 38px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 24px rgba(255,255,255,0.08)",
-                    opacity: captionOpacity,
-                    transform: captionTransform,
-                    filter: `blur(${captionBlur.toFixed(2)}px)`,
-                    willChange: "transform, opacity, filter",
-                  }
-            }
-          >
-            {activeCaption}
-          </div>
-        </AbsoluteFill>
-      ) : null}
+      <CaptionsLayer
+        captionsEnabled={captionsEnabled}
+        captionsStyle={captionsStyle}
+        effectiveCaptionsStyle={effectiveCaptionsStyle}
+        captionPages={captionPages}
+        fps={fps}
+        timelineMs={timelineMs}
+        captionOpacity={captionOpacity}
+        captionTransform={captionTransform}
+        captionBlur={captionBlur}
+        captionHighlightColor={captionHighlightColor}
+      />
       {visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{

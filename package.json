@@ -49,6 +49,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@remotion/bundler": "4.0.409",
+    "@remotion/captions": "4.0.409",
     "@remotion/install-whisper-cpp": "4.0.409",
     "@remotion/lambda-client": "4.0.409",
     "@remotion/media": "^4.0.409",
