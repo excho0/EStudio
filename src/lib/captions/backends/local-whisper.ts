@@ -13,7 +13,7 @@ import { captionDocumentSchema, type CaptionDocument, type CaptionSegment } from
 import { getStorage, storageKey } from "@/lib/storage";
 
 const DEFAULT_WHISPER_CPP_VERSION = "1.7.6";
-const DEFAULT_WHISPER_MODEL: WhisperModel = "small";
+const DEFAULT_WHISPER_MODEL: WhisperModel = "large-v3";
 
 let setupPromise: Promise<{
   whisperPathKey: string;
@@ -69,8 +69,33 @@ const resolveWhisperAdditionalArgs = (): string[] => {
   return raw.split(/\s+/).filter(Boolean);
 };
 
+const hasAnyFlag = (args: string[], ...flags: string[]) =>
+  args.some((arg) => flags.includes(arg));
+
+const resolveWhisperBeamSize = () => {
+  const parsed = Number.parseInt(
+    process.env.CAPTION_LOCAL_WHISPER_BEAM_SIZE?.trim() || "8",
+    10
+  );
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 32 ? parsed : 8;
+};
+
+const resolveWhisperDecodeStrategy = () => {
+  const raw = process.env.CAPTION_LOCAL_WHISPER_DECODE_STRATEGY?.trim().toLowerCase();
+  if (raw === "greedy" || raw === "beam") return raw;
+  return "beam";
+};
+
 const buildWhisperAdditionalArgs = () => {
-  const args = resolveWhisperAdditionalArgs();
+  const args = [...resolveWhisperAdditionalArgs()];
+  // Default to beam search for better caption accuracy; allow opt-out via env.
+  const strategy = resolveWhisperDecodeStrategy();
+  if (
+    strategy === "beam" &&
+    !hasAnyFlag(args, "--beam-size", "-bs", "--best-of", "-bo")
+  ) {
+    args.push("--beam-size", String(resolveWhisperBeamSize()));
+  }
   // Do not auto-inject --gpu-layers: many whisper.cpp builds (including this one)
   // do not support the flag and fail hard with "unknown argument".
   // GPU remains enabled by default unless --no-gpu is explicitly passed.

@@ -87,6 +87,14 @@ const mixHex = (first: string, second: string, amount: number) => {
 
 const lerp = (from: number, to: number, alpha: number) => from + (to - from) * alpha;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const hashString = (value: string) => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
 
 const LoopVideo: React.FC<LoopVideoProps> = (props) => {
   const { isRendering } = useRemotionEnvironment();
@@ -680,16 +688,113 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
 
   const maxStart = Math.max(0, videoFrames - segmentFrames);
-  const activeCaption = useMemo(() => {
+  const timelineMs = (frame / fps) * 1000;
+  const activeCaptionSegment = useMemo(() => {
     if (!captionsEnabled || !captionsData?.segments?.length) {
       return null;
     }
-    const timeMs = (frame / fps) * 1000;
     const segment = captionsData.segments.find(
-      (item) => timeMs >= item.startMs && timeMs < item.endMs
+      (item) => timelineMs >= item.startMs && timelineMs < item.endMs
     );
-    return segment?.text?.trim() || null;
-  }, [captionsData?.segments, captionsEnabled, fps, frame]);
+    return segment ?? null;
+  }, [captionsData?.segments, captionsEnabled, timelineMs]);
+  const activeCaption = activeCaptionSegment?.text?.trim() || null;
+  const captionEnterMs = captionsStyle === "tiktok" ? 180 : 140;
+  const captionExitMs = captionsStyle === "tiktok" ? 140 : 120;
+  const captionElapsedMs = activeCaptionSegment
+    ? Math.max(0, timelineMs - activeCaptionSegment.startMs)
+    : 0;
+  const captionRemainingMs = activeCaptionSegment
+    ? Math.max(0, activeCaptionSegment.endMs - timelineMs)
+    : 0;
+  const captionEnterProgress = interpolate(
+    captionElapsedMs,
+    [0, captionEnterMs],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    }
+  );
+  const captionExitProgress = interpolate(
+    captionRemainingMs,
+    [0, captionExitMs],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    }
+  );
+  const captionPresence = Math.min(captionEnterProgress, captionExitProgress);
+  const captionVariant = useMemo(() => {
+    if (!activeCaptionSegment) return 0;
+    const token = `${activeCaptionSegment.startMs}:${activeCaptionSegment.endMs}:${activeCaptionSegment.text}`;
+    return hashString(token) % 4;
+  }, [activeCaptionSegment]);
+  const captionFromY =
+    captionVariant === 0
+      ? 18
+      : captionVariant === 1
+        ? 26
+        : captionVariant === 2
+          ? 14
+          : 20;
+  const captionFromX =
+    captionVariant === 0
+      ? 0
+      : captionVariant === 1
+        ? -12
+        : captionVariant === 2
+          ? 10
+          : 0;
+  const captionFromScale =
+    captionVariant === 0
+      ? 0.985
+      : captionVariant === 1
+        ? 0.97
+        : captionVariant === 2
+          ? 1.015
+          : 0.98;
+  const captionFromRotate =
+    captionVariant === 0
+      ? 0
+      : captionVariant === 1
+        ? -0.8
+        : captionVariant === 2
+          ? 0.6
+          : 0;
+  const captionTranslateY = interpolate(captionPresence, [0, 1], [captionFromY, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionTranslateX = interpolate(captionPresence, [0, 1], [captionFromX, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionScale = interpolate(captionPresence, [0, 1], [captionFromScale, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionRotate = interpolate(captionPresence, [0, 1], [captionFromRotate, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionBlur = interpolate(captionPresence, [0, 1], [4, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionEase = captionPresence * captionPresence * (3 - 2 * captionPresence);
+  const captionPulse = 1 + Math.sin(captionEnterProgress * Math.PI) * 0.018 * captionEase;
+  const captionDepth = interpolate(captionEase, [0, 1], [32, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const captionOpacity = Math.max(0, Math.min(1, captionEase));
+  const captionTransform = `translate3d(${captionTranslateX.toFixed(2)}px, ${captionTranslateY.toFixed(
+    2
+  )}px, ${captionDepth.toFixed(2)}px) rotate(${captionRotate.toFixed(2)}deg) scale(${(
+    captionScale * captionPulse
+  ).toFixed(3)})`;
   const segmentCount = useMemo(() => {
     if (segmentFrames <= transitionFrames) {
       return 1;
@@ -946,7 +1051,12 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                     textTransform: "uppercase",
                     color: "#FFFFFF",
                     textShadow:
-                      "0 3px 10px rgba(0,0,0,0.78), 0 0 28px rgba(0,0,0,0.5)",
+                      "0 3px 10px rgba(0,0,0,0.78), 0 0 28px rgba(0,0,0,0.5), 0 0 38px rgba(255,255,255,0.14)",
+                    WebkitTextStroke: "1px rgba(0,0,0,0.45)",
+                    opacity: captionOpacity,
+                    transform: captionTransform,
+                    filter: `blur(${captionBlur.toFixed(2)}px)`,
+                    willChange: "transform, opacity, filter",
                   }
                 : {
                     maxWidth: "86%",
@@ -955,12 +1065,19 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                     lineHeight: 1.2,
                     textAlign: "center",
                     color: "#FFFFFF",
-                    backgroundColor: "rgba(0,0,0,0.58)",
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    borderRadius: 12,
-                    padding: "12px 18px",
-                    textShadow: "0 2px 8px rgba(0,0,0,0.75)",
-                    backdropFilter: "blur(2px)",
+                    background:
+                      "linear-gradient(180deg, rgba(18,22,32,0.68) 0%, rgba(8,10,16,0.56) 100%)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    borderRadius: 14,
+                    padding: "12px 20px",
+                    textShadow: "0 2px 8px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.35)",
+                    backdropFilter: "blur(5px)",
+                    boxShadow:
+                      "0 14px 38px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 24px rgba(255,255,255,0.08)",
+                    opacity: captionOpacity,
+                    transform: captionTransform,
+                    filter: `blur(${captionBlur.toFixed(2)}px)`,
+                    willChange: "transform, opacity, filter",
                   }
             }
           >

@@ -5,8 +5,6 @@ import {
   SlidersHorizontal,
   Video,
   Monitor,
-  Cloud,
-  HardDrive,
   Languages,
   Captions,
   MessageSquareText,
@@ -195,23 +193,9 @@ const videoLoopSections: ContentModeSection[] = [
         input: "toggle",
       },
       {
-        key: "captionsBackend",
-        label: "Caption Backend",
-        tooltip: "Select transcription provider backend.",
-        input: "select",
-        defaultValue: "openai",
-        options: [
-          { label: "OpenAI Whisper", value: "openai", icon: Cloud },
-          { label: "Local Whisper.cpp", value: "local", icon: HardDrive },
-        ],
-        disabledWhen: {
-          all: [{ key: "captionsEnabled", equals: false }],
-        },
-      },
-      {
         key: "captionsLanguage",
         label: "Language",
-        tooltip: "ISO language hint sent to caption backend (for example: en, es).",
+        tooltip: "ISO language hint for this mode (for example: en, es).",
         input: "select",
         defaultValue: "en",
         options: [
@@ -243,7 +227,7 @@ const videoLoopSections: ContentModeSection[] = [
         key: "captionsGenerate",
         label: "Captions",
         tooltip:
-          "Generate captions now using the selected backend.",
+          "Generate captions now using global caption settings.",
         input: "action",
         action: {
           id: "captions.generate",

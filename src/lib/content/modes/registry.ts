@@ -139,7 +139,6 @@ export const videoLoopSettingsSchema = z
       })
       .default({ preset: "landscape_hd" }),
     captionsEnabled: z.boolean().default(false),
-    captionsBackend: z.enum(["openai", "local"]).default("openai"),
     captionsLanguage: z.string().min(2).max(16).default("en"),
     captionsStyle: z
       .enum(["subtitle", "tiktok"])

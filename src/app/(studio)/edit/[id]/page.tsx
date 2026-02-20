@@ -444,15 +444,11 @@ export default function EditContentPage() {
     }
 
     const mode = formValues.mode || item.mode || DEFAULT_CONTENT_MODE;
-    const backend = String(getFieldValue("captionsBackend") || "openai") as
-      | "openai"
-      | "local";
     const language = String(getFieldValue("captionsLanguage") || "en");
     setModeActionLoading("captions.generate", true);
     try {
       await sdk.content.triggerCaptions(item.id, {
         mode,
-        backend,
         language,
       });
 
