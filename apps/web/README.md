@@ -1,120 +1,99 @@
-# EStudio
+# EStudio Web (`apps/web`)
 
-A creator‑focused studio for generating, managing, and publishing audiovisual content.  
-Built with Next.js, Remotion, Drizzle, and real‑time updates via Socket.IO.
+Next.js 16 studio app for content upload/edit/render/publish workflows with realtime updates.
 
-## What It Does
+## Scope
 
-- Create content items (video + audio + metadata).
-- Render looped compositions with Remotion (server‑side).
-- Track render progress live in the studio UI.
-- Publish to connected providers (YouTube today, others later).
-- Keep everything user‑scoped (DB + storage + sockets).
+This app includes:
+- Studio UI pages (`src/app/(studio)`)
+- API routes (`src/app/api`)
+- Background runtime entrypoints (`src/runtime`) for API/worker modes
+- Rendering, queue, publishing, notifications, and settings domains (`src/lib/*`)
+- Remotion compositions (`src/remotion/*`)
 
-## Key Concepts
+## Runtime Modes
 
-**Content items**  
-A content item is a single project with metadata + assets. It owns:
-- source assets (thumbnail, video, song)
-- renders (exported mp4 files)
-- a manifest file to support rescan + recovery
+Runtime is controlled by `src/runtime/runner.ts`:
+- `api` - Next.js API/server only
+- `worker` - BullMQ workers only
+- `api+worker` - both
 
-**User‑scoped storage**  
-All files are stored under:
-
-```
-data/users/{userId}/
-  uploads/
-  renders/
-  manifests/
-```
-
-This makes it safe to multi‑tenant later without refactoring.
-
-**User‑scoped DB**  
-`content_items` has a `userId` foreign key with indexes for queries by user.
-
-**Real‑time updates**  
-Socket events emit to a room per user (`user:{id}`), so multiple devices can stay in sync.
-
-## Architecture (Short)
-
-- **Studio UI**: `src/app/(studio)`  
-  Auth‑guarded routes for editing, rendering, uploading, and publishing.
-- **API**: `src/app/api`  
-  Content CRUD, uploads, render, publish, and provider info endpoints.
-- **Storage**: `src/lib/storage`  
-  Adapter‑based filesystem layer (future‑proof for buckets).
-- **Publishing**: `src/lib/publishing`  
-  Provider registry + adapters (YouTube implemented).
-
-## Development
-
-Run the dev server:
+Common scripts:
 
 ```bash
-pnpm dev
+pnpm dev           # api+worker
+pnpm dev:api
+pnpm dev:worker
+pnpm start         # production api
+pnpm start:worker
+pnpm start:all
 ```
 
-Apply migrations:
+## Core Architecture
+
+- UI: `src/app`, `src/components`
+- API handlers: `src/lib/api/*`
+- Data/repositories/schemas: `src/lib/data/*`
+- SDK client facade: `src/lib/sdk/*`
+- Content mode system: `src/lib/content/modes/*`
+- Rendering pipeline: `src/lib/rendering/*`
+- Queues: `src/lib/queue/*`
+- Publishing: `src/lib/publishing/*`
+- Realtime events: `src/lib/socket/*`, `src/lib/event-bus/*`
+
+## Render & Publish
+
+- Render queue: `content-render` (local backend or Remotion lambda backend)
+- Publish queue: `content-publish`
+- Worker process is in `src/runtime/worker.ts`
+
+## Captions
+
+- Captions are supported in modes and Remotion layer rendering
+- Backends include local whisper-cpp and OpenAI whisper flows
+- Shared captions data is stored in settings under `__shared.captionsData`
+
+## Storage & Database
+
+- Default DB stack uses Drizzle + SQLite locally (`better-sqlite3`)
+- Storage uses adapter abstraction under `src/lib/storage`
+- Local data path (containerized) typically maps to `/app/data`
+
+## Environment (high-impact)
+
+- Redis:
+  - `REDIS_URL`
+  - optional overrides: `RENDER_QUEUE_REDIS_URL`, `PUBLISH_QUEUE_REDIS_URL`, `SOCKET_IO_REDIS_URL`
+- Render backend:
+  - `RENDER_BACKEND=local|lambda`
+  - lambda: `REMOTION_LAMBDA_FUNCTION_NAME`, `REMOTION_LAMBDA_REGION`, `REMOTION_LAMBDA_SERVE_URL`
+- Caption backend fallback:
+  - `CAPTION_BACKEND`
+
+See `.env.example` for the full list.
+
+## Migrations
 
 ```bash
+pnpm drizzle:dev:generate
 pnpm drizzle:dev:migrate
 ```
 
-## Environment
+## Validation
 
-Core env variables you will need:
+Run before commit:
 
-```
-DATABASE_URL=
-AUTH_SECRET=
-AUTH_URL=
-CONTENT_ASSET_SIGNING_SECRET=
+```bash
+pnpm tsc --noEmit
+pnpm lint
 ```
 
-`CONTENT_ASSET_SIGNING_SECRET` signs short‑lived tokens used by Remotion to fetch assets while rendering server‑side.
+## Monorepo Notes
 
-Render/shader env variables:
+This app now lives in `apps/web` under the EStudio monorepo root.
+Infrastructure orchestration (compose, nix, future terraform/helm) is managed at repo root.
 
-```
-REMOTION_RENDER_CONCURRENCY=
-REMOTION_OFFTHREAD_VIDEO_THREADS=
-REMOTION_RENDER_ENABLE_SHADER=false
-REMOTION_RENDER_GL=
-```
+## Source of Truth
 
-Notes:
-- `REMOTION_RENDER_ENABLE_SHADER=false` is the safe default for headless exports.
-- Set `REMOTION_RENDER_ENABLE_SHADER=true` only if you explicitly want shader effects in final renders.
-- If shader render is enabled, optionally set `REMOTION_RENDER_GL` to one of: `angle`, `egl`, `swiftshader`, `swangle`.
-
-## How Rendering Works
-
-1) User triggers `/api/content/[id]/render`  
-2) Remotion renders in the server process  
-3) Render progress emits via Socket.IO  
-4) Rendered mp4 is stored in `data/users/{id}/renders/{contentId}`
-
-## How Publishing Works
-
-1) User selects provider + render + metadata  
-2) `/api/content/[id]/publishes` stores a publish record  
-3) Background queue processes uploads  
-4) Status + progress update live via Socket.IO
-
-## Future Scaling Ideas
-
-You already have the right abstractions. Scaling is mostly “swap‑in”:
-
-- **Storage** → add S3/R2 adapter for `src/lib/storage`
-- **Queue** → move publish/render jobs to a persistent worker (BullMQ/pg‑boss)
-- **Sockets** → add Redis adapter for multi‑node Socket.IO
-- **Rendering** → separate render workers (dedicated machines / GPU nodes)
-- **Rendering (serverless)** → evaluate Remotion Lambda for burst renders and queue offloading
-- **CDN** → serve assets and renders via signed URLs
-
-## Notes
-
-This repo is optimized for iteration and rapid product development.  
-If you want SaaS‑grade scaling, the above steps are the intended upgrade path.
+For deeper architecture details and extension rules, use:
+- `apps/web/AGENTS.md`

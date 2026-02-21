@@ -1,0 +1,27 @@
+# Workspace
+node_modules/
+pnpm-debug.log*
+
+# Build / cache
+**/.next/
+**/dist/
+**/build/
+**/.turbo/
+**/.cache/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Runtime data
+infra/data/
+apps/web/data/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

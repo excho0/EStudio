@@ -1,0 +1,17 @@
+{
+  "name": "estudio-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "dev": "pnpm --filter estudio dev",
+    "dev:api": "pnpm --filter estudio dev:api",
+    "dev:worker": "pnpm --filter estudio dev:worker",
+    "build": "pnpm --filter estudio build",
+    "start": "pnpm --filter estudio start",
+    "start:worker": "pnpm --filter estudio start:worker",
+    "start:all": "pnpm --filter estudio start:all",
+    "lint": "pnpm --filter estudio lint",
+    "typecheck": "pnpm --filter estudio exec tsc --noEmit"
+  }
+}

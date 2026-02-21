@@ -40,10 +40,10 @@ services:
   # ---------------------------------------------------------------------------
   # Application services
   # ---------------------------------------------------------------------------
-  api:
-    container_name: estudio-api
+  web:
+    container_name: estudio-web
     build:
-      context: .
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
@@ -52,7 +52,7 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - .env.example
+      - ./apps/web/.env.example
     environment:
       # Runtime
       NODE_ENV: production
@@ -67,7 +67,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./data/app:/app/data
+      - ./data/apps/web:/app/data
     command: ["pnpm", "start"]
     healthcheck:
       test:
@@ -82,7 +82,7 @@ services:
   worker:
     container_name: estudio-worker
     build:
-      context: .
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
@@ -90,10 +90,10 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      api:
+      web:
         condition: service_started
     env_file:
-      - .env.example
+      - ./apps/web/.env.example
     environment:
       # Runtime
       NODE_ENV: production
@@ -105,5 +105,5 @@ services:
       # Redis (single shared URL; queue modules can use this fallback)
       REDIS_URL: redis://redis:6379
     volumes:
-      - ./data/app:/app/data
+      - ./data/apps/web:/app/data
     command: ["pnpm", "start:worker"]
