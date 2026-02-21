@@ -14,6 +14,7 @@ type CaptionsLayerProps = {
   captionTransform: string;
   captionBlur: number;
   captionHighlightColor: string;
+  layerOpacity: number;
 };
 
 export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
@@ -28,10 +29,13 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionTransform,
   captionBlur,
   captionHighlightColor,
+  layerOpacity,
 }) => {
   if (!captionsEnabled || !hasActiveCaption) {
     return null;
   }
+
+  const effectiveCaptionOpacity = captionOpacity * layerOpacity;
 
   if (effectiveCaptionsStyle === "tiktok" && captionPages.length > 0) {
     return (
@@ -73,7 +77,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     textShadow:
                       "0 2px 8px rgba(0,0,0,0.82), 0 0 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,255,255,0.1)",
                     WebkitTextStroke: "0.8px rgba(0,0,0,0.5)",
-                    opacity: captionOpacity,
+                    opacity: effectiveCaptionOpacity,
                     transform: captionTransform,
                     filter: `blur(${captionBlur.toFixed(2)}px)`,
                     willChange: "transform, opacity, filter",
@@ -151,7 +155,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     backdropFilter: "blur(5px)",
                     boxShadow:
                       "0 14px 38px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 24px rgba(255,255,255,0.08)",
-                    opacity: captionOpacity,
+                    opacity: effectiveCaptionOpacity,
                     transform: captionTransform,
                     filter: `blur(${captionBlur.toFixed(2)}px)`,
                     willChange: "transform, opacity, filter",

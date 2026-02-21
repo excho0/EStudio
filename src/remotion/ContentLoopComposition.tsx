@@ -204,7 +204,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       : thumbnailSrc
         ? 1
         : 0;
-  const visualizationOpacity =
+  const thumbnailRevealOpacity =
     thumbnailSrc && !isRendering
       ? Math.max(0, Math.min(1, 1 - thumbnailOpacity))
       : 1;
@@ -229,6 +229,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const videoOpacity =
     (thumbnailSrc && !thumbnailLoaded && !isRendering ? 0 : 1) *
     introOutroOpacity;
+  const contentLayerOpacity = thumbnailRevealOpacity * introOutroOpacity;
   const outroOverlayOpacity =
     outroFadeFrames > 0
       ? interpolate(
@@ -253,7 +254,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     0,
     Math.round(audioFadeOutOffsetSeconds * fps)
   );
-  const resolvedOverlapRatio =
+  const clampedOverlapRatio =
     Number.isFinite(overlapRatio) && overlapRatio !== null
       ? Math.min(0.9, Math.max(0, overlapRatio))
       : null;
@@ -265,11 +266,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     fadeFrames > 0 && segmentFrames > 1
       ? Math.min(fadeFrames, segmentFrames - 1)
       : 0;
-  const step =
-    resolvedOverlapRatio === null
+  const segmentStepFrames =
+    clampedOverlapRatio === null
       ? Math.max(1, segmentFrames - defaultOverlapFrames)
-      : Math.max(1, Math.round(segmentFrames * (1 - resolvedOverlapRatio)));
-  const overlapFrames = Math.max(0, segmentFrames - step);
+      : Math.max(1, Math.round(segmentFrames * (1 - clampedOverlapRatio)));
+  const overlapFrames = Math.max(0, segmentFrames - segmentStepFrames);
   const transitionFrames =
     fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
       ? Math.min(fadeFrames, overlapFrames)
@@ -610,7 +611,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     : undefined;
 
 
-  const maxStart = Math.max(0, videoFrames - segmentFrames);
+  const maxSegmentStartFrame = Math.max(0, videoFrames - segmentFrames);
   const timelineMs = (frame / fps) * 1000;
   const {
     effectiveCaptionsStyle,
@@ -643,13 +644,13 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       return 1;
     }
     const target = Math.max(1, durationInFrames - transitionFrames);
-    return Math.max(1, Math.ceil(target / step));
-  }, [durationInFrames, segmentFrames, step, transitionFrames]);
+    return Math.max(1, Math.ceil(target / segmentStepFrames));
+  }, [durationInFrames, segmentFrames, segmentStepFrames, transitionFrames]);
   const segments = useMemo(
     () => Array.from({ length: segmentCount }, (_, index) => index),
     [segmentCount]
   );
-  const series = useMemo(
+  const segmentTransitionSeries = useMemo(
     () =>
       segments.flatMap((index) => {
         const items = [
@@ -662,7 +663,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               videoSrc={videoSrc}
               videoFrames={videoFrames}
               startFrom={
-                maxStart === 0 ? 0 : (index * step) % (maxStart + 1)
+                maxSegmentStartFrame === 0
+                  ? 0
+                  : (index * segmentStepFrames) % (maxSegmentStartFrame + 1)
               }
               playbackRate={resolvedPlaybackRate}
               sharpenEnabled={sharpenEnabled}
@@ -673,7 +676,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               sharpenSaturationWeight={sharpenSaturationWeight}
               sharpenBrightnessWeight={sharpenBrightnessWeight}
               glowEnabled={edgeRaysEnabled}
-              glowIntensity={glowIntensity * visualizationOpacity * introOutroOpacity}
+              glowIntensity={glowIntensity * contentLayerOpacity}
               glowColor={glowColor}
               scale={scaleFactor}
             />
@@ -697,11 +700,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     [
       segmentFrames,
       segments,
-      step,
+      segmentStepFrames,
       transitionFrames,
       videoFrames,
       videoSrc,
-      maxStart,
+      maxSegmentStartFrame,
       resolvedPlaybackRate,
       glowIntensity,
       sharpenAmount,
@@ -711,13 +714,26 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       sharpenSaturationWeight,
       sharpenBrightnessWeight,
       sharpenEnabled,
-      introOutroOpacity,
-      visualizationOpacity,
+      contentLayerOpacity,
       edgeRaysEnabled,
       glowColor,
       scaleFactor,
     ]
   );
+  const captionsLayerProps = {
+    captionsEnabled,
+    captionsStyle,
+    effectiveCaptionsStyle,
+    captionPages,
+    hasActiveCaption,
+    fps,
+    timelineMs,
+    captionOpacity,
+    captionTransform,
+    captionBlur,
+    captionHighlightColor,
+    layerOpacity: contentLayerOpacity,
+  };
 
   useEffect(() => {
     if (!thumbnailSrc || isRendering) {
@@ -745,7 +761,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               transform: motionTransform,
             }}
           >
-            <TransitionSeries>{series}</TransitionSeries>
+            <TransitionSeries>{segmentTransitionSeries}</TransitionSeries>
           </AbsoluteFill>
           {thumbnailSrc && !isRendering ? (
             <AbsoluteFill
@@ -793,7 +809,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         <AbsoluteFill
           style={{
             pointerEvents: "none",
-            opacity: visualizationOpacity * introOutroOpacity,
+            opacity: contentLayerOpacity,
             zIndex: 2,
           }}
         >
@@ -871,25 +887,13 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         </AbsoluteFill>
       )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
-      <CaptionsLayer
-        captionsEnabled={captionsEnabled}
-        captionsStyle={captionsStyle}
-        effectiveCaptionsStyle={effectiveCaptionsStyle}
-        captionPages={captionPages}
-        hasActiveCaption={hasActiveCaption}
-        fps={fps}
-        timelineMs={timelineMs}
-        captionOpacity={captionOpacity}
-        captionTransform={captionTransform}
-        captionBlur={captionBlur}
-        captionHighlightColor={captionHighlightColor}
-      />
+      <CaptionsLayer {...captionsLayerProps} />
       {visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",
             padding: "0",
-            opacity: visualizationOpacity * introOutroOpacity,
+            opacity: contentLayerOpacity,
           }}
         >
           <div
