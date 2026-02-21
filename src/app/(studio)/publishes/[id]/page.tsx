@@ -298,7 +298,10 @@ const ProviderSection = ({
       />
       <CollapsibleContent>
         {isMobile ? (
-        <ScrollArea className="h-[40svh]" viewportRef={scrollRef}>
+          <ScrollArea 
+            className="h-[clamp(20rem,56svh,68svh)]"
+            viewportRef={scrollRef}
+          >          
           <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const item = items[virtualRow.index];
@@ -362,7 +365,10 @@ const ProviderSection = ({
           </div>
         </ScrollArea>
       ) : (
-        <ScrollArea className="h-[45svh]" viewportRef={scrollRef}>
+        <ScrollArea
+          className="h-[clamp(20rem,56svh,68svh)]"
+          viewportRef={scrollRef}
+        >
           <Table className="w-full table-fixed">
             <colgroup>
               <col className="w-[50%]" />
@@ -676,11 +682,10 @@ export default function PublishesPage() {
           </div>
           <div
             className={cn(
-              "mt-6 flex items-center justify-center transition-opacity",
+              "flex items-center justify-center transition-opacity",
               totalPages > 1 || page > 1 ? "visible" : "invisible"
             )}
           >
-            {totalPages > 1 || page > 1 ? (
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
@@ -724,9 +729,6 @@ export default function PublishesPage() {
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
-            ) : (
-              <div className="h-10" />
-            )}
           </div>
         </div>
       ) : (

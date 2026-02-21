@@ -248,7 +248,10 @@ export default function RendersPage() {
       ) : rendersQuery.data && rendersQuery.data.items.length > 0 ? (
         <div className="mt-2">
           {isMobile ? (
-            <ScrollArea className="h-[50svh]" viewportRef={mobileScrollRef}>
+            <ScrollArea 
+              className="h-[clamp(20rem,56svh,68svh)]"
+              viewportRef={mobileScrollRef}
+            >   
               <div
                 className="relative"
                 style={{ height: mobileVirtualizer.getTotalSize() }}
@@ -329,7 +332,10 @@ export default function RendersPage() {
                   </thead>
                 </Table>
               </div>
-              <ScrollArea className="h-[60svh]" viewportRef={desktopScrollRef}>
+              <ScrollArea 
+                className="h-[clamp(20rem,56svh,68svh)]"
+                viewportRef={desktopScrollRef}
+              >   
                 <Table className="w-full table-fixed">
                   <colgroup>
                     <col className="w-[55%]" />
@@ -426,11 +432,10 @@ export default function RendersPage() {
           )}
           <div
             className={cn(
-              "mt-6 flex items-center justify-center transition-opacity",
+              "flex items-center justify-center transition-opacity",
               totalPages > 1 || page > 1 ? "visible" : "invisible"
             )}
           >
-            {totalPages > 1 || page > 1 ? (
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
@@ -474,9 +479,6 @@ export default function RendersPage() {
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
-            ) : (
-              <div className="h-10" />
-            )}
           </div>
         </div>
       ) : (
