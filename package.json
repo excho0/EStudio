@@ -4,14 +4,23 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.16.1",
   "scripts": {
-    "dev": "pnpm --filter estudio dev",
-    "dev:api": "pnpm --filter estudio dev:api",
-    "dev:worker": "pnpm --filter estudio dev:worker",
-    "build": "pnpm --filter estudio build",
-    "start": "pnpm --filter estudio start",
-    "start:worker": "pnpm --filter estudio start:worker",
-    "start:all": "pnpm --filter estudio start:all",
-    "lint": "pnpm --filter estudio lint",
-    "typecheck": "pnpm --filter estudio exec tsc --noEmit"
+    "dev": "pnpm run dev:web",
+    "build": "pnpm run build:web",
+    "start": "pnpm run start:web",
+
+    "dev:web": "pnpm --filter estudio dev",
+    "dev:web:api": "pnpm --filter estudio dev:api",
+    "dev:web:worker": "pnpm --filter estudio dev:worker",
+
+    "build:web": "pnpm --filter estudio build",
+    "start:web": "pnpm --filter estudio start",
+    "start:web:worker": "pnpm --filter estudio start:worker",
+    "start:web:all": "pnpm --filter estudio start:all",
+
+    "lint:web": "pnpm --filter estudio lint",
+    "typecheck:web": "pnpm --filter estudio exec tsc --noEmit",
+
+    "lint": "pnpm run lint:web",
+    "typecheck": "pnpm run typecheck:web"
   }
 }
