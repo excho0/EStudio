@@ -107,3 +107,31 @@ services:
     volumes:
       - ./data/apps/web:/app/data
     command: ["pnpm", "start:worker"]
+
+
+  captions-api:
+    container_name: estudio-captions-api
+    build:
+      context: ./apps/captions-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./apps/captions-api/.env.example
+    environment:
+      APP_ENV: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8010
+      CAPTIONS_BACKEND: whisperx
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./data/apps/captions-api:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/health')\"",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10

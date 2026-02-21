@@ -17,6 +17,10 @@
     "start:web:worker": "pnpm --filter estudio start:worker",
     "start:web:all": "pnpm --filter estudio start:all",
 
+    "dev:captions-api": "cd apps/captions-api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8010",
+    "build:captions-api": "cd apps/captions-api && uv sync --no-dev",
+    "start:captions-api": "cd apps/captions-api && uv run uvicorn app.main:app --host 0.0.0.0 --port 8010",
+
     "lint:web": "pnpm --filter estudio lint",
     "typecheck:web": "pnpm --filter estudio exec tsc --noEmit",
 
