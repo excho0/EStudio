@@ -20,8 +20,16 @@ type Props = {
 
 export function CaptionEditorPreview({ preview, playerRef }: Props) {
   if (!preview) return null;
+  const aspectRatio = `${preview.compositionWidth} / ${preview.compositionHeight}`;
   return (
-    <div className="mx-auto aspect-video w-full max-w-3xl max-h-60 lg:max-h-100">
+    <div
+      className="mx-auto w-full max-w-5xl overflow-hidden"
+      style={{
+        aspectRatio,
+        height: "clamp(180px, 34vh, 460px)",
+        maxHeight: "55svh",
+      }}
+    >
       <Player
         ref={playerRef}
         acknowledgeRemotionLicense
@@ -32,7 +40,7 @@ export function CaptionEditorPreview({ preview, playerRef }: Props) {
         compositionWidth={preview.compositionWidth}
         compositionHeight={preview.compositionHeight}
         controls={false}
-        style={{ width: "100%", height: "100%", maxHeight: "280px" }}
+        style={{ width: "100%", height: "100%" }}
       />
     </div>
   );

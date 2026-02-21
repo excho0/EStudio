@@ -1105,6 +1105,11 @@ export function CaptionEditorDrawer({
               onRedo={redo}
               onZoomOut={() => setZoomAnchored(zoomPxPerSecond - 10)}
               onZoomIn={() => setZoomAnchored(zoomPxPerSecond + 10)}
+              onBeginNavigate={() => {
+                const player = playerRef.current;
+                if (!player) return;
+                if (player.isPlaying()) player.pause();
+              }}
             />
 
             {!isMobile ? (
