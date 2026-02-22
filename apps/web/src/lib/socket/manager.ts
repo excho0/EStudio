@@ -365,7 +365,7 @@ export const emitSettingsUpdated = (payload: {
   userId: string;
   settings: {
     captions: {
-      backend?: "openai" | "local";
+      backend?: "openai" | "local" | "captions-api-app";
     };
   };
 }) => {

@@ -15,7 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 whisperx = [
   "whisperx==3.8.1",
-  "torchcodec==0.7.0"
+  "torchcodec==0.7.0",
+  "demucs>=4.0.1",
+  "faster-whisper>=1.1.0"
 ]
 
 [dependency-groups]

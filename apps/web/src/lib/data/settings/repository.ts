@@ -13,13 +13,30 @@ type RowPayload = {
   version: number;
 };
 
+const normalizeLegacySettingsShape = (value: unknown): unknown => {
+  const obj = (value ?? {}) as { captions?: { backend?: unknown } };
+  const backend = obj.captions?.backend;
+  if (backend !== "whisperx-remote") {
+    return value;
+  }
+  return {
+    ...obj,
+    captions: {
+      ...(obj.captions ?? {}),
+      backend: "captions-api-app",
+    },
+  };
+};
+
 const normalizeRowPayload = (value: unknown): RowPayload => {
   const row = (value ?? {}) as {
     data?: unknown;
     value?: unknown;
     version?: unknown;
   };
-  const parsedData = appSettingsSchema.parse(row.data ?? row.value ?? {});
+  const parsedData = appSettingsSchema.parse(
+    normalizeLegacySettingsShape(row.data ?? row.value ?? {})
+  );
   const version =
     typeof row.version === "number" && Number.isFinite(row.version) && row.version > 0
       ? row.version

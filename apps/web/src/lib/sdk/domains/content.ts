@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { captionDocumentSchema } from "@/types";
 import { ApiClient } from "@/lib/sdk/client";
+import { settingsCaptionBackendSchema } from "@/lib/data/settings/schemas";
 import {
   contentItemSchema,
   contentListResponseSchema,
@@ -45,7 +46,7 @@ export type ContentTriggerRenderResponse = z.infer<typeof triggerRenderResponseS
 export type TriggerRenderOptions = z.infer<typeof triggerRenderRequestSchema>;
 export type TriggerCaptionsOptions = {
   mode?: string;
-  backend?: "openai" | "local";
+  backend?: z.infer<typeof settingsCaptionBackendSchema>;
   language?: string;
 };
 export type SaveCaptionsOptions = {

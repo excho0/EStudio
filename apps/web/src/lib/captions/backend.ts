@@ -3,10 +3,12 @@ import { getLogger } from "@/lib/logging";
 import type { CaptionDocument } from "@/types";
 import { transcribeWithLocalWhisper } from "./backends/local-whisper";
 import { transcribeWithOpenAiWhisper } from "./backends/openai-whisper";
+import { transcribeWithCaptionsApiApp } from "./backends/captions-api-app";
 
 const logger = getLogger("captions-backend");
 
-export const captionBackendSchema = z.enum(["openai", "local"]);
+const captionBackendRawSchema = z.enum(["openai", "local", "captions-api-app"]);
+export const captionBackendSchema = captionBackendRawSchema;
 export type CaptionBackend = z.infer<typeof captionBackendSchema>;
 
 export type CaptionBackendInput = {
@@ -26,6 +28,7 @@ export type CaptionBackendRunner = (
 const BACKEND_RUNNERS: Record<CaptionBackend, CaptionBackendRunner> = {
   openai: transcribeWithOpenAiWhisper,
   local: transcribeWithLocalWhisper,
+  "captions-api-app": transcribeWithCaptionsApiApp,
 };
 
 export const resolveCaptionBackend = (value?: string | null): CaptionBackend => {

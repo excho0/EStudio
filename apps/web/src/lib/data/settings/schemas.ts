@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const settingsCaptionBackendSchema = z.enum(["openai", "local"]);
+const settingsCaptionBackendRawSchema = z.enum([
+  "openai",
+  "local",
+  "captions-api-app",
+]);
+
+export const settingsCaptionBackendSchema = settingsCaptionBackendRawSchema;
 
 export const appSettingsSchema = z.object({
   captions: z
@@ -53,4 +59,3 @@ export const settingsUpdateResponseSchema = z.object({
   ok: z.literal(true),
   settings: settingsResponseSchema,
 });
-

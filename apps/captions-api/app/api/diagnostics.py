@@ -7,9 +7,10 @@ import struct
 import time
 import wave
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.config import settings
+from app.core.security import require_api_token
 from app.schemas.diagnostics import (
     ProbeStatus,
     RuntimeDiagnosticsResponse,
@@ -17,7 +18,11 @@ from app.schemas.diagnostics import (
 )
 from app.services.backends import get_transcription_backend
 
-router = APIRouter(prefix="/v1/diagnostics", tags=["diagnostics"])
+router = APIRouter(
+    prefix="/v1/diagnostics",
+    tags=["diagnostics"],
+    dependencies=[Depends(require_api_token)],
+)
 
 
 @router.get("/runtime", response_model=RuntimeDiagnosticsResponse)

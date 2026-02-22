@@ -8,6 +8,7 @@ import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-qu
 import { processCaptionJob } from "@/lib/captions/process-caption-job";
 import { emitCaptionUpdate, emitContentUpdate } from "@/lib/socket/manager";
 import { resolveCaptionBackendSetting } from "@/lib/data/settings";
+import { settingsCaptionBackendSchema } from "@/lib/data/settings/schemas";
 
 const resolveDefaultCaptionLanguage = () => {
   const value = process.env.CAPTION_DEFAULT_LANGUAGE?.trim();
@@ -16,7 +17,7 @@ const resolveDefaultCaptionLanguage = () => {
 
 const triggerCaptionsRequestSchema = z.object({
   mode: z.string().min(1).optional(),
-  backend: z.enum(["openai", "local"]).optional(),
+  backend: settingsCaptionBackendSchema.optional(),
   language: z.string().min(2).max(16).optional(),
 });
 

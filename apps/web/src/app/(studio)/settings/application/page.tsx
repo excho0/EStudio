@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Cloud, HardDrive, Settings2 } from "lucide-react";
+import { Cloud, HardDrive, Server, Settings2 } from "lucide-react";
+import { z } from "zod";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -9,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { IconSelect } from "@/components/ui/icon-select";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
+import { settingsCaptionBackendSchema } from "@/lib/data/settings/schemas";
 import type { SettingsResponse } from "@/types";
+
+type CaptionBackend = z.infer<typeof settingsCaptionBackendSchema>;
 
 export default function ApplicationSettingsPage() {
   const queryClient = useQueryClient();
@@ -19,7 +23,7 @@ export default function ApplicationSettingsPage() {
     queryFn: async () => sdk.settings.get(),
   });
   const updateSettingsMutation = useMutation({
-    mutationFn: async (backend: "openai" | "local") =>
+    mutationFn: async (backend: CaptionBackend) =>
       sdk.settings.update({
         captions: { backend },
       }),
@@ -35,10 +39,10 @@ export default function ApplicationSettingsPage() {
   });
 
   const data = settingsQuery.data ?? null;
-  const serverCaptionBackend = data?.captions.backend ?? "openai";
-  const [captionBackendDraft, setCaptionBackendDraft] = useState<
-    "openai" | "local" | null
-  >(null);
+  const serverCaptionBackend: CaptionBackend = data?.captions.backend ?? "openai";
+  const [captionBackendDraft, setCaptionBackendDraft] = useState<CaptionBackend | null>(
+    null
+  );
   const effectiveCaptionBackend = captionBackendDraft ?? serverCaptionBackend;
 
   useEffect(() => {
@@ -79,12 +83,13 @@ export default function ApplicationSettingsPage() {
             <IconSelect
               value={effectiveCaptionBackend}
               onValueChange={(value) =>
-                setCaptionBackendDraft(value as "openai" | "local")
+                setCaptionBackendDraft(value as CaptionBackend)
               }
               triggerClassName="h-9 min-w-48"
               options={[
                 { value: "openai", label: "OpenAI Whisper", icon: Cloud },
                 { value: "local", label: "Local Whisper.cpp", icon: HardDrive },
+                { value: "captions-api-app", label: "Captions API App", icon: Server },
               ]}
             />
             <Button

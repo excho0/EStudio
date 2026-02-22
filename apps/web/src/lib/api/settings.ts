@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/settings";
 import { emitSettingsUpdated } from "@/lib/socket/manager";
 import { getStorage } from "@/lib/storage";
+import z from "zod";
 
 const storage = getStorage();
 
@@ -55,12 +56,19 @@ export const handleGetSettings = async (userId: string) => {
 };
 
 export const handleUpdateSettings = async (request: Request, userId: string) => {
-  const payload = settingsUpdateRequestSchema
-    .safeParse(await request.json().catch(() => null))
-    .data;
-  if (!payload) {
-    return NextResponse.json({ error: "Invalid settings payload." }, { status: 400 });
+  const parsed = settingsUpdateRequestSchema.safeParse(
+    await request.json().catch(() => null)
+  );
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "Invalid settings payload.",
+        details: z.treeifyError(parsed.error),
+      },
+      { status: 400 }
+    );
   }
+  const payload = parsed.data;
   const updatedSettings = await updateSettings(
     {
       captions: {

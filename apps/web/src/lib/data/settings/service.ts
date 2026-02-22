@@ -9,8 +9,12 @@ type AppSettings = Awaited<ReturnType<typeof getAppSettings>>;
 type AppSettingsUpdate = Parameters<typeof updateAppSettings>[0];
 type CaptionBackend = z.infer<typeof settingsCaptionBackendSchema>;
 
-const resolveEnvCaptionBackend = (): CaptionBackend =>
-  process.env.CAPTION_BACKEND?.trim().toLowerCase() === "local" ? "local" : "openai";
+const resolveEnvCaptionBackend = (): CaptionBackend => {
+  const raw = process.env.CAPTION_BACKEND?.trim().toLowerCase() ?? "openai";
+  const normalized = raw;
+  const parsed = settingsCaptionBackendSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : "openai";
+};
 
 export const getSettings = (): Promise<AppSettings> => getAppSettings();
 
