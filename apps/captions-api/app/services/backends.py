@@ -75,8 +75,10 @@ class WhisperXBackend(TranscriptionBackend):
         with cls._diarize_lock:
             if cls._diarize_pipeline is None:
                 cls._diarize_pipeline = DiarizationPipeline(
+                    model_name=settings.whisperx_diarization_model,
                     token=settings.hf_token,
                     device=settings.whisperx_device,
+                    cache_dir=settings.whisperx_cache_dir,
                 )
             return cls._diarize_pipeline
 
@@ -111,6 +113,11 @@ class WhisperXBackend(TranscriptionBackend):
         diarize: bool,
     ) -> TranscriptionResponse:
         import whisperx
+        import torch
+
+        if settings.whisperx_tf32:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
 
         extension = Path(filename).suffix or ".wav"
         with tempfile.NamedTemporaryFile(suffix=extension, delete=True) as temp_file:
