@@ -99,6 +99,9 @@
           gnumake
           gcc
           pkg-config
+          docker
+          docker-compose
+          podman
 
           # Browser / rendering
           chromium

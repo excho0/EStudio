@@ -1,0 +1,14 @@
+name: estudio
+
+services:
+  captions-api:
+    environment:
+      # PyTorch ROCm typically still uses the `cuda` device API surface.
+      WHISPERX_DEVICE: cuda
+      WHISPERX_COMPUTE_TYPE: float16
+    # Typical AMD ROCm device mappings.
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
