@@ -60,21 +60,14 @@ class MusicFasterWhisperBackend(TranscriptionBackend):
             word_end = start_ms + int(round(((idx + 1) / total) * span))
             if word_end <= word_start:
                 word_end = word_start + 1
-            shifted_from, shifted_to = MusicFasterWhisperBackend._apply_timing_offset(
-                word_start,
-                min(end_ms, word_end),
+            out.append(
+                CaptionToken(
+                    text=word,
+                    fromMs=word_start,
+                    toMs=min(end_ms, word_end),
+                )
             )
-            out.append(CaptionToken(text=word, fromMs=shifted_from, toMs=shifted_to))
         return out
-
-    @staticmethod
-    def _apply_timing_offset(from_ms: int, to_ms: int) -> tuple[int, int]:
-        offset = int(settings.music_whisper_timing_offset_ms)
-        shifted_from = max(0, from_ms + offset)
-        shifted_to = max(0, to_ms + offset)
-        if shifted_to <= shifted_from:
-            shifted_to = shifted_from + 1
-        return shifted_from, shifted_to
 
     def _transcribe_sync(
         self,
@@ -149,8 +142,7 @@ class MusicFasterWhisperBackend(TranscriptionBackend):
                     to_ms = int(round(max(w_end, w_start) * 1000))
                     if to_ms <= from_ms:
                         to_ms = from_ms + 1
-                    shifted_from, shifted_to = self._apply_timing_offset(from_ms, to_ms)
-                    captions.append(CaptionToken(text=text, fromMs=shifted_from, toMs=shifted_to))
+                    captions.append(CaptionToken(text=text, fromMs=from_ms, toMs=to_ms))
                     added_words += 1
 
                 if added_words > 0:
@@ -169,8 +161,7 @@ class MusicFasterWhisperBackend(TranscriptionBackend):
             logger.info(
                 "Music backend transcription completed. "
                 f"filename={filename} captions_count={len(captions)} duration_ms={duration_ms} "
-                f"elapsed_ms={int(round((time.perf_counter() - started) * 1000))} "
-                f"timing_offset_ms={settings.music_whisper_timing_offset_ms}"
+                f"elapsed_ms={int(round((time.perf_counter() - started) * 1000))}"
             )
             return response
 

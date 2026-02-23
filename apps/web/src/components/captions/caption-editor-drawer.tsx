@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ArrowLeft, RotateCw, Save } from "lucide-react";
 import type { PlayerRef } from "@remotion/player";
 import type { CaptionDocument, CaptionSegment } from "@/types";
 import { captionDocumentSchema } from "@/types";
@@ -13,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -38,6 +40,18 @@ type CaptionEditorDrawerProps = {
   language: string;
   onSave: (next: CaptionDocument) => Promise<void> | void;
   preview: CaptionEditorPreviewProps | null;
+};
+
+export type CaptionEditorProps = {
+  value: CaptionDocument | null;
+  mode: string;
+  language: string;
+  onSave: (next: CaptionDocument) => Promise<void> | void;
+  preview: CaptionEditorPreviewProps | null;
+  active?: boolean;
+  onRequestClose?: () => void;
+  closeHref?: string;
+  className?: string;
 };
 
 type DragMode = "move" | "start" | "end";
@@ -82,8 +96,19 @@ const buildDefaultDocument = (_mode: string, language: string): CaptionDocument 
   backend: "manual",
   language: (language || "en").trim() || "en",
   generatedAt: new Date().toISOString(),
+  globalOffsetMs: 0,
   segments: [],
 });
+
+const normalizeCaptionDocument = (
+  value: CaptionDocument | null | undefined,
+  mode: string,
+  language: string
+): CaptionDocument => {
+  const parsed = captionDocumentSchema.safeParse(value ?? buildDefaultDocument(mode, language));
+  if (parsed.success) return parsed.data;
+  return buildDefaultDocument(mode, language);
+};
 
 export function CaptionEditorDrawer({
   open,
@@ -94,9 +119,49 @@ export function CaptionEditorDrawer({
   onSave,
   preview,
 }: CaptionEditorDrawerProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex h-[90vh] w-[96vw] max-w-[96vw] flex-col rounded-xl border p-0 sm:max-w-[96vw] lg:max-w-400"
+        onInteractOutside={(event) => event.preventDefault()}
+      >
+        <DialogHeader className="px-4 pt-4 pb-2">
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle className="text-base">Captions Editor</DialogTitle>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Drag, resize, and edit captions for mode <span className="font-medium">{mode}</span>.
+          </p>
+        </DialogHeader>
+        <CaptionEditor
+          value={value}
+          mode={mode}
+          language={language}
+          onSave={onSave}
+          preview={preview}
+          active={open}
+          onRequestClose={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function CaptionEditor({
+  value,
+  mode,
+  language,
+  onSave,
+  preview,
+  active = true,
+  onRequestClose,
+  closeHref,
+  className,
+}: CaptionEditorProps) {
   const isMobile = useIsMobile();
   const [draft, setDraft] = useState<CaptionDocument>(() =>
-    value ?? buildDefaultDocument(mode, language)
+    normalizeCaptionDocument(value, mode, language)
   );
   const [selectedIndex, setSelectedIndex] = useState<number | null>(() =>
     (value?.segments?.length ?? 0) > 0 ? 0 : null
@@ -111,6 +176,7 @@ export function CaptionEditorDrawer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState("0");
   const [history, setHistory] = useState<DraftHistory>({ past: [], future: [] });
   const dragRef = useRef<DragState | null>(null);
   const scrubRef = useRef<ScrubState>({ active: false });
@@ -133,6 +199,7 @@ export function CaptionEditorDrawer({
   const mobilePlaybackTickRef = useRef(0);
   const wasOpenRef = useRef(false);
   const baselineDraftRef = useRef<string>("");
+  const appliedGlobalOffsetRef = useRef(0);
 
   const draftSnapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const isDirty = draftSnapshot !== baselineDraftRef.current;
@@ -147,9 +214,20 @@ export function CaptionEditorDrawer({
     draftRef.current = draft;
   }, [draft]);
 
+  const globalOffsetMs = Math.round(draft.globalOffsetMs ?? 0);
+  const toDisplayMs = (ms: number) => Math.max(0, Math.round(ms + globalOffsetMs));
+  const toRawMsFromDisplay = (ms: number) => Math.max(0, Math.round(ms - globalOffsetMs));
+
   const sortedSegments = useMemo(
-    () => [...draft.segments].sort((a, b) => a.startMs - b.startMs),
-    [draft.segments]
+    () =>
+      [...draft.segments]
+        .sort((a, b) => a.startMs - b.startMs)
+        .map((segment) => ({
+          ...segment,
+          startMs: toDisplayMs(segment.startMs),
+          endMs: Math.max(toDisplayMs(segment.endMs), toDisplayMs(segment.startMs) + 1),
+        })),
+    [draft.segments, globalOffsetMs]
   );
 
   const durationMs = useMemo(() => {
@@ -191,9 +269,9 @@ export function CaptionEditorDrawer({
   }, [draft, preview]);
 
   useEffect(() => {
-    const isOpening = open && !wasOpenRef.current;
-    wasOpenRef.current = open;
-    if (!open) return;
+    const isOpening = active && !wasOpenRef.current;
+    wasOpenRef.current = active;
+    if (!active) return;
 
     // Hydrate from source value when dialog opens (or when value arrives after open
     // and current draft is still empty).
@@ -201,7 +279,7 @@ export function CaptionEditorDrawer({
       isOpening || (draft.segments.length === 0 && (value?.segments.length ?? 0) > 0);
     if (!shouldHydrate) return;
 
-    const next = value ?? buildDefaultDocument(mode, language);
+    const next = normalizeCaptionDocument(value, mode, language);
     setDraft(next);
     setHistory({ past: [], future: [] });
     baselineDraftRef.current = JSON.stringify(next);
@@ -209,8 +287,11 @@ export function CaptionEditorDrawer({
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
     setCursorMs(0);
+    const initialOffset = next.globalOffsetMs ?? 0;
+    setGlobalOffsetMsInput(String(initialOffset));
+    appliedGlobalOffsetRef.current = initialOffset;
     setError(null);
-  }, [draft.segments.length, language, mode, open, value]);
+  }, [active, draft.segments.length, language, mode, value]);
 
   const handleRestore = () => {
     if (!baselineDraftRef.current) return;
@@ -222,8 +303,35 @@ export function CaptionEditorDrawer({
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
     setCursorMs(0);
+    const restoredOffset = parsed.data.globalOffsetMs ?? 0;
+    setGlobalOffsetMsInput(String(restoredOffset));
+    appliedGlobalOffsetRef.current = restoredOffset;
     setError(null);
   };
+
+  useEffect(() => {
+    const nextRequestedOffset = Number.parseInt(globalOffsetMsInput.trim(), 10);
+    if (!Number.isFinite(nextRequestedOffset)) return;
+    const previousOffset = appliedGlobalOffsetRef.current;
+    let delta = nextRequestedOffset - previousOffset;
+    if (delta === 0) return;
+    const minStartMs = sortedSegmentsRef.current.reduce(
+      (min, segment) => Math.min(min, segment.startMs),
+      Number.POSITIVE_INFINITY
+    );
+    const maxNegativeDelta =
+      Number.isFinite(minStartMs) && minStartMs > 0 ? -minStartMs : 0;
+    if (delta < maxNegativeDelta) {
+      delta = maxNegativeDelta;
+    }
+    if (delta === 0) return;
+    applyDraftUpdate((current) => ({
+      ...current,
+      globalOffsetMs: previousOffset + delta,
+      segments: current.segments,
+    }));
+    appliedGlobalOffsetRef.current = previousOffset + delta;
+  }, [globalOffsetMsInput]);
 
   useEffect(() => {
     sortedSegmentsRef.current = sortedSegments;
@@ -245,7 +353,14 @@ export function CaptionEditorDrawer({
       const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
       const prev = sorted[index];
       if (!prev) return current;
-      sorted[index] = { ...prev, ...patch };
+      const nextPatch = { ...patch };
+      if (typeof nextPatch.startMs === "number") {
+        nextPatch.startMs = toRawMsFromDisplay(nextPatch.startMs);
+      }
+      if (typeof nextPatch.endMs === "number") {
+        nextPatch.endMs = toRawMsFromDisplay(nextPatch.endMs);
+      }
+      sorted[index] = { ...prev, ...nextPatch };
       return { ...current, segments: sorted };
     });
   };
@@ -260,6 +375,7 @@ export function CaptionEditorDrawer({
       const next = updater(current);
       if (next === current) return current;
       const same =
+        (next.globalOffsetMs ?? 0) === (current.globalOffsetMs ?? 0) &&
         next.segments.length === current.segments.length &&
         next.segments.every((segment, index) => {
           const prev = current.segments[index];
@@ -278,6 +394,8 @@ export function CaptionEditorDrawer({
 
   const setSegmentTiming = (index: number, startMs: number, endMs: number) => {
     applyDraftUpdate((current) => {
+      const rawStartMs = toRawMsFromDisplay(startMs);
+      const rawEndMs = toRawMsFromDisplay(endMs);
       const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
       const target = sorted[index];
       if (!target) return current;
@@ -285,8 +403,8 @@ export function CaptionEditorDrawer({
       const next = index < sorted.length - 1 ? sorted[index + 1] : null;
       const minStart = prev ? prev.endMs : 0;
       const maxEnd = next ? next.startMs : Number.POSITIVE_INFINITY;
-      const boundedStart = Math.max(minStart, Math.round(startMs));
-      const boundedEnd = Math.min(maxEnd, Math.round(endMs));
+      const boundedStart = Math.max(minStart, Math.round(rawStartMs));
+      const boundedEnd = Math.min(maxEnd, Math.round(rawEndMs));
       const normalizedStart = Math.max(0, boundedStart);
       const normalizedEnd = Math.max(normalizedStart + MIN_SEGMENT_MS, boundedEnd);
       if (normalizedEnd > maxEnd) {
@@ -313,7 +431,7 @@ export function CaptionEditorDrawer({
     let nextSelected = 0;
     applyDraftUpdate((current) => {
       const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
-      const cursor = clamp(snapMs(cursorMs), 0, durationMs);
+      const cursor = clamp(snapMs(toRawMsFromDisplay(cursorMs)), 0, durationMs);
       let insertedStartMs = 0;
       let insertedEndMs = 0;
       const withNew: CaptionSegment[] = [...sorted];
@@ -432,7 +550,13 @@ export function CaptionEditorDrawer({
   const pasteSegmentsAtCursor = () => {
     const payload = clipboardRef.current;
     if (!payload || payload.segments.length === 0) return;
-    const source = [...payload.segments].sort((a, b) => a.startMs - b.startMs);
+    const source = [...payload.segments]
+      .sort((a, b) => a.startMs - b.startMs)
+      .map((segment) => ({
+        ...segment,
+        startMs: toRawMsFromDisplay(segment.startMs),
+        endMs: toRawMsFromDisplay(segment.endMs),
+      }));
     const sourceStart = source[0]?.startMs ?? 0;
     let nextSelection: number[] = [];
     applyDraftUpdate((current) => {
@@ -441,7 +565,10 @@ export function CaptionEditorDrawer({
       for (const original of source) {
         const relativeOffset = original.startMs - sourceStart;
         const duration = Math.max(MIN_SEGMENT_MS, original.endMs - original.startMs);
-        let candidateStart = Math.max(0, snapMs(cursorMs + relativeOffset));
+        let candidateStart = Math.max(
+          0,
+          snapMs(toRawMsFromDisplay(cursorMs) + relativeOffset)
+        );
         let searching = true;
         let guard = 0;
         while (searching) {
@@ -629,7 +756,7 @@ export function CaptionEditorDrawer({
   }, []);
 
   useCaptionEditorShortcuts({
-    open,
+    open: active,
     canUndo,
     canRedo,
     selectedCount: selectedIndices.length,
@@ -653,7 +780,7 @@ export function CaptionEditorDrawer({
   });
 
   useEffect(() => {
-    if (!preview || !open) return;
+    if (!preview || !active) return;
     const tick = () => {
       const currentPlayer = playerRef.current;
       if (!currentPlayer) {
@@ -691,7 +818,7 @@ export function CaptionEditorDrawer({
         playbackRafRef.current = null;
       }
     };
-  }, [isMobile, open, preview]);
+  }, [active, isMobile, preview]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -872,7 +999,7 @@ export function CaptionEditorDrawer({
 
   useEffect(() => {
     if (isMobile) return;
-    if (!open) return;
+    if (!active) return;
     const tick = () => {
       const scroller = timelineScrollerRef.current;
       const target = followScrollTargetRef.current;
@@ -898,7 +1025,7 @@ export function CaptionEditorDrawer({
       }
       followScrollTargetRef.current = null;
     };
-  }, [isMobile, open]);
+  }, [active, isMobile]);
 
   useEffect(() => {
     return () => {
@@ -915,7 +1042,7 @@ export function CaptionEditorDrawer({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Shift") shiftPressedRef.current = true;
     };
@@ -956,13 +1083,14 @@ export function CaptionEditorDrawer({
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("wheel", onWheelNative, true);
     };
-  }, [open]);
+  }, [active]);
 
   const handleSave = async () => {
     if (isSaving) return;
     const normalized = {
       ...draft,
       generatedAt: new Date().toISOString(),
+      globalOffsetMs: Math.round(draft.globalOffsetMs ?? 0),
       segments: [...draft.segments]
         .map((segment) => {
           const startMs = Math.max(0, Math.round(segment.startMs));
@@ -981,9 +1109,10 @@ export function CaptionEditorDrawer({
     setIsSaving(true);
     try {
       await onSave(parsed.data);
+      setDraft(parsed.data);
       baselineDraftRef.current = JSON.stringify(parsed.data);
       setHistory({ past: [], future: [] });
-      onOpenChange(false);
+      onRequestClose?.();
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Failed to save captions."
@@ -994,32 +1123,73 @@ export function CaptionEditorDrawer({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="flex h-[90vh] w-[96vw] max-w-[96vw] flex-col rounded-xl border p-0 sm:max-w-[96vw] lg:max-w-[1600px]"
-        onInteractOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader className="px-4 pt-4 pb-2">
-          <div className="flex items-center justify-between gap-3">
-            <DialogTitle className="text-base">Captions Editor</DialogTitle>
-            <DialogClose asChild>
-              <Button
-                type="button"
-                variant="ghost"
+    <div
+      className={cn(
+        "flex h-full w-full max-w-full flex-col rounded-xl",
+        className
+      )}
+    >
+        <div className="px-2 pb-8 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+          {closeHref ? (
+            <Button
+              asChild
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close captions editor"
+            >
+              <Link href={closeHref}>
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : onRequestClose ? (
+            <Button
+              type="button"
+              variant="ghost"
                 size="icon-sm"
                 aria-label="Close captions editor"
+                onClick={onRequestClose}
               >
-                <X className="h-4 w-4" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
-            </DialogClose>
+            ) : null}
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold">Captions Editor</h2>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">
+                preview your captions in real-time as you edit.
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Drag, resize, and edit captions for mode <span className="font-medium">{mode}</span>.
-          </p>
-        </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+          <div className="flex items-center justify-end gap-2">
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="text-xs text-muted-foreground">Global offset (ms)</span>
+              <Input
+                value={globalOffsetMsInput}
+                onChange={(event) => setGlobalOffsetMsInput(event.target.value)}
+                className="h-9 w-28 text-right"
+                inputMode="numeric"
+                aria-label="Global captions offset in milliseconds"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleRestore}
+              disabled={!isDirty || isSaving}
+            >
+              <RotateCw className="size-5" />
+              <span className="hidden sm:inline">Restore</span>
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={!canSave} loading={isSaving}>
+              <Save className="size-5" />
+              <span className="hidden sm:inline">Save Caption</span>
+            </Button>
+          </div>
+      </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
 
           <CaptionEditorPreview
             preview={
@@ -1113,7 +1283,7 @@ export function CaptionEditorDrawer({
             />
 
             {!isMobile ? (
-              <div className="min-h-0 w-full rounded-lg border bg-background p-3 lg:w-[420px] lg:shrink-0">
+              <div className="min-h-0 w-full rounded-lg border bg-background p-3 lg:w-105 lg:shrink-0">
                 <CaptionEditorInspector
                   sortedSegmentsLength={sortedSegments.length}
                   selectedIndices={selectedIndices}
@@ -1130,21 +1300,7 @@ export function CaptionEditorDrawer({
             ) : null}
           </div>
 
-          <div className="mt-3 flex items-center justify-end gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleRestore}
-                disabled={!isDirty || isSaving}
-              >
-                Restore
-              </Button>
-              <Button type="button" onClick={handleSave} disabled={!canSave} loading={isSaving}>
-                Save captions
-              </Button>
-            </div>
-          </div>
+
         </div>
         {isMobile ? (
           <Drawer open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
@@ -1169,7 +1325,6 @@ export function CaptionEditorDrawer({
             </DrawerContent>
           </Drawer>
         ) : null}
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

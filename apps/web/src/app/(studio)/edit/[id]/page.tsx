@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { Link } from "@/components/navigation/route-transition";
-import { useParams } from "next/navigation";
+import { useRouteTransition } from "@/components/navigation/route-transition";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
@@ -46,7 +47,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   captionDocumentSchema,
-  type CaptionDocument,
   type ContentItem,
   type EditFormValues,
   type PaletteMode,
@@ -86,7 +86,6 @@ import StickyBox from "@/components/ui/sticky-box";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
 import { Alert, AlertContent, AlertIcon, AlertTitle } from "@/components/ui/alert";
-import { CaptionEditorDrawer } from "@/components/captions/caption-editor-drawer";
 
 const STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded", icon: Upload },
@@ -208,6 +207,8 @@ const PREVIEW_CANVAS_ASPECT = PREVIEW_CANVAS_WIDTH / PREVIEW_CANVAS_HEIGHT;
 
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const routeTransition = useRouteTransition();
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(max-width: 1024px)");
 
@@ -222,7 +223,6 @@ export default function EditContentPage() {
   const [fieldActionLoading, setFieldActionLoading] = useState<
     Record<string, boolean>
   >({});
-  const [captionsEditorOpen, setCaptionsEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<{
     formValues: FormValues;
@@ -504,30 +504,13 @@ export default function EditContentPage() {
   };
 
   const handleOpenCaptionsEditor: FieldActionHandler = async () => {
-    setCaptionsEditorOpen(true);
-  };
-
-  const handleSaveCaptionsFromEditor = (next: CaptionDocument) => {
-    setFormValues((current) => {
-      const nextSettingsMap = normalizeSettingsMap(current.mode, current.settings);
-      const shared =
-        nextSettingsMap.__shared &&
-        typeof nextSettingsMap.__shared === "object" &&
-        !Array.isArray(nextSettingsMap.__shared)
-          ? (nextSettingsMap.__shared as Record<string, unknown>)
-          : {};
-      return {
-        ...current,
-        settings: {
-          ...nextSettingsMap,
-          __shared: {
-            ...shared,
-            captionsData: next,
-          },
-        },
-      };
-    });
-    toast.success("Captions updated locally. Save content to persist.");
+    if (!params.id) return;
+    const href = `/edit/${params.id}/captions`;
+    if (routeTransition) {
+      routeTransition.startTransition(href);
+      return;
+    }
+    router.push(href);
   };
 
   const fieldActionHandlers: Record<string, FieldActionHandler> = {
@@ -715,15 +698,6 @@ export default function EditContentPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <CaptionEditorDrawer
-        open={captionsEditorOpen}
-        onOpenChange={setCaptionsEditorOpen}
-        value={sharedCaptionsData}
-        mode={String(formValues.mode || item?.mode || DEFAULT_CONTENT_MODE)}
-        language={String(getFieldValue("captionsLanguage") || "en")}
-        onSave={handleSaveCaptionsFromEditor}
-        preview={captionsEditorPreview}
-      />
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
         <div className="flex min-w-0 items-center gap-3">
         <Button

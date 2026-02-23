@@ -192,6 +192,7 @@ export const resolveCaptionRuntime = ({
   captionsAnimationPreset,
   captionsWordsPerPage,
   captionsSegments,
+  captionsGlobalOffsetMs,
   timelineMs,
 }: {
   captionsEnabled: boolean;
@@ -199,11 +200,21 @@ export const resolveCaptionRuntime = ({
   captionsAnimationPreset: CaptionAnimationPreset;
   captionsWordsPerPage?: number;
   captionsSegments: CaptionSegment[];
+  captionsGlobalOffsetMs?: number;
   timelineMs: number;
 }) => {
   const effectiveCaptionsStyle: CaptionStyle = captionsStyle;
+  const globalOffsetMs = Math.round(captionsGlobalOffsetMs ?? 0);
+  const runtimeSegments =
+    globalOffsetMs === 0
+      ? captionsSegments
+      : captionsSegments.map((segment) => {
+          const startMs = Math.max(0, segment.startMs + globalOffsetMs);
+          const endMs = Math.max(startMs + 1, segment.endMs + globalOffsetMs);
+          return { ...segment, startMs, endMs };
+        });
 
-  if (!captionsEnabled || captionsSegments.length === 0) {
+  if (!captionsEnabled || runtimeSegments.length === 0) {
     return {
       effectiveCaptionsStyle,
       captionPages: [] as CaptionPage[],
@@ -224,11 +235,11 @@ export const resolveCaptionRuntime = ({
   );
 
   const activeCaptionSegment =
-    captionsSegments.find(
+    runtimeSegments.find(
       (item) => timelineMs >= item.startMs && timelineMs < item.endMs
     ) ?? null;
 
-  const captionPages = buildCaptionPages(captionsSegments, safeWordsPerPage);
+  const captionPages = buildCaptionPages(runtimeSegments, safeWordsPerPage);
 
   const activeCaptionPage =
     captionPages.find(

@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     music_whisper_beam_size: int = 7
     music_whisper_best_of: int = 7
     music_whisper_language: str | None = None
-    music_whisper_timing_offset_ms: int = -60
     transcription_max_upload_mb: int = 100
     CAPTION_REMOTE_TOKEN: str | None = None
     hf_token: str | None = None

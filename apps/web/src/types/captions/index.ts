@@ -10,6 +10,7 @@ export const captionDocumentSchema = z.object({
   backend: z.string(),
   language: z.string().default("en"),
   generatedAt: z.string(),
+  globalOffsetMs: z.number().int().default(0),
   segments: z.array(captionSegmentSchema),
 });
 

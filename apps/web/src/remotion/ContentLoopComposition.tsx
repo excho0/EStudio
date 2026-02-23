@@ -628,11 +628,13 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         captionsAnimationPreset,
         captionsWordsPerPage,
         captionsSegments: captionsData?.segments ?? [],
+        captionsGlobalOffsetMs: captionsData?.globalOffsetMs ?? 0,
         timelineMs,
       }),
     [
       captionsAnimationPreset,
       captionsData?.segments,
+      captionsData?.globalOffsetMs,
       captionsEnabled,
       captionsWordsPerPage,
       captionsStyle,
