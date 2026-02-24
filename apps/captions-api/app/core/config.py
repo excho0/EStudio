@@ -25,8 +25,12 @@ class Settings(BaseSettings):
     music_whisper_model: str = "large-v3"
     music_whisper_device: str = "cuda"
     music_whisper_compute_type: str = "float16"
+    music_whisper_profile: str = "default"
     music_whisper_beam_size: int = 7
     music_whisper_best_of: int = 7
+    music_whisper_parity_compute_type: str = "float32"
+    music_whisper_parity_beam_size: int = 10
+    music_whisper_parity_best_of: int = 10
     music_whisper_language: str | None = None
     transcription_max_upload_mb: int = 100
     CAPTION_REMOTE_TOKEN: str | None = None

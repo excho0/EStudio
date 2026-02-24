@@ -55,6 +55,31 @@ const isTruthy = (value?: string | null) => {
 const resolveWhisperFlashAttention = () =>
   isTruthy(process.env.CAPTION_LOCAL_WHISPER_FLASH_ATTENTION);
 
+const resolveWhisperGpuEnabled = () => {
+  const raw = process.env.CAPTION_LOCAL_WHISPER_GPU?.trim();
+  if (!raw) return true;
+  return isTruthy(raw);
+};
+
+const resolveWhisperGpuLayers = () => {
+  const parsed = Number.parseInt(
+    process.env.CAPTION_LOCAL_WHISPER_GPU_LAYERS?.trim() || "999",
+    10
+  );
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 999;
+};
+
+const resolveWhisperBuildCuda = () =>
+  isTruthy(process.env.CAPTION_LOCAL_WHISPER_BUILD_CUDA);
+
+const resolveWhisperBuildThreads = () => {
+  const parsed = Number.parseInt(
+    process.env.CAPTION_LOCAL_WHISPER_BUILD_THREADS?.trim() || "0",
+    10
+  );
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
 const resolveWhisperAdditionalArgs = (): string[] => {
   const raw = process.env.CAPTION_LOCAL_WHISPER_ADDITIONAL_ARGS?.trim();
   if (!raw) return [];
@@ -96,11 +121,87 @@ const buildWhisperAdditionalArgs = () => {
   ) {
     args.push("--beam-size", String(resolveWhisperBeamSize()));
   }
-  // Do not auto-inject --gpu-layers: many whisper.cpp builds (including this one)
-  // do not support the flag and fail hard with "unknown argument".
-  // GPU remains enabled by default unless --no-gpu is explicitly passed.
-  void isTruthy(process.env.CAPTION_LOCAL_WHISPER_GPU);
+  const gpuEnabled = resolveWhisperGpuEnabled();
+  if (!gpuEnabled && !hasAnyFlag(args, "--no-gpu", "-ng")) {
+    args.push("--no-gpu");
+  }
+  // NOTE:
+  // Newer whisper.cpp CLI builds may not support GPU-layer flags (-ngl/--gpu-layers),
+  // while GPU is enabled by default unless --no-gpu/-ng is passed.
+  // Keep layer config as a no-op for compatibility across versions.
+  void resolveWhisperGpuLayers();
   return args;
+};
+
+const runCommand = async ({
+  bin,
+  args,
+  cwd,
+}: {
+  bin: string;
+  args: string[];
+  cwd?: string;
+}) => {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(bin, args, {
+      cwd,
+      stdio: "inherit",
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Failed command: ${bin} ${args.join(" ")} (exit ${code})`));
+    });
+  });
+};
+
+const storageExistsAtPath = async (absolutePath: string) =>
+  storage.exists(storageKey(path.relative(storage.baseDir, absolutePath)));
+
+const rebuildWhisperWithCuda = async ({
+  whisperPath,
+  whisperPathKey,
+  buildThreads,
+}: {
+  whisperPath: string;
+  whisperPathKey: string;
+  buildThreads: number;
+}) => {
+  const hasCmakeLists = await storageExistsAtPath(path.join(whisperPath, "CMakeLists.txt"));
+  if (hasCmakeLists) {
+    await storage.deleteDir(storageKey(whisperPathKey, "build"));
+    await runCommand({
+      bin: "cmake",
+      args: [
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DGGML_CUDA=ON",
+        "-DCMAKE_BUILD_TYPE=Release",
+      ],
+      cwd: whisperPath,
+    });
+    await runCommand({
+      bin: "cmake",
+      args: [
+        "--build",
+        "build",
+        ...(buildThreads > 0 ? ["-j", String(buildThreads)] : []),
+      ],
+      cwd: whisperPath,
+    });
+    return;
+  }
+
+  await runCommand({
+    bin: "make",
+    args: ["GGML_CUDA=1", ...(buildThreads > 0 ? [`-j${buildThreads}`] : [])],
+    cwd: whisperPath,
+  });
 };
 
 const convertToWhisperWav = async (inputPath: string, outputPath: string) => {
@@ -186,6 +287,20 @@ const ensureWhisperInstallation = async ({
       printOutput: true,
     });
   }
+
+  if (process.platform !== "linux" || !resolveWhisperBuildCuda()) {
+    return;
+  }
+
+  const cudaMarkerKey = storageKey(whisperPathKey, ".cuda-build.ok");
+  const hasCudaBuild = await storage.exists(cudaMarkerKey);
+  if (hasCudaBuild) {
+    return;
+  }
+
+  const buildThreads = resolveWhisperBuildThreads();
+  await rebuildWhisperWithCuda({ whisperPath, whisperPathKey, buildThreads });
+  await storage.writeFile(cudaMarkerKey, "ok");
 };
 
 const ensureWhisperReady = async (): Promise<{
