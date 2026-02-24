@@ -259,16 +259,40 @@ export function CaptionEditorToolbar({
           />
         </div>
       </div>
-      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5">
-        <Captions className="h-4 w-4 text-muted-foreground" />
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Timeline
-        </span>
-        <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
-        <span className="text-sm font-semibold tabular-nums">{segmentCount}</span>
-        <span className="text-xs text-muted-foreground">
-          segment{segmentCount === 1 ? "" : "s"}
-        </span>
+      <div className="flex flex-row gap-2">
+        <div className="flex flex-row gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={onUndo}
+            disabled={!canUndo}
+            aria-label="Undo"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={onRedo}
+            disabled={!canRedo}
+            aria-label="Redo"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5">
+          <Captions className="h-4 w-4 flex shrink-0 text-muted-foreground" />
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Timeline
+          </span>
+          <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
+          <span className="text-sm font-semibold tabular-nums">{segmentCount}</span>
+          <span className="text-xs text-muted-foreground">
+            segment{segmentCount === 1 ? "" : "s"}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -1503,10 +1503,15 @@ export function CaptionEditor({
                 if (!player) return;
                 if (player.isPlaying()) player.pause();
               }}
+              onOpenInspectorForSegment={(index) => {
+                setSelectedIndices([index]);
+                setSelectedIndex(index);
+                setMobileInspectorOpen(true);
+              }}
             />
 
             {!isCompactLayout ? (
-              <div className="min-h-0 w-full rounded-lg border bg-background p-3 lg:w-105 lg:shrink-0">
+              <div className="min-h-0 w-full rounded-lg border bg-background p-3 lg:w-75 lg:shrink-0">
                 <CaptionEditorInspector
                   sortedSegmentsLength={sortedSegments.length}
                   selectedIndices={selectedIndices}

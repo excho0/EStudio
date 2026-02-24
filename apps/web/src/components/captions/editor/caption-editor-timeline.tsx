@@ -1,7 +1,7 @@
 "use client";
 
 import type { CaptionSegment } from "@/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { cn } from "@/lib/shared/utils";
 import {
@@ -46,6 +46,7 @@ type Props = {
   onZoomOut: () => void;
   onZoomIn: () => void;
   onBeginNavigate: () => void;
+  onOpenInspectorForSegment?: (index: number) => void;
 };
 
 export function CaptionEditorTimeline({
@@ -82,8 +83,32 @@ export function CaptionEditorTimeline({
   onZoomOut,
   onZoomIn,
   onBeginNavigate,
+  onOpenInspectorForSegment,
 }: Props) {
   const [viewport, setViewport] = useState({ left: 0, width: 0 });
+  const lastSegmentTapRef = useRef<{ index: number; at: number } | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStateRef = useRef<{
+    pointerId: number;
+    index: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const suppressClickAfterLongPressRef = useRef(false);
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStateRef.current = null;
+  };
+
+  useEffect(() => {
+    return () => {
+      clearLongPress();
+    };
+  }, []);
 
   useEffect(() => {
     const scroller = timelineScrollerRef.current;
@@ -283,12 +308,59 @@ export function CaptionEditorTimeline({
                       "border-primary/80 bg-linear-to-b from-primary/25 to-primary/15 ring-1 ring-primary/45"
                   )}
                   style={{ width: widthPx, transform: `translate3d(${leftPx}px, 0, 0)` }}
-                  onPointerDown={(event) => onStartDrag(event, index, "move")}
+                  onPointerDown={(event) => {
+                    onStartDrag(event, index, "move");
+                    if (!isMobile || isSelectionMode) return;
+                    clearLongPress();
+                    suppressClickAfterLongPressRef.current = false;
+                    longPressStateRef.current = {
+                      pointerId: event.pointerId,
+                      index,
+                      startX: event.clientX,
+                      startY: event.clientY,
+                    };
+                    longPressTimerRef.current = window.setTimeout(() => {
+                      const state = longPressStateRef.current;
+                      if (!state || state.index !== index) return;
+                      suppressClickAfterLongPressRef.current = true;
+                      lastSegmentTapRef.current = null;
+                      onOpenInspectorForSegment?.(index);
+                    }, 420);
+                  }}
+                  onPointerMove={(event) => {
+                    const state = longPressStateRef.current;
+                    if (!state || state.pointerId !== event.pointerId) return;
+                    const movedX = Math.abs(event.clientX - state.startX);
+                    const movedY = Math.abs(event.clientY - state.startY);
+                    if (movedX > 10 || movedY > 10) {
+                      clearLongPress();
+                    }
+                  }}
+                  onPointerUp={() => clearLongPress()}
+                  onPointerCancel={() => clearLongPress()}
+                  onPointerLeave={() => clearLongPress()}
                   onClick={(event) => {
+                    if (suppressClickAfterLongPressRef.current) {
+                      suppressClickAfterLongPressRef.current = false;
+                      return;
+                    }
                     if (!(isMobile && isSelectionMode)) {
                       onBeginNavigate();
                     }
                     onSelectSegment(index, event);
+                    if (!isMobile || isSelectionMode) return;
+                    const now = Date.now();
+                    const previous = lastSegmentTapRef.current;
+                    if (
+                      previous &&
+                      previous.index === index &&
+                      now - previous.at <= 360
+                    ) {
+                      lastSegmentTapRef.current = null;
+                      onOpenInspectorForSegment?.(index);
+                      return;
+                    }
+                    lastSegmentTapRef.current = { index, at: now };
                   }}
                 >
                   <div
@@ -341,24 +413,26 @@ export function CaptionEditorTimeline({
     <ContextMenu>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        <ContextMenuItem onClick={onTogglePlay}>
+        {/* <ContextMenuItem onClick={onTogglePlay}>
           {isPlaying ? "Pause preview" : "Play preview"}
         </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem disabled={!canUndo} onClick={onUndo}>
+        <ContextMenuSeparator /> */}
+        {/* <ContextMenuItem disabled={!canUndo} onClick={onUndo}>
           Undo
         </ContextMenuItem>
         <ContextMenuItem disabled={!canRedo} onClick={onRedo}>
           Redo
         </ContextMenuItem>
-        <ContextMenuSeparator />
+        <ContextMenuSeparator /> */}
         <ContextMenuItem onClick={onAddSegment}>Add segment</ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem disabled={!canCopy} onClick={onCopy}>
           Copy selected
         </ContextMenuItem>
         <ContextMenuItem disabled={!canPaste} onClick={onPaste}>
           Paste
         </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
           disabled={!canDelete}
@@ -366,9 +440,9 @@ export function CaptionEditorTimeline({
         >
           Delete selected
         </ContextMenuItem>
-        <ContextMenuSeparator />
+        {/* <ContextMenuSeparator />
         <ContextMenuItem onClick={onZoomOut}>Zoom out</ContextMenuItem>
-        <ContextMenuItem onClick={onZoomIn}>Zoom in</ContextMenuItem>
+        <ContextMenuItem onClick={onZoomIn}>Zoom in</ContextMenuItem> */}
       </ContextMenuContent>
     </ContextMenu>
   );
