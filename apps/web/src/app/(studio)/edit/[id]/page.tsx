@@ -710,7 +710,7 @@ export default function EditContentPage() {
         </Button>
         <div className="min-w-0">
           <h2 className="text-lg font-semibold">Content Details</h2>
-          <p className="text-sm text-slate-500 dark:text-zinc-400">
+          <p className="text-sm text-slate-500 dark:text-zinc-400 hidden md:block">
             Review metadata and render settings for this item.
           </p>
         </div>

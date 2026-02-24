@@ -2,7 +2,7 @@
 
 import { Player } from "@remotion/player";
 import type { PlayerRef } from "@remotion/player";
-import type { ComponentType, RefObject } from "react";
+import { memo, type ComponentType, type RefObject } from "react";
 
 export type CaptionEditorPreviewProps = {
   component: ComponentType<Record<string, unknown>>;
@@ -18,7 +18,7 @@ type Props = {
   playerRef: RefObject<PlayerRef | null>;
 };
 
-export function CaptionEditorPreview({ preview, playerRef }: Props) {
+function CaptionEditorPreviewComponent({ preview, playerRef }: Props) {
   if (!preview) return null;
   const aspectRatio = `${preview.compositionWidth} / ${preview.compositionHeight}`;
   return (
@@ -45,3 +45,10 @@ export function CaptionEditorPreview({ preview, playerRef }: Props) {
     </div>
   );
 }
+
+export const CaptionEditorPreview = memo(
+  CaptionEditorPreviewComponent,
+  (prev, next) => prev.preview === next.preview && prev.playerRef === next.playerRef
+);
+
+CaptionEditorPreview.displayName = "CaptionEditorPreview";

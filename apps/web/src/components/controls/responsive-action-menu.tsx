@@ -5,6 +5,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/shared/utils";
 import { Button } from "@/components/ui/button";
 import { useRouteTransition } from "@/components/navigation/route-transition";
@@ -80,6 +81,8 @@ export function ResponsiveActionMenu({
   onOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
+  const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1024px)");
+  const isCompactLayout = isMobile || isTablet;
   const [internalOpen, setInternalOpen] = React.useState(false);
   const isControlled = typeof open === "boolean";
   const currentOpen = isControlled ? open : internalOpen;
@@ -110,7 +113,7 @@ export function ResponsiveActionMenu({
     </Button>
   );
 
-  if (isMobile) {
+  if (isCompactLayout) {
     return (
       <Drawer
         open={currentOpen}

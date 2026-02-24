@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   Drawer,
   DrawerContent,
@@ -59,9 +60,12 @@ type DragMode = "move" | "start" | "end";
 type DragState = {
   index: number;
   mode: DragMode;
-  pointerStartX: number;
+  pointerStartContentX: number;
   startMs: number;
   endMs: number;
+  selectedIndices: number[];
+  selectedStarts: number[];
+  selectedEnds: number[];
 };
 
 type ScrubState = {
@@ -85,11 +89,57 @@ const snapMs = (value: number) => Math.round(value / SNAP_MS) * SNAP_MS;
 const toSeconds = (ms: number) => (ms / 1000).toFixed(2);
 const getWheelPrimaryDelta = (event: Pick<WheelEvent, "deltaX" | "deltaY">) =>
   Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+const DRAG_EDGE_PX = 56;
+const DRAG_MAX_AUTO_SCROLL_STEP = 28;
+
+const COMPACT_PLAYBACK_TUNING = {
+  sampleEveryTicks: 2,
+  syncIntervalMs: 90,
+  syncMinMoveMs: 120,
+  cursorMinDeltaMs: 20,
+} as const;
+
+const COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS = clamp(
+  COMPACT_PLAYBACK_TUNING.sampleEveryTicks,
+  1,
+  12
+);
+const COMPACT_PLAYBACK_SYNC_INTERVAL_MS = clamp(
+  COMPACT_PLAYBACK_TUNING.syncIntervalMs,
+  16,
+  1000
+);
+const COMPACT_PLAYBACK_SYNC_MIN_MOVE_MS = clamp(
+  COMPACT_PLAYBACK_TUNING.syncMinMoveMs,
+  0,
+  5000
+);
+const COMPACT_PLAYBACK_CURSOR_MIN_DELTA_MS = clamp(
+  COMPACT_PLAYBACK_TUNING.cursorMinDeltaMs,
+  1,
+  1000
+);
 
 const toMs = (seconds: string, fallbackMs: number) => {
   const parsed = Number(seconds);
   if (!Number.isFinite(parsed) || parsed < 0) return fallbackMs;
   return Math.round(parsed * 1000);
+};
+
+const hasMeaningfulDraftChange = (current: CaptionDocument, next: CaptionDocument) => {
+  return !(
+    (next.globalOffsetMs ?? 0) === (current.globalOffsetMs ?? 0) &&
+    next.segments.length === current.segments.length &&
+    next.segments.every((segment, index) => {
+      const prev = current.segments[index];
+      return (
+        prev &&
+        prev.text === segment.text &&
+        prev.startMs === segment.startMs &&
+        prev.endMs === segment.endMs
+      );
+    })
+  );
 };
 
 const buildDefaultDocument = (_mode: string, language: string): CaptionDocument => ({
@@ -160,6 +210,8 @@ export function CaptionEditor({
   className,
 }: CaptionEditorProps) {
   const isMobile = useIsMobile();
+  const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1024px)");
+  const isCompactLayout = isMobile || isTablet;
   const [draft, setDraft] = useState<CaptionDocument>(() =>
     normalizeCaptionDocument(value, mode, language)
   );
@@ -174,11 +226,17 @@ export function CaptionEditor({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isDraggingSegments, setIsDraggingSegments] = useState(false);
+  const [mobileSelectionMode, setMobileSelectionMode] = useState(false);
   const [volume, setVolume] = useState(1);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
-  const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState("0");
+  const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState(() =>
+    String(normalizeCaptionDocument(value, mode, language).globalOffsetMs ?? 0)
+  );
   const [history, setHistory] = useState<DraftHistory>({ past: [], future: [] });
   const dragRef = useRef<DragState | null>(null);
+  const dragBaselineDraftRef = useRef<CaptionDocument | null>(null);
+  const dragSessionDirtyRef = useRef(false);
   const scrubRef = useRef<ScrubState>({ active: false });
   const timelineScrollerRef = useRef<HTMLDivElement | null>(null);
   const sortedSegmentsRef = useRef<CaptionSegment[]>([]);
@@ -190,6 +248,7 @@ export function CaptionEditor({
   const playerRef = useRef<PlayerRef>(null);
   const lastPlayerFrameRef = useRef(0);
   const playbackRafRef = useRef<number | null>(null);
+  const compactCursorSyncAtRef = useRef(0);
   const clipboardRef = useRef<CaptionsClipboard | null>(null);
   const draftRef = useRef<CaptionDocument>(draft);
   const shiftPressedRef = useRef(false);
@@ -199,7 +258,7 @@ export function CaptionEditor({
   const mobilePlaybackTickRef = useRef(0);
   const wasOpenRef = useRef(false);
   const baselineDraftRef = useRef<string>("");
-  const appliedGlobalOffsetRef = useRef(0);
+  const suppressOffsetInputEffectRef = useRef(false);
 
   const draftSnapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const isDirty = draftSnapshot !== baselineDraftRef.current;
@@ -267,6 +326,13 @@ export function CaptionEditor({
       },
     };
   }, [draft, preview]);
+  const resolvedPreview = useMemo<CaptionEditorPreviewProps | null>(() => {
+    if (!preview || !livePreviewInputProps) return null;
+    return {
+      ...preview,
+      inputProps: livePreviewInputProps,
+    };
+  }, [livePreviewInputProps, preview]);
 
   useEffect(() => {
     const isOpening = active && !wasOpenRef.current;
@@ -286,10 +352,11 @@ export function CaptionEditor({
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
+    setMobileSelectionMode(false);
     setCursorMs(0);
     const initialOffset = next.globalOffsetMs ?? 0;
+    suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(initialOffset));
-    appliedGlobalOffsetRef.current = initialOffset;
     setError(null);
   }, [active, draft.segments.length, language, mode, value]);
 
@@ -302,17 +369,22 @@ export function CaptionEditor({
     const hasSegments = parsed.data.segments.length > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
+    setMobileSelectionMode(false);
     setCursorMs(0);
     const restoredOffset = parsed.data.globalOffsetMs ?? 0;
+    suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(restoredOffset));
-    appliedGlobalOffsetRef.current = restoredOffset;
     setError(null);
   };
 
   useEffect(() => {
+    if (suppressOffsetInputEffectRef.current) {
+      suppressOffsetInputEffectRef.current = false;
+      return;
+    }
     const nextRequestedOffset = Number.parseInt(globalOffsetMsInput.trim(), 10);
     if (!Number.isFinite(nextRequestedOffset)) return;
-    const previousOffset = appliedGlobalOffsetRef.current;
+    const previousOffset = Math.round(draftRef.current.globalOffsetMs ?? 0);
     let delta = nextRequestedOffset - previousOffset;
     if (delta === 0) return;
     const minStartMs = sortedSegmentsRef.current.reduce(
@@ -325,12 +397,17 @@ export function CaptionEditor({
       delta = maxNegativeDelta;
     }
     if (delta === 0) return;
+    const appliedOffset = previousOffset + delta;
     applyDraftUpdate((current) => ({
       ...current,
-      globalOffsetMs: previousOffset + delta,
+      globalOffsetMs: appliedOffset,
       segments: current.segments,
     }));
-    appliedGlobalOffsetRef.current = previousOffset + delta;
+    // Keep input and effective draft offset aligned when clamping occurs.
+    if (nextRequestedOffset !== appliedOffset) {
+      suppressOffsetInputEffectRef.current = true;
+      setGlobalOffsetMsInput(String(appliedOffset));
+    }
   }, [globalOffsetMsInput]);
 
   useEffect(() => {
@@ -370,29 +447,30 @@ export function CaptionEditor({
       .filter((idx) => idx >= 0 && idx < length)
       .sort((a, b) => a - b);
 
-  const applyDraftUpdate = (updater: (current: CaptionDocument) => CaptionDocument) => {
+  const applyDraftUpdate = (
+    updater: (current: CaptionDocument) => CaptionDocument,
+    options?: { recordHistory?: boolean }
+  ) => {
+    const recordHistory = options?.recordHistory ?? true;
     setDraft((current) => {
       const next = updater(current);
       if (next === current) return current;
-      const same =
-        (next.globalOffsetMs ?? 0) === (current.globalOffsetMs ?? 0) &&
-        next.segments.length === current.segments.length &&
-        next.segments.every((segment, index) => {
-          const prev = current.segments[index];
-          return (
-            prev &&
-            prev.text === segment.text &&
-            prev.startMs === segment.startMs &&
-            prev.endMs === segment.endMs
-          );
-        });
-      if (same) return current;
-      setHistory((prev) => ({ past: [...prev.past, current], future: [] }));
+      if (!hasMeaningfulDraftChange(current, next)) return current;
+      if (recordHistory) {
+        setHistory((prev) => ({ past: [...prev.past, current], future: [] }));
+      } else {
+        dragSessionDirtyRef.current = true;
+      }
       return next;
     });
   };
 
-  const setSegmentTiming = (index: number, startMs: number, endMs: number) => {
+  const setSegmentTiming = (
+    index: number,
+    startMs: number,
+    endMs: number,
+    recordHistory = true
+  ) => {
     applyDraftUpdate((current) => {
       const rawStartMs = toRawMsFromDisplay(startMs);
       const rawEndMs = toRawMsFromDisplay(endMs);
@@ -424,7 +502,7 @@ export function CaptionEditor({
         endMs: normalizedEnd,
       };
       return { ...current, segments: sorted };
-    });
+    }, { recordHistory });
   };
 
   const addSegment = () => {
@@ -620,6 +698,9 @@ export function CaptionEditor({
       const previous = currentHistory.past[currentHistory.past.length - 1];
       if (!previous) return currentHistory;
       setDraft(previous);
+      const offset = Math.round(previous.globalOffsetMs ?? 0);
+      suppressOffsetInputEffectRef.current = true;
+      setGlobalOffsetMsInput(String(offset));
       const hasSegments = previous.segments.length > 0;
       setSelectedIndex(hasSegments ? 0 : null);
       setSelectedIndices(hasSegments ? [0] : []);
@@ -635,6 +716,9 @@ export function CaptionEditor({
       const [next, ...futureRest] = currentHistory.future;
       if (!next) return currentHistory;
       setDraft(next);
+      const offset = Math.round(next.globalOffsetMs ?? 0);
+      suppressOffsetInputEffectRef.current = true;
+      setGlobalOffsetMsInput(String(offset));
       const hasSegments = next.segments.length > 0;
       setSelectedIndex(hasSegments ? 0 : null);
       setSelectedIndices(hasSegments ? [0] : []);
@@ -649,6 +733,16 @@ export function CaptionEditor({
     index: number,
     event?: Pick<MouseEvent | React.MouseEvent, "metaKey" | "ctrlKey" | "shiftKey">
   ) => {
+    if (isCompactLayout && mobileSelectionMode) {
+      setSelectedIndices((current) => {
+        const exists = current.includes(index);
+        const next = exists ? current.filter((idx) => idx !== index) : [...current, index];
+        const normalized = normalizeSelection(next, sortedSegments.length);
+        setSelectedIndex(normalized[normalized.length - 1] ?? null);
+        return normalized;
+      });
+      return;
+    }
     const isToggle = Boolean(event?.metaKey || event?.ctrlKey);
     const isRange = Boolean(event?.shiftKey);
     if (isRange && selectedIndex !== null) {
@@ -678,6 +772,10 @@ export function CaptionEditor({
     index: number,
     mode: DragMode
   ) => {
+    if (isCompactLayout && mobileSelectionMode) {
+      if (mode !== "move") return;
+      if (!selectedIndices.includes(index)) return;
+    }
     if (event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
@@ -685,15 +783,35 @@ export function CaptionEditor({
     event.stopPropagation();
     const target = sortedSegments[index];
     if (!target) return;
+    const scroller = timelineScrollerRef.current;
+    const rect = scroller?.getBoundingClientRect();
+    const pointerStartContentX =
+      scroller && rect
+        ? scroller.scrollLeft + clamp(event.clientX - rect.left, 0, rect.width)
+        : event.clientX;
+    const selectedForDrag =
+      mode === "move" && selectedIndices.includes(index) && selectedIndices.length > 1
+        ? [...selectedIndices].sort((a, b) => a - b)
+        : [index];
     dragRef.current = {
       index,
       mode,
-      pointerStartX: event.clientX,
+      pointerStartContentX,
       startMs: target.startMs,
       endMs: target.endMs,
+      selectedIndices: selectedForDrag,
+      selectedStarts: selectedForDrag.map(
+        (selectedIndex) => sortedSegments[selectedIndex]?.startMs ?? target.startMs
+      ),
+      selectedEnds: selectedForDrag.map(
+        (selectedIndex) => sortedSegments[selectedIndex]?.endMs ?? target.endMs
+      ),
     };
+    dragBaselineDraftRef.current = draftRef.current;
+    dragSessionDirtyRef.current = false;
+    setIsDraggingSegments(true);
     setSelectedIndex(index);
-    setSelectedIndices([index]);
+    setSelectedIndices(selectedForDrag);
     setCursorMs(target.startMs);
   };
 
@@ -704,7 +822,30 @@ export function CaptionEditor({
       const liveSegments = sortedSegmentsRef.current;
       const liveDuration = durationMsRef.current;
       const liveZoom = zoomPxPerSecondRef.current;
-      const deltaPx = event.clientX - drag.pointerStartX;
+      const scroller = timelineScrollerRef.current;
+      const rect = scroller?.getBoundingClientRect();
+      if (scroller && rect) {
+        const localX = event.clientX - rect.left;
+        if (localX < DRAG_EDGE_PX) {
+          const factor = clamp((DRAG_EDGE_PX - localX) / DRAG_EDGE_PX, 0, 1);
+          scroller.scrollLeft = Math.max(
+            0,
+            scroller.scrollLeft - DRAG_MAX_AUTO_SCROLL_STEP * factor
+          );
+        } else if (localX > rect.width - DRAG_EDGE_PX) {
+          const factor = clamp(
+            (localX - (rect.width - DRAG_EDGE_PX)) / DRAG_EDGE_PX,
+            0,
+            1
+          );
+          scroller.scrollLeft += DRAG_MAX_AUTO_SCROLL_STEP * factor;
+        }
+      }
+      const currentContentX =
+        scroller && rect
+          ? scroller.scrollLeft + clamp(event.clientX - rect.left, 0, rect.width)
+          : event.clientX;
+      const deltaPx = currentContentX - drag.pointerStartContentX;
       const deltaMs = snapMs((deltaPx / liveZoom) * 1000);
       const prev = drag.index > 0 ? liveSegments[drag.index - 1] : null;
       const next = drag.index < liveSegments.length - 1 ? liveSegments[drag.index + 1] : null;
@@ -712,13 +853,58 @@ export function CaptionEditor({
       const maxEnd = next ? next.startMs : liveDuration;
 
       if (drag.mode === "move") {
+        if (drag.selectedIndices.length > 1) {
+          const selectedSet = new Set(drag.selectedIndices);
+          let minDelta = Number.NEGATIVE_INFINITY;
+          let maxDelta = Number.POSITIVE_INFINITY;
+          for (let i = 0; i < drag.selectedIndices.length; i += 1) {
+            const currentIndex = drag.selectedIndices[i]!;
+            const baseStart = drag.selectedStarts[i]!;
+            const baseEnd = drag.selectedEnds[i]!;
+            minDelta = Math.max(minDelta, -baseStart);
+            maxDelta = Math.min(maxDelta, liveDuration - baseEnd);
+            const leftNeighbor =
+              currentIndex > 0 ? liveSegments[currentIndex - 1] : null;
+            if (leftNeighbor && !selectedSet.has(currentIndex - 1)) {
+              minDelta = Math.max(minDelta, leftNeighbor.endMs - baseStart);
+            }
+            const rightNeighbor =
+              currentIndex < liveSegments.length - 1
+                ? liveSegments[currentIndex + 1]
+                : null;
+            if (rightNeighbor && !selectedSet.has(currentIndex + 1)) {
+              maxDelta = Math.min(maxDelta, rightNeighbor.startMs - baseEnd);
+            }
+          }
+
+          const boundedDelta = clamp(deltaMs, minDelta, maxDelta);
+          applyDraftUpdate((current) => {
+            const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
+            for (let i = 0; i < drag.selectedIndices.length; i += 1) {
+              const currentIndex = drag.selectedIndices[i]!;
+              const baseStart = drag.selectedStarts[i]!;
+              const baseEnd = drag.selectedEnds[i]!;
+              const nextStart = Math.max(0, snapMs(baseStart + boundedDelta));
+              const duration = Math.max(MIN_SEGMENT_MS, baseEnd - baseStart);
+              sorted[currentIndex] = {
+                ...sorted[currentIndex]!,
+                startMs: toRawMsFromDisplay(nextStart),
+                endMs: toRawMsFromDisplay(nextStart + duration),
+              };
+            }
+            return { ...current, segments: sorted };
+          }, { recordHistory: false });
+          setCursorMs(Math.max(0, drag.startMs + boundedDelta));
+          return;
+        }
+
         const segmentDuration = drag.endMs - drag.startMs;
         const nextStart = clamp(
           snapMs(drag.startMs + deltaMs),
           minStart,
           Math.max(minStart, maxEnd - segmentDuration)
         );
-        setSegmentTiming(drag.index, nextStart, nextStart + segmentDuration);
+        setSegmentTiming(drag.index, nextStart, nextStart + segmentDuration, false);
         setCursorMs(nextStart);
         return;
       }
@@ -729,7 +915,7 @@ export function CaptionEditor({
           minStart,
           drag.endMs - MIN_SEGMENT_MS
         );
-        setSegmentTiming(drag.index, nextStart, drag.endMs);
+        setSegmentTiming(drag.index, nextStart, drag.endMs, false);
         setCursorMs(nextStart);
         return;
       }
@@ -739,12 +925,19 @@ export function CaptionEditor({
         drag.startMs + MIN_SEGMENT_MS,
         maxEnd
       );
-      setSegmentTiming(drag.index, drag.startMs, nextEnd);
+      setSegmentTiming(drag.index, drag.startMs, nextEnd, false);
       setCursorMs(nextEnd);
     };
 
     const onPointerUp = () => {
       dragRef.current = null;
+      setIsDraggingSegments(false);
+      if (dragSessionDirtyRef.current && dragBaselineDraftRef.current) {
+        const baseline = dragBaselineDraftRef.current;
+        setHistory((prev) => ({ past: [...prev.past, baseline], future: [] }));
+      }
+      dragBaselineDraftRef.current = null;
+      dragSessionDirtyRef.current = false;
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -788,10 +981,10 @@ export function CaptionEditor({
         return;
       }
       const playing = currentPlayer.isPlaying();
-      setIsPlaying((prev) => (prev === playing ? prev : playing));
       if (playing) {
-        if (isMobile) {
-          mobilePlaybackTickRef.current = (mobilePlaybackTickRef.current + 1) % 2;
+        if (isCompactLayout && COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS > 1) {
+          mobilePlaybackTickRef.current =
+            (mobilePlaybackTickRef.current + 1) % COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS;
           if (mobilePlaybackTickRef.current !== 0) {
             playbackRafRef.current = window.requestAnimationFrame(tick);
             return;
@@ -802,7 +995,23 @@ export function CaptionEditor({
           lastPlayerFrameRef.current = frame;
           const nextMs = (frame / preview.fps) * 1000;
           const rounded = Math.round(nextMs);
-          if (Math.abs(rounded - cursorLastCommittedMsRef.current) >= 1) {
+          if (isCompactLayout) {
+            const now = performance.now();
+            const elapsed = now - compactCursorSyncAtRef.current;
+            const moved = Math.abs(rounded - cursorLastCommittedMsRef.current);
+            if (
+              elapsed < COMPACT_PLAYBACK_SYNC_INTERVAL_MS &&
+              moved < COMPACT_PLAYBACK_SYNC_MIN_MOVE_MS
+            ) {
+              playbackRafRef.current = window.requestAnimationFrame(tick);
+              return;
+            }
+            compactCursorSyncAtRef.current = now;
+          }
+          const minDeltaMs = isCompactLayout
+            ? COMPACT_PLAYBACK_CURSOR_MIN_DELTA_MS
+            : 1;
+          if (Math.abs(rounded - cursorLastCommittedMsRef.current) >= minDeltaMs) {
             cursorLastCommittedMsRef.current = rounded;
             setCursorMs(nextMs);
             followPlaybackCursor(nextMs);
@@ -817,8 +1026,9 @@ export function CaptionEditor({
         window.cancelAnimationFrame(playbackRafRef.current);
         playbackRafRef.current = null;
       }
+      compactCursorSyncAtRef.current = 0;
     };
-  }, [active, isMobile, preview]);
+  }, [active, isCompactLayout, preview]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -871,16 +1081,17 @@ export function CaptionEditor({
   const tickMarks = useMemo(() => {
     const ticks: number[] = [];
     const seconds = Math.ceil(durationMs / 1000);
-    const step = isMobile ? 2 : 1;
+    const step = isCompactLayout ? 2 : 1;
     for (let second = 0; second <= seconds; second += step) {
       ticks.push(second * 1000);
     }
     return ticks;
-  }, [durationMs, isMobile]);
+  }, [durationMs, isCompactLayout]);
 
   const setCursorFromClientX = (clientX: number, followViewport = false) => {
     const scroller = timelineScrollerRef.current;
     if (!scroller) return;
+    if (durationMs <= 0 || timelineWidth <= 0) return;
     const rect = scroller.getBoundingClientRect();
     const localX = clientX - rect.left;
     if (followViewport) {
@@ -907,6 +1118,7 @@ export function CaptionEditor({
     }
     const x = clamp(localX + scroller.scrollLeft, 0, timelineWidth);
     const ms = clamp((x / timelineWidth) * durationMs, 0, durationMs);
+    if (!Number.isFinite(ms)) return;
     cursorPendingMsRef.current = ms;
     if (cursorRafRef.current !== null) return;
     cursorRafRef.current = window.requestAnimationFrame(() => {
@@ -914,10 +1126,14 @@ export function CaptionEditor({
       const pending = cursorPendingMsRef.current;
       if (pending === null) return;
       const next = Math.round(pending);
+      if (!Number.isFinite(next)) return;
       // Avoid rerender spam for tiny pointer jitter.
       if (Math.abs(next - cursorLastCommittedMsRef.current) < 4) return;
-      cursorLastCommittedMsRef.current = next;
-      setCursorMs(next);
+      setCursorMs((prev) => {
+        if (Math.abs(next - prev) < 4) return prev;
+        cursorLastCommittedMsRef.current = next;
+        return next;
+      });
     });
   };
 
@@ -971,7 +1187,7 @@ export function CaptionEditor({
         0,
         Math.max(0, contentWidth - viewWidth)
       );
-      if (isMobile) {
+      if (isCompactLayout) {
         scroller.scrollLeft = target;
         return;
       }
@@ -984,7 +1200,7 @@ export function CaptionEditor({
         0,
         Math.max(0, contentWidth - viewWidth)
       );
-      if (isMobile) {
+      if (isCompactLayout) {
         scroller.scrollLeft = target;
         return;
       }
@@ -998,7 +1214,7 @@ export function CaptionEditor({
   };
 
   useEffect(() => {
-    if (isMobile) return;
+    if (isCompactLayout) return;
     if (!active) return;
     const tick = () => {
       const scroller = timelineScrollerRef.current;
@@ -1025,7 +1241,7 @@ export function CaptionEditor({
       }
       followScrollTargetRef.current = null;
     };
-  }, [active, isMobile]);
+  }, [active, isCompactLayout]);
 
   useEffect(() => {
     return () => {
@@ -1156,7 +1372,7 @@ export function CaptionEditor({
             ) : null}
             <div className="min-w-0">
               <h2 className="text-lg font-semibold">Captions Editor</h2>
-              <p className="text-sm text-slate-500 dark:text-zinc-400">
+              <p className="text-sm text-slate-500 dark:text-zinc-400 hidden lg:block">
                 preview your captions in real-time as you edit.
               </p>
             </div>
@@ -1164,7 +1380,7 @@ export function CaptionEditor({
 
           <div className="flex items-center justify-end gap-2">
             <div className="hidden items-center gap-2 md:flex">
-              <span className="text-xs text-muted-foreground">Global offset (ms)</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Global offset (ms)</span>
               <Input
                 value={globalOffsetMsInput}
                 onChange={(event) => setGlobalOffsetMsInput(event.target.value)}
@@ -1192,17 +1408,12 @@ export function CaptionEditor({
         <div className="flex min-h-0 flex-1 flex-col">
 
           <CaptionEditorPreview
-            preview={
-              preview && livePreviewInputProps
-                ? {
-                    ...preview,
-                    inputProps: livePreviewInputProps,
-                  }
-                : null
-            }
+            preview={resolvedPreview}
             playerRef={playerRef}
           />
           <CaptionEditorToolbar
+            isMobileSelectionMode={mobileSelectionMode}
+            selectedCount={selectedIndices.length}
             canEditSelected={selectedIndices.length > 0}
             isPlaying={isPlaying}
             volume={volume}
@@ -1228,12 +1439,24 @@ export function CaptionEditor({
             onZoomOut={() => setZoomAnchored(zoomPxPerSecond - 10)}
             onZoomIn={() => setZoomAnchored(zoomPxPerSecond + 10)}
             onEditSelected={() => setMobileInspectorOpen(true)}
+            onToggleMobileSelectionMode={() =>
+              setMobileSelectionMode((current) => {
+                const next = !current;
+                if (!next) {
+                  setSelectedIndices([]);
+                  setSelectedIndex(null);
+                }
+                return next;
+              })
+            }
           />
 
           <div className="flex mt-2 min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
             <CaptionEditorTimeline
-              isMobile={isMobile}
+              isMobile={isCompactLayout}
+              isSelectionMode={mobileSelectionMode}
               isPlaying={isPlaying}
+              isDraggingSegments={isDraggingSegments}
               canUndo={canUndo}
               canRedo={canRedo}
               canCopy={selectedIndices.length > 0}
@@ -1282,7 +1505,7 @@ export function CaptionEditor({
               }}
             />
 
-            {!isMobile ? (
+            {!isCompactLayout ? (
               <div className="min-h-0 w-full rounded-lg border bg-background p-3 lg:w-105 lg:shrink-0">
                 <CaptionEditorInspector
                   sortedSegmentsLength={sortedSegments.length}
@@ -1302,7 +1525,7 @@ export function CaptionEditor({
 
 
         </div>
-        {isMobile ? (
+        {isCompactLayout ? (
           <Drawer open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
             <DrawerContent>
               <DrawerHeader>

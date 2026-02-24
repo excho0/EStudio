@@ -14,7 +14,9 @@ import {
 
 type Props = {
   isMobile: boolean;
+  isSelectionMode?: boolean;
   isPlaying: boolean;
+  isDraggingSegments: boolean;
   canUndo: boolean;
   canRedo: boolean;
   canCopy: boolean;
@@ -48,7 +50,9 @@ type Props = {
 
 export function CaptionEditorTimeline({
   isMobile,
+  isSelectionMode = false,
   isPlaying,
+  isDraggingSegments,
   canUndo,
   canRedo,
   canCopy,
@@ -191,12 +195,16 @@ export function CaptionEditorTimeline({
         ref={timelineScrollerRef}
         className="h-full overflow-x-auto overflow-y-hidden touch-none overscroll-none"
         onPointerDown={(event) => {
+          if (isMobile && isSelectionMode) return;
+          if (isDraggingSegments) return;
           if ((event.target as HTMLElement).closest("[data-caption-segment='true']")) return;
           onBeginNavigate();
           suspendAutoFollow(900);
           onSetCursorFromClientX(event.clientX, true);
         }}
         onPointerMove={(event) => {
+          if (isMobile && isSelectionMode) return;
+          if (isDraggingSegments) return;
           if (event.buttons !== 1) return;
           onBeginNavigate();
           suspendAutoFollow(900);
@@ -234,11 +242,17 @@ export function CaptionEditorTimeline({
               );
             })}
             <div
-              className="absolute top-0 h-full w-px bg-primary/80"
+              className={cn(
+                "absolute top-0 h-full w-px bg-primary/80 transition-opacity duration-150",
+                isDraggingSegments ? "opacity-0" : "opacity-100"
+              )}
               style={{ left: `${cursorMs * pxPerMs}px` }}
             />
             <div
-              className="absolute -top-5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
+              className={cn(
+                "absolute -top-5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground transition-opacity duration-150",
+                isDraggingSegments ? "opacity-0" : "opacity-100"
+              )}
               style={{ left: `${cursorMs * pxPerMs}px` }}
             >
               {toSeconds(cursorMs)}s
@@ -246,12 +260,15 @@ export function CaptionEditorTimeline({
           </div>
           <div
             className={cn(
-              "relative select-none rounded-md bg-muted/30 [contain:layout_paint_style]",
+              "relative select-none rounded-md bg-muted/30 contain-[layout_paint_style]",
               isMobile ? "h-44" : "h-56"
             )}
           >
             <div
-              className="absolute inset-y-0 z-10 w-px bg-primary/80"
+              className={cn(
+                "absolute inset-y-0 z-10 w-px bg-primary/80 transition-opacity duration-150",
+                isDraggingSegments ? "opacity-0" : "opacity-100"
+              )}
               style={{ left: `${cursorMs * pxPerMs}px` }}
             />
             {visibleSegments.map(({ segment, index, leftPx, widthPx }) => {
@@ -261,38 +278,54 @@ export function CaptionEditorTimeline({
                   key={`${segment.startMs}-${segment.endMs}-${index}`}
                   data-caption-segment="true"
                   className={cn(
-                    "absolute top-4 h-14 cursor-grab select-none rounded-md border bg-primary/15 active:cursor-grabbing will-change-transform",
-                    selected && "border-primary ring-1 ring-primary/50"
+                    "absolute top-4 h-14 cursor-grab select-none rounded-md border border-border/50 bg-linear-to-b from-primary/15 to-primary/8 backdrop-blur-[1px] active:cursor-grabbing will-change-transform transition-[box-shadow,border-color,background-color] duration-150",
+                    selected &&
+                      "border-primary/80 bg-linear-to-b from-primary/25 to-primary/15 ring-1 ring-primary/45"
                   )}
                   style={{ width: widthPx, transform: `translate3d(${leftPx}px, 0, 0)` }}
                   onPointerDown={(event) => onStartDrag(event, index, "move")}
                   onClick={(event) => {
-                    onBeginNavigate();
+                    if (!(isMobile && isSelectionMode)) {
+                      onBeginNavigate();
+                    }
                     onSelectSegment(index, event);
                   }}
                 >
                   <div
-                    className="absolute left-0 top-0 h-full w-2 rounded-l-md bg-primary/35"
+                    className={cn(
+                      "absolute left-0 top-0 h-full w-2.5 cursor-ew-resize rounded-l-md border-r border-border/70 bg-linear-to-r from-background/85 to-background/55 transition-colors active:cursor-ew-resize dark:from-zinc-900/90 dark:to-zinc-900/55 dark:border-zinc-600/85",
+                      selected &&
+                        "border-primary/45 from-primary/15 to-primary/8 dark:from-primary/20 dark:to-primary/10 dark:border-primary/35"
+                    )}
                     onPointerDown={(event) => {
                       onBeginNavigate();
                       onStartDrag(event, index, "start");
                     }}
-                  />
+                  >
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="h-9 w-0.5 rounded-full bg-foreground/55 dark:bg-foreground/45" />
+                    </div>
+                  </div>
                   <div className={cn("h-full overflow-hidden px-3 py-2", isMobile ? "text-[10px]" : "text-xs")}>
-                    <p className="truncate font-medium">{segment.text || "Untitled"}</p>
-                    {!isMobile ? (
-                      <p className="text-muted-foreground">
-                        {toSeconds(segment.startMs)}s - {toSeconds(segment.endMs)}s
-                      </p>
-                    ) : null}
+                    <p className="truncate font-semibold tracking-tight text-foreground/95">
+                      {segment.text || "Untitled"}
+                    </p>
                   </div>
                   <div
-                    className="absolute right-0 top-0 h-full w-2 rounded-r-md bg-primary/35"
+                    className={cn(
+                      "absolute right-0 top-0 h-full w-2.5 cursor-ew-resize rounded-r-md border-l border-border/70 bg-linear-to-l from-background/85 to-background/55 transition-colors active:cursor-ew-resize dark:from-zinc-900/90 dark:to-zinc-900/55 dark:border-zinc-600/85",
+                      selected &&
+                        "border-primary/45 from-primary/15 to-primary/8 dark:from-primary/20 dark:to-primary/10 dark:border-primary/35"
+                    )}
                     onPointerDown={(event) => {
                       onBeginNavigate();
                       onStartDrag(event, index, "end");
                     }}
-                  />
+                  >
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="h-9 w-0.5 rounded-full bg-foreground/55 dark:bg-foreground/45" />
+                    </div>
+                  </div>
                 </div>
               );
             })}
