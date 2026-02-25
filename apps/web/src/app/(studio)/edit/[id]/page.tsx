@@ -544,7 +544,7 @@ export default function EditContentPage() {
             size={action.size ?? "sm"}
             loading={loading}
             loadingText={action.loadingLabel}
-            disabled={actionState.disabled}
+            disabled={actionState.disabled || actionState.loading}
             className="justify-start"
             onClick={() => {
               if (!handler) return;
