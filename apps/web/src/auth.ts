@@ -1,4 +1,7 @@
 import NextAuth from "next-auth";
+import nodemailer from "nodemailer";
+import { createElement } from "react";
+import { render } from "@react-email/render";
 import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
@@ -8,6 +11,9 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 
 import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import { eventBus } from "@/lib/event-bus";
+import { AuthMagicLinkTemplate } from "@/lib/email";
+import { APP_NAME } from "@/lib/shared/constants";
+import { getBaseUrl } from "@/lib/shared/url";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import {
   accounts,
@@ -91,6 +97,34 @@ if (
         },
       },
       from: process.env.SMTP_FROM,
+      async sendVerificationRequest({ identifier, url, provider }) {
+        const baseUrl = getBaseUrl();
+        const subject = `Sign in to ${APP_NAME}`;
+
+        const emailComponent = createElement(AuthMagicLinkTemplate, {
+          email: identifier,
+          signInUrl: url,
+          appName: APP_NAME,
+          logoUrl: `${baseUrl}/favicon.png`,
+        });
+
+        const html = await render(emailComponent);
+        const text = await render(emailComponent, { plainText: true });
+
+        const transport = nodemailer.createTransport(provider.server);
+        const result = await transport.sendMail({
+          to: identifier,
+          from: provider.from,
+          subject,
+          text,
+          html,
+        });
+
+        const failed = [...(result.rejected || []), ...(result.pending || [])].filter(Boolean);
+        if (failed.length > 0) {
+          throw new Error(`Email(s) (${failed.join(", ")}) could not be sent`);
+        }
+      },
     })
   );
 }

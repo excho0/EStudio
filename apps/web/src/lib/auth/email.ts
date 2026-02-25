@@ -1,20 +1,13 @@
 import nodemailer from "nodemailer";
+import { createElement } from "react";
+import { render } from "@react-email/render";
 import { getLogger } from "@/lib/logging";
+import { EmailChangeVerificationTemplate } from "@/lib/email";
 import { APP_NAME } from "@/lib/shared/constants";
+import { getBaseUrl } from "@/lib/shared/url";
 
 const logger = getLogger("auth-email");
 
-const getBaseUrl = () => {
-  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL;
-  if (process.env.APP_URL) return process.env.APP_URL;
-  if (process.env.VERCEL_URL) {
-    const base = process.env.VERCEL_URL.startsWith("http")
-      ? process.env.VERCEL_URL
-      : `https://${process.env.VERCEL_URL}`;
-    return base;
-  }
-  return "http://localhost:3000";
-};
 
 const getTransport = () => {
   const host = process.env.SMTP_HOST;
@@ -67,13 +60,14 @@ export const sendEmailChangeVerification = async (params: {
   }
 
   const subject = "Confirm your new email";
-  const text = `${greeting}\n\nWe received a request to change the email for your ${APP_NAME} account.\n\nConfirm your new email:\n${confirmUrl}\n\nIf you did not request this, you can ignore this message.\n`;
-  const html = `
-    <p>${greeting}</p>
-    <p>We received a request to change the email for your ${APP_NAME} account.</p>
-    <p><a href="${confirmUrl}">Confirm your new email</a></p>
-    <p>If you did not request this, you can ignore this message.</p>
-  `;
+  const emailComponent = createElement(EmailChangeVerificationTemplate, {
+    greeting,
+    confirmUrl,
+    appName: APP_NAME,
+    logoUrl: `${baseUrl}/favicon.png`,
+  });
+  const html = await render(emailComponent);
+  const text = await render(emailComponent, { plainText: true });
 
   await transport.sendMail({
     from,
