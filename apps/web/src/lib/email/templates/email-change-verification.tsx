@@ -53,9 +53,9 @@ const styles = {
   logo: {
     borderRadius: "14px",
     display: "block",
-    height: "56px",
+    height: "80px",
     margin: "0 auto",
-    width: "56px",
+    width: "80px",
   },
   brand: {
     color: "#1e293b",
@@ -148,7 +148,7 @@ export function EmailChangeVerificationTemplate({
             <Section style={styles.logoWrap}>
               <Img alt={`${appName} logo`} src={safeLogoUrl} style={styles.logo} />
             </Section>
-            <Text style={styles.brand}>{appName}</Text>
+            {/* <Text style={styles.brand}>{appName}</Text> */}
             <Heading style={styles.heading}>Confirm your new email</Heading>
             <Text style={styles.heroText}>
               Keep your account secure by confirming this email address change.

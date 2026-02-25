@@ -50,9 +50,9 @@ const styles = {
   logo: {
     borderRadius: "14px",
     display: "block",
-    height: "56px",
-    margin: "0 auto 14px",
-    width: "56px",
+    height: "80px",
+    margin: "0 auto",
+    width: "80px",
   },
   brand: {
     color: "#1e293b",
@@ -142,7 +142,7 @@ export function AuthMagicLinkTemplate({
         <Container style={styles.card}>
           <Section style={styles.hero}>
             <Img alt={`${appName} logo`} src={safeLogoUrl} style={styles.logo} />
-            <Text style={styles.brand}>{appName}</Text>
+            {/* <Text style={styles.brand}>{appName}</Text> */}
             <Heading style={styles.heading}>Your sign-in link is ready</Heading>
             <Text style={styles.heroText}>Use this secure magic link to sign in instantly.</Text>
           </Section>
