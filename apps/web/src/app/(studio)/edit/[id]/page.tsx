@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { useRouteTransition } from "@/components/navigation/route-transition";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
@@ -207,6 +207,7 @@ const PREVIEW_CANVAS_ASPECT = PREVIEW_CANVAS_WIDTH / PREVIEW_CANVAS_HEIGHT;
 
 export default function EditContentPage() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const router = useRouter();
   const routeTransition = useRouteTransition();
   const isMobile = useIsMobile();
@@ -399,7 +400,7 @@ export default function EditContentPage() {
     previewAspect >= PREVIEW_CANVAS_ASPECT ? Math.max(1, previewScale * 100) : 100;
 
   const modeUi = useMemo(
-    () => getContentModeUi(formValues.mode || item?.mode),
+    () => getContentModeUi(formValues.mode || item?.mode, pathname),
     [formValues.mode, item?.mode]
   );
   const previewComponent = modeUi.previewComponent ?? ContentLoopComposition;

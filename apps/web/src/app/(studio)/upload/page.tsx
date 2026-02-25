@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { defineStepper } from "@stepperize/react";
 import {
   CheckCircle,
@@ -125,6 +126,7 @@ const getMediaDuration = (file: File, kind: "audio" | "video") =>
 
 export default function DashboardUploadPage() {
   const methods = stepper.useStepper();
+  const pathname = usePathname();
   const { refresh } = useContentList();
   const [submitting, setSubmitting] = useState(false);
   const [formValues, setFormValues] = useState<UploadFormValues>(initialForm);
@@ -144,7 +146,7 @@ export default function DashboardUploadPage() {
   const thumbnailPreview = mediaFiles.find((file) =>
     file.file.type?.startsWith("image/")
   )?.preview;
-  const modeUi = getContentModeUi(formValues.mode || "video_loop");
+  const modeUi = getContentModeUi(formValues.mode || "video_loop", pathname);
   const modeDefinition = getContentModeDefinition(formValues.mode || "video_loop");
   const requiredAssets = modeDefinition.requiredAssets;
   const requiresThumbnail = requiredAssets.includes("thumbnail");

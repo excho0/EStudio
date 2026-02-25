@@ -206,7 +206,7 @@ export default function DashboardOverviewPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_500px]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(420px,1fr)_minmax(280px,500px)]">
         <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <div className="flex items-center justify-between">
             <div>
@@ -217,10 +217,10 @@ export default function DashboardOverviewPage() {
             </div>
 
             <div className="flex gap-4">
-              <span className="hidden items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 sm:flex">
+              {/* <span className="hidden items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 sm:flex">
                 <Sparkles className="h-4 w-4" />
                 Freshly synced
-              </span>
+              </span> */}
               <Button
                 asChild
                 variant="outline"

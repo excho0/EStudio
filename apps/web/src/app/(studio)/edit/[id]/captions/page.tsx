@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ComponentType } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { captionDocumentSchema, type CaptionDocument, type ContentItem } from "@/types";
@@ -42,6 +42,7 @@ const buildSettingsWithSharedCaptions = (
 
 export default function EditCaptionsPage() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -77,7 +78,7 @@ export default function EditCaptionsPage() {
   }, [settingsMap]);
 
   const previewOutput = getOutputDefaultsForMode(mode, resolvedSettings);
-  const modeUi = useMemo(() => getContentModeUi(mode), [mode]);
+  const modeUi = useMemo(() => getContentModeUi(mode, pathname), [mode, pathname]);
   const modeDefinition = useMemo(() => getContentModeDefinition(mode), [mode]);
   const previewComponent = modeUi.previewComponent ?? ContentLoopComposition;
 

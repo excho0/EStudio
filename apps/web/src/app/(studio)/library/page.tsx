@@ -804,7 +804,7 @@ export default function LibraryPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold">Library</h2>
-            <p className="text-sm text-slate-500 dark:text-zinc-400">
+            <p className="text-sm text-slate-500 dark:text-zinc-400 hidden lg:block">
               Manage your uploaded content, previews, and renders.
             </p>
           </div>

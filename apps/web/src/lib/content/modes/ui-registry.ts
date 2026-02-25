@@ -43,6 +43,7 @@ export type ContentModeField = {
   step?: number;
   options?: Array<{ label: string; value: string; icon?: LucideIcon }>;
   suffix?: string;
+  disableRoutes?: string[];
   disabledWhen?: {
     all?: Array<{
       key: string;
@@ -78,6 +79,7 @@ export type ContentModeSection = {
   icon?: LucideIcon;
   fields: ContentModeField[];
   layout?: "grid" | "list";
+  disableRoutes?: string[];
   groups?: Array<{
     id: string;
     title: string;
@@ -85,6 +87,7 @@ export type ContentModeSection = {
     icon?: LucideIcon;
     fields: ContentModeField[];
     layout?: "grid" | "list";
+    disableRoutes?: string[];
   }>;
 };
 
@@ -185,6 +188,7 @@ const videoLoopSections: ContentModeSection[] = [
   },
   {
     id: "captions",
+    disableRoutes: ["/upload"],
     title: "Captions",
     description: "Automatic subtitle generation and style.",
     icon: Subtitles,
@@ -684,8 +688,67 @@ export const contentModeUiRegistry: Record<string, ContentModeUiDefinition> = {
   },
 };
 
-export const getContentModeUi = (mode?: string) =>
-  contentModeUiRegistry[mode ?? "video_loop"] ?? contentModeUiRegistry.video_loop;
+const normalizeRoute = (route: string) => {
+  const [pathname] = route.split(/[?#]/, 1);
+  return pathname?.trim() || "/";
+};
+
+const matchesRouteRule = (rule: string, route: string) => {
+  const normalizedRule = normalizeRoute(rule);
+  const normalizedRoute = normalizeRoute(route);
+  if (!normalizedRule) return false;
+  if (normalizedRule.endsWith("*")) {
+    const prefix = normalizedRule.slice(0, -1);
+    return normalizedRoute.startsWith(prefix);
+  }
+  return normalizedRoute === normalizedRule;
+};
+
+const isDisabledOnRoute = (disableRoutes: string[] | undefined, route?: string) => {
+  if (!route || !disableRoutes || disableRoutes.length === 0) return false;
+  return disableRoutes.some((rule) => matchesRouteRule(rule, route));
+};
+
+const filterSectionsByRoute = (sections: ContentModeSection[], route?: string) => {
+  if (!route) return sections;
+
+  return sections
+    .filter((section) => !isDisabledOnRoute(section.disableRoutes, route))
+    .map((section) => {
+      const filteredFields = section.fields.filter(
+        (field) => !isDisabledOnRoute(field.disableRoutes, route)
+      );
+
+      const filteredGroups = section.groups
+        ?.filter((group) => !isDisabledOnRoute(group.disableRoutes, route))
+        .map((group) => ({
+          ...group,
+          fields: group.fields.filter(
+            (field) => !isDisabledOnRoute(field.disableRoutes, route)
+          ),
+        }))
+        .filter((group) => group.fields.length > 0);
+
+      return {
+        ...section,
+        fields: filteredFields,
+        groups: filteredGroups,
+      };
+    })
+    .filter((section) => section.fields.length > 0 || (section.groups?.length ?? 0) > 0);
+};
+
+export const getContentModeUi = (mode?: string, route?: string) => {
+  const base =
+    contentModeUiRegistry[mode ?? "video_loop"] ?? contentModeUiRegistry.video_loop;
+
+  if (!route) return base;
+
+  return {
+    ...base,
+    sections: filterSectionsByRoute(base.sections, route),
+  };
+};
 
 export const getContentModeDefinition = (mode?: string) => {
   if (mode && mode in contentModeRegistry) {
