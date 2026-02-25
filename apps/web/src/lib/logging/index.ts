@@ -1,4 +1,5 @@
 import pino from "pino";
+import { APP_NAME } from "@/lib/shared/constants";
 
 type LogContext = Record<string, unknown>;
 
@@ -24,7 +25,7 @@ const createBaseLogger = () =>
     {
       level: resolveLogLevel(),
       base: {
-        service: "EStudio",
+        service: APP_NAME,
         env: process.env.NODE_ENV ?? "development",
       },
       timestamp: pino.stdTimeFunctions.isoTime,

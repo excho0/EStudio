@@ -1,6 +1,7 @@
 import type React from "react";
 
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
+import { APP_NAME } from "@/lib/shared/constants";
 
 export const LogoIcon = (props: React.ComponentProps<"svg">) => (
 	<svg fill="currentColor" viewBox="0 0 24 24" {...props}>
@@ -32,7 +33,7 @@ export const Logo = ({
 	className,
 	alt = "logo",
 	showText = false,
-	text = "EStudio",
+	text = APP_NAME,
 	textClassName = "font-bold text-lg",
 }: LogoProps) => (
 	<div className="flex items-center gap-2">

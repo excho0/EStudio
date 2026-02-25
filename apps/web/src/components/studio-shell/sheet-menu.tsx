@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/studio-shell/menu";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { Logo } from "@/components/branding/logo";
+import { APP_NAME } from "@/lib/shared/constants";
 import {
   Sheet,
   SheetHeader,
@@ -41,7 +42,7 @@ export function SheetMenu() {
                 wrapperClassName="rounded-full"
                 className="rounded-full"
               />
-              <SheetTitle className="font-bold text-lg hidden">EStudio</SheetTitle>
+              <SheetTitle className="font-bold text-lg hidden">{APP_NAME}</SheetTitle>
             </Link>
           </Button>
         </SheetHeader>

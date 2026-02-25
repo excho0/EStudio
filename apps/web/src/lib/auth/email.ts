@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { getLogger } from "@/lib/logging";
+import { APP_NAME } from "@/lib/shared/constants";
 
 const logger = getLogger("auth-email");
 
@@ -66,10 +67,10 @@ export const sendEmailChangeVerification = async (params: {
   }
 
   const subject = "Confirm your new email";
-  const text = `${greeting}\n\nWe received a request to change the email for your Excho Studio account.\n\nConfirm your new email:\n${confirmUrl}\n\nIf you did not request this, you can ignore this message.\n`;
+  const text = `${greeting}\n\nWe received a request to change the email for your ${APP_NAME} account.\n\nConfirm your new email:\n${confirmUrl}\n\nIf you did not request this, you can ignore this message.\n`;
   const html = `
     <p>${greeting}</p>
-    <p>We received a request to change the email for your Excho Studio account.</p>
+    <p>We received a request to change the email for your ${APP_NAME} account.</p>
     <p><a href="${confirmUrl}">Confirm your new email</a></p>
     <p>If you did not request this, you can ignore this message.</p>
   `;

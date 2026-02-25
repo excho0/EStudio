@@ -28,7 +28,7 @@ const MetricsContext = createContext<MetricsPayload | null>(null);
 const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
 
 type WindowWithSocket = Window & {
-  __estudioSocket?: Socket;
+  __appSocket?: Socket;
   __realtimeToastStartedKeys?: Set<string>;
   __realtimeToastCompletedKeys?: Set<string>;
 };
@@ -38,15 +38,15 @@ const getBrowserSocket = () => {
     return null;
   }
   const win = window as WindowWithSocket;
-  if (!win.__estudioSocket) {
-    win.__estudioSocket = io({
+  if (!win.__appSocket) {
+    win.__appSocket = io({
       path: "/api/socket",
       autoConnect: true,
       addTrailingSlash: false,
       transports: ["websocket", "polling"],
     });
   }
-  return win.__estudioSocket;
+  return win.__appSocket;
 };
 
 const getStartedKeys = () => {

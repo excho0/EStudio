@@ -7,6 +7,7 @@ import { ToasterResponsive } from "@/components/providers/toaster-responsive";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppSessionProvider } from "@/components/auth/session-provider";
 import { SocketIOProvider } from "@/components/studio/socketIO-provider";
+import { APP_NAME } from "@/lib/shared/constants";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EStudio",
+  title: APP_NAME,
   description: "AI-powered video content creation and rendering platform",
 };
 
