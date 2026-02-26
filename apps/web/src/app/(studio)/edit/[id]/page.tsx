@@ -933,9 +933,9 @@ export default function EditContentPage() {
                     icon={Palette}
                     rightSlot={
                       <div className="flex items-center -space-x-1">
-                        {paletteState.slice(0, 5).map((color) => (
+                        {paletteState.slice(0, 5).map((color, index) => (
                           <span
-                            key={color}
+                            key={`${color}-${index}`}
                             className="h-4 w-4 rounded-full border border-white shadow-sm dark:border-zinc-950"
                             style={{ backgroundColor: color }}
                           />

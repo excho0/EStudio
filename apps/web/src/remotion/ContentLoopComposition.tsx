@@ -310,12 +310,17 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       .map((value) => normalizeHex(value))
       .filter((value): value is string => Boolean(value));
     const base = cleaned.length ? cleaned : DEFAULT_PALETTE;
-    return base.slice(0, 2);
+    return base.slice(0, 5);
   }, [colorPalette]);
 
 
   const accentColor =
     paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
+
+  const barPaletteColors = useMemo(() => {
+    return paletteColors.slice(0, 2);
+  }, [paletteColors]);
+
 
   const glowColor = useMemo(() => {
     const primary = paletteColors[0] ?? DEFAULT_PALETTE[0];
@@ -324,10 +329,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     return mixHex(blended, "#FFFFFF", 0.4);
   }, [paletteColors]);
   const captionHighlightColor = useMemo(() => {
-    const primary = paletteColors[0] ?? DEFAULT_PALETTE[0];
-    return mixHex(primary, "#FFFFFF", 0.18);
+    const accent = paletteColors[2] ?? DEFAULT_PALETTE[2] ?? "#FFFFFF";
+    return mixHex(accent, "#FFFFFF", 0.12);
   }, [paletteColors]);
-
 
 
   // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
@@ -916,7 +920,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               // We use the 'value' directly from processAudioBars().
               const clamped = value; 
 
-              const shade = paletteColors[index % paletteColors.length];
+              const shade = barPaletteColors[index % barPaletteColors.length] ?? paletteColors[0] ?? DEFAULT_PALETTE[0];
               return (
                 <div
                   key={`bar-${index}`}
