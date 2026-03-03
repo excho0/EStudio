@@ -17,6 +17,7 @@ const shouldPrettyPrint = () => {
 };
 
 type LoggerGlobal = typeof globalThis & {
+  __estudioBaseLogger?: pino.Logger;
   __exchoBaseLogger?: pino.Logger;
 };
 
@@ -44,7 +45,13 @@ const createBaseLogger = () =>
   );
 
 const globalWithLogger = globalThis as LoggerGlobal;
-const baseLogger = globalWithLogger.__exchoBaseLogger ?? createBaseLogger();
+const baseLogger =
+  globalWithLogger.__estudioBaseLogger ??
+  globalWithLogger.__exchoBaseLogger ??
+  createBaseLogger();
+if (!globalWithLogger.__estudioBaseLogger) {
+  globalWithLogger.__estudioBaseLogger = baseLogger;
+}
 if (!globalWithLogger.__exchoBaseLogger) {
   globalWithLogger.__exchoBaseLogger = baseLogger;
 }

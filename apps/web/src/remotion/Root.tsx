@@ -32,7 +32,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={{
           title: "Momentum for your content",
           subtitle: "Loop-ready visuals synced to your audio track.",
-          badge: "EXCHO",
+          badge: "ESTUDIO",
           accentColor: "#10b981",
           backgroundColor: "#030712",
         }}

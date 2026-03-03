@@ -1,17 +1,30 @@
+# Local development stack for EStudio.
+#
+# This compose file runs:
+# - redis        : queue + realtime backing store
+# - postgres     : primary relational database
+# - web          : Next.js API/server runtime
+# - worker       : background render/publish jobs
+# - captions-api : Python transcription service
+
 name: estudio
 
 services:
-  # ---------------------------------------------------------------------------
-  # Infrastructure services
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Core infrastructure
+  # ===========================================================================
+
   redis:
+    # Shared Redis instance for queues, pub/sub, and ephemeral runtime state.
     container_name: estudio-redis
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
+      # Expose Redis for local tooling/debugging.
       - "6379:6379"
     volumes:
+      # Persist Redis append-only data between restarts.
       - ./data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -20,53 +33,63 @@ services:
       retries: 5
 
   postgres:
+    # Primary app database used by web + worker services.
     container_name: estudio-postgres
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: excho_engine
-      POSTGRES_USER: excho
+      # Dev credentials/database. Replace for non-local environments.
+      POSTGRES_DB: estudio
+      POSTGRES_USER: estudio
       POSTGRES_PASSWORD:
     ports:
+      # Expose Postgres for local clients/migrations.
       - "5432:5432"
     volumes:
+      # Persist database files between container restarts.
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U excho -d excho_engine"]
+      test: ["CMD-SHELL", "pg_isready -U estudio -d estudio"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ---------------------------------------------------------------------------
-  # Application services
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Application runtimes
+  # ===========================================================================
+
   web:
+    # Main Next.js runtime (API/server + studio UI).
     container_name: estudio-web
     build:
       context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
+      # Start only after datastore dependencies are healthy.
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
     env_file:
-      - ./apps/web/.env.example
+      # Runtime env file. Copy from .env.example and fill real values before compose up.
+      - ./apps/web/.env
     environment:
-      # Runtime
+      # Runtime mode
       NODE_ENV: production
       PORT: 3000
 
-      # Database
+      # Database connection for the web runtime
       DB_DRIVER: postgres
       DATABASE_URL:
 
-      # Redis (single shared URL; queue/socket modules can use this fallback)
+      # Shared Redis URL used by queue/socket modules
       REDIS_URL: redis://redis:6379
     ports:
+      # Host port for studio/API access.
       - "3000:3000"
     volumes:
+      # Persist generated/app runtime data in local repo storage.
       - ./data/apps/web:/app/data
     command: ["pnpm", "start"]
     healthcheck:
@@ -80,6 +103,7 @@ services:
       retries: 10
 
   worker:
+    # Background jobs runtime (render queue, publish queue, etc.).
     container_name: estudio-worker
     build:
       context: ./apps/web
@@ -90,41 +114,45 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      # Worker can start after web container is started (not necessarily healthy).
       web:
         condition: service_started
     env_file:
-      - ./apps/web/.env.example
+      # Runtime env file. Copy from .env.example and fill real values before compose up.
+      - ./apps/web/.env
     environment:
-      # Runtime
       NODE_ENV: production
 
-      # Database
+      # Database connection for worker runtime
       DB_DRIVER: postgres
       DATABASE_URL:
 
-      # Redis (single shared URL; queue modules can use this fallback)
+      # Shared Redis URL for queue workers
       REDIS_URL: redis://redis:6379
     volumes:
       - ./data/apps/web:/app/data
     command: ["pnpm", "start:worker"]
 
-
   captions-api:
+    # Python captions/transcription microservice.
     container_name: estudio-captions-api
     build:
       context: ./apps/captions-api
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - ./apps/captions-api/.env.example
+      # Runtime env file. Copy from .env.example and fill real values before compose up.
+      - ./apps/captions-api/.env
     environment:
       APP_ENV: production
       APP_HOST: 0.0.0.0
       APP_PORT: 8010
       CAPTIONS_BACKEND: whisperx
     ports:
+      # Host port used by web runtime when targeting remote captions backend.
       - "8010:8010"
     volumes:
+      # Persist service data/artifacts locally.
       - ./data/apps/captions-api:/app/data
     healthcheck:
       test:

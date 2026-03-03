@@ -255,7 +255,7 @@ export const createS3Adapter = (baseDir: string): StorageAdapter => {
     },
     createWriteStream: (key: string) => {
       const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const tempPath = path.join(tmpdir(), `excho-s3-upload-${unique}`);
+      const tempPath = path.join(tmpdir(), `estudio-s3-upload-${unique}`);
       const fileStream = createWriteStream(tempPath);
       fileStream.on("finish", () => {
         void (async () => {

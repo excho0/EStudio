@@ -1,109 +1,143 @@
-# EStudio Monorepo
+<div align="center">
+  <img src="apps/web/public/favicon.png" alt="EStudio Logo" width="88" height="88" />
+  <h1>EStudio Monorepo</h1>
+  <p>
+    Create, edit, caption, render, and publish media workflows with a single dev stack.
+  </p>
+</div>
 
-EStudio contains the web app, worker runtime, and captions API in one repository.
+---
 
-## Apps
+## Overview
 
-- `apps/web`: Next.js app + API + worker entrypoints
-- `apps/captions-api`: FastAPI WhisperX transcription service
+EStudio contains:
 
-## Requirements
+- `apps/web` - Next.js app, API routes, and worker runtime
+- `apps/captions-api` - FastAPI transcription service
 
-- Docker / Docker Compose
-- Optional GPU runtime:
+### Stack Services (Compose)
+
+- `web` - Studio UI + API
+- `worker` - Background jobs (render/publish queues)
+- `captions-api` - Transcription backend
+- `postgres` - Primary DB
+- `redis` - Queue/pub-sub backing store
+
+---
+
+## Prerequisites
+
+- Docker + Docker Compose (or Podman Compose)
+- Optional GPU runtime support:
   - NVIDIA CDI: `nvidia.com/gpu=all`
   - AMD ROCm devices: `/dev/kfd`, `/dev/dri`
 
+---
+
 ## Compose Files
 
-- `docker-compose.yml`: base stack (CPU-safe defaults)
-- `docker-compose.nvidia.yml`: NVIDIA CUDA overrides for `captions-api`
-- `docker-compose.amd.yml`: AMD ROCm device mapping overrides for `captions-api`
+- `docker-compose.yml` - base stack
+- `docker-compose.nvidia.yml` - NVIDIA overrides for `captions-api`
+- `docker-compose.amd.yml` - AMD overrides for `captions-api`
 
-## Start the Stack
+---
 
-Base (CPU):
+## Environment Setup
+
+Compose uses real `.env` files at runtime:
+
+- `apps/web/.env`
+- `apps/captions-api/.env`
+
+Use templates once:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+cp apps/captions-api/.env.example apps/captions-api/.env
+```
+
+> `.env.example` is documentation/template only.
+
+---
+
+## Quick Start
+
+### Start (CPU)
 
 ```bash
 docker compose -f docker-compose.yml up --build
 ```
 
-Detach:
+### Start Detached
 
 ```bash
 docker compose -f docker-compose.yml up -d --build
 ```
 
-Stop:
+### Stop
 
 ```bash
 docker compose -f docker-compose.yml down
 ```
 
+---
+
 ## GPU Profiles
 
-NVIDIA (CDI):
+### NVIDIA
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d --build
 ```
 
-AMD (ROCm devices):
+### AMD
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d --build
 ```
 
+---
+
 ## Podman Equivalents
 
-Base (CPU):
+### Base (CPU)
 
 ```bash
 podman compose -f docker-compose.yml up -d --build
 ```
 
-NVIDIA (CDI):
+### NVIDIA
 
 ```bash
 podman compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d --build
 ```
 
-AMD (ROCm devices):
+### AMD
 
 ```bash
 podman compose -f docker-compose.yml -f docker-compose.amd.yml up -d --build
 ```
 
-## Build Only
+---
 
-Build full stack:
-
-```bash
-docker compose -f docker-compose.yml build
-```
-
-Build captions-api with NVIDIA profile:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.nvidia.yml build captions-api
-```
-
-## Service Endpoints
+## Endpoints
 
 - Web app: `http://localhost:3000`
 - Captions API: `http://localhost:8010`
 - Redis: `localhost:6379`
 - Postgres: `localhost:5432`
 
+---
+
 ## Captions API Diagnostics
 
-- Runtime checks:
+### Runtime
 
 ```bash
 curl -s http://localhost:8010/v1/diagnostics/runtime
 ```
 
-- Transcription smoke:
+### Transcription Smoke
 
 ```bash
 curl -s -X POST http://localhost:8010/v1/diagnostics/transcription-smoke

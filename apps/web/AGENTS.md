@@ -1,12 +1,12 @@
 # AGENTS.md
 
-This document explains the architecture and operational conventions of `excho-engine` for AI coding agents.
+This document explains the architecture and operational conventions of `estudio` for AI coding agents.
 
 Use this as the primary orientation guide before making changes.
 
 ## 1) Project Purpose
 
-`excho-engine` is a Next.js 16 application for creating, editing, rendering, publishing, and tracking media workflows.
+`estudio` is a Next.js 16 application for creating, editing, rendering, publishing, and tracking media workflows.
 
 Core capabilities:
 - Create and edit content items with mode-specific settings.
