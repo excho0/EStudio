@@ -1,22 +1,37 @@
-FROM node:20-bookworm-slim AS base
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04 AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+
+# Install Node.js 20 + build/runtime dependencies needed by the web/worker runtime,
+# including toolchain required for local whisper.cpp CUDA builds.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates \
+  curl \
+  gnupg \
+  git \
+  cmake \
+  make \
+  g++ \
+  pkg-config \
+  python3 \
+  sqlite3 \
+  libsqlite3-dev \
+  ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+    > /etc/apt/sources.list.d/nodesource.list \
+  && apt-get update && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable
 
 FROM base AS deps
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  python3 \
-  make \
-  g++ \
-  pkg-config \
-  sqlite3 \
-  libsqlite3-dev \
-  ffmpeg \
-  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -30,17 +45,6 @@ RUN pnpm build
 
 FROM base AS runtime
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  ca-certificates \
-  git \
-  cmake \
-  make \
-  g++ \
-  pkg-config \
-  sqlite3 \
-  ffmpeg \
-  && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

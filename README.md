@@ -70,17 +70,6 @@ docker compose -f docker-compose.yml up --build
 
 ### Start Detached
 
-```bash
-docker compose -f docker-compose.yml up -d --build
-```
-
-### Stop
-
-```bash
-docker compose -f docker-compose.yml down
-```
-
----
 
 ## GPU Profiles
 

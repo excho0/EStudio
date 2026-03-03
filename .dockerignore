@@ -1,0 +1,29 @@
+# VCS
+.git
+.gitignore
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build artifacts
+.next
+**/.next
+out
+**/out
+build
+**/build
+
+# Local runtime data (contains restricted dirs like postgres)
+data
+
+# Logs / tmp
+*.log
+**/*.log
+.tmp
+**/.tmp
+
+# Environment files (runtime-mounted, not build inputs)
+.env
+.env.*
+!.env.example

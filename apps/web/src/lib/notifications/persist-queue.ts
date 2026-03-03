@@ -1,4 +1,7 @@
-import "server-only";
+if (process.env.NEXT_RUNTIME === "nodejs" || process.env.NEXT_RUNTIME === "edge") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("server-only");
+}
 
 import type { NotificationKind, NotificationStatus } from "@/types";
 import { upsertNotificationByKey } from "@/lib/data/notifications";

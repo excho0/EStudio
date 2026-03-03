@@ -2,6 +2,7 @@ name: estudio
 
 services:
   captions-api:
+    profiles: ["captions-api"]
     build:
       context: ./apps/captions-api
       dockerfile: Dockerfile.nvidia
@@ -9,5 +10,21 @@ services:
       WHISPERX_DEVICE: cuda
       WHISPERX_COMPUTE_TYPE: float16
     # GPU passthrough via CDI (NixOS/NVIDIA container toolkit mode).
+    devices:
+      - "nvidia.com/gpu=all"
+
+  # Enable GPU for Remotion/transcription code paths executed in web runtime.
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile.nvidia
+    devices:
+      - "nvidia.com/gpu=all"
+
+  # Worker executes render/caption jobs and also needs GPU access in NVIDIA mode.
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile.nvidia
     devices:
       - "nvidia.com/gpu=all"

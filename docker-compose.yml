@@ -81,18 +81,26 @@ services:
       NODE_ENV: production
       PORT: 3000
 
+      # AuthJS runtime defaults (override via host env for production)
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      NEXTAUTH_SECRET:
+
       # Database connection for the web runtime
       DB_DRIVER: postgres
       DATABASE_URL:
 
       # Shared Redis URL used by queue/socket modules
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      # Keep uploaded/media assets in the shared bind-mounted storage root.
+      STORAGE_BASE_DIR: /app/data
     ports:
       # Host port for studio/API access.
       - "3000:3000"
     volumes:
       # Persist generated/app runtime data in local repo storage.
-      - ${ESTUDIO_DATA_ROOT:-./data}/apps/web:/app/data
+      - ${ESTUDIO_WEB_STORAGE_ROOT:-./data/apps/web}:/app/data
     command: ["pnpm", "start"]
     healthcheck:
       test:
@@ -130,13 +138,17 @@ services:
       DATABASE_URL:
 
       # Shared Redis URL for queue workers
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      # Keep uploaded/media assets in the shared bind-mounted storage root.
+      STORAGE_BASE_DIR: /app/data
     volumes:
-      - ${ESTUDIO_DATA_ROOT:-./data}/apps/web:/app/data
-    command: ["pnpm", "start:worker"]
+      - ${ESTUDIO_WEB_STORAGE_ROOT:-./data/apps/web}:/app/data
+    command: ["pnpm", "start:web:worker"]
 
   captions-api:
     # Python captions/transcription microservice.
+    profiles: ["captions-api"]
     container_name: estudio-captions-api
     build:
       context: .
