@@ -8,6 +8,16 @@ import { createClient } from "redis";
 import si from "systeminformation";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { eventBus } from "@/lib/event-bus";
+import type {
+  CaptionUpdatePayload,
+  ContentUpdatePayload,
+  PublishProgressPayload,
+  PublishUpdatePayload,
+  RenderCompletePayload,
+  RenderProgressPayload,
+  SettingsUpdatedPayload,
+} from "@/types";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -96,6 +106,68 @@ app
     }
 
     globalThis.io = io;
+
+    const resolveUserRoom = (userId?: string | null) => (userId ? `user:${userId}` : null);
+
+    const registerRealtimeBridge = async () => {
+      const unsubs = await Promise.all([
+        eventBus.on("content.update", ({ payload }) => {
+          const data = payload as ContentUpdatePayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("content:update", data);
+          else io.emit("content:update", data);
+        }),
+        eventBus.on("render.progress", ({ payload }) => {
+          const data = payload as RenderProgressPayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("render:progress", data);
+          else io.emit("render:progress", data);
+        }),
+        eventBus.on("render.completed", ({ payload }) => {
+          const data = payload as RenderCompletePayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("render:complete", data);
+          else io.emit("render:complete", data);
+        }),
+        eventBus.on("publish.update", ({ payload }) => {
+          const data = payload as PublishUpdatePayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("publish:update", data);
+          else io.emit("publish:update", data);
+        }),
+        eventBus.on("publish.progress", ({ payload }) => {
+          const data = payload as PublishProgressPayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("publish:progress", data);
+          else io.emit("publish:progress", data);
+        }),
+        eventBus.on("caption.update", ({ payload }) => {
+          const data = payload as CaptionUpdatePayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("caption:update", data);
+          else io.emit("caption:update", data);
+        }),
+        eventBus.on("settings.updated", ({ payload }) => {
+          const data = payload as SettingsUpdatedPayload;
+          const room = resolveUserRoom(data.userId);
+          if (room) io.to(room).emit("settings:updated", data);
+          else io.emit("settings:updated", data);
+        }),
+      ]);
+
+      const stop = async () => {
+        await Promise.all(unsubs.map(async (unsubscribe) => unsubscribe().catch(() => undefined)));
+      };
+
+      process.on("SIGTERM", () => {
+        void stop();
+      });
+      process.on("SIGINT", () => {
+        void stop();
+      });
+    };
+
+    await registerRealtimeBridge();
 
     const readNvidiaSmi = () =>
       new Promise<NvidiaSmiEntry[] | null>((resolve) => {

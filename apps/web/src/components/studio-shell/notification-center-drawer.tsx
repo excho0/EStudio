@@ -185,6 +185,21 @@ const dedupeJobs = (items: ActivityJob[]) => {
   return Array.from(map.values()).sort(compareJobsByRecency);
 };
 
+
+const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
+  const map = new Map<string, ActivityJob>();
+  for (const item of items) {
+    const subjectKey = `${item.kind}:${item.id}:${item.mode ?? "default"}`;
+    const existing = map.get(subjectKey);
+    if (!existing) {
+      map.set(subjectKey, item);
+      continue;
+    }
+    map.set(subjectKey, pickPreferredJob(existing, item));
+  }
+  return Array.from(map.values()).sort(compareJobsByRecency);
+};
+
 const SectionHeader = ({
   title,
   count,
@@ -605,11 +620,16 @@ export function NotificationCenterDrawer() {
     return dedupeJobs([...fromBootstrap, ...fromSocket]);
   }, [bootstrapQuery.data, jobs]);
   const sortedJobs = combinedJobs;
-  const activeJobs = sortedJobs.filter((job) => isActiveStatus(job.status));
-  const recentJobs = sortedJobs
-    .filter((job) => !isActiveStatus(job.status))
-    .sort(compareJobsByRecency)
-    .slice(0, 20);
+  const activeJobs = useMemo(() => {
+    return dedupeActiveJobsBySubject(sortedJobs.filter((job) => isActiveStatus(job.status)));
+  }, [sortedJobs]);
+
+  const recentJobs = useMemo(() => {
+    return sortedJobs
+      .filter((job) => !isActiveStatus(job.status))
+      .sort(compareJobsByRecency)
+      .slice(0, 20);
+  }, [sortedJobs]);
   const showLoadingSkeleton =
     open &&
     bootstrapQuery.isLoading &&

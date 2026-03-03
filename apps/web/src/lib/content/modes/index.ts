@@ -8,6 +8,17 @@ export const getContentMode = (mode?: string) =>
   contentModeRegistry[(mode ?? DEFAULT_CONTENT_MODE) as ContentModeId] ??
   contentModeRegistry[DEFAULT_CONTENT_MODE];
 
+const cloneSettingsValue = <T>(value: T): T => {
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {
+      // fallback below
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+};
+
 const isSettingsMap = (value: unknown) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -18,11 +29,11 @@ const isSettingsMap = (value: unknown) => {
 export const normalizeSettingsMap = (mode: string | undefined, settings: unknown) => {
   const definition = getContentMode(mode);
   if (isSettingsMap(settings)) {
-    return settings as Record<string, Record<string, unknown>>;
+    return cloneSettingsValue(settings as Record<string, Record<string, unknown>>);
   }
   const base =
     settings && typeof settings === "object" && !Array.isArray(settings)
-      ? (settings as Record<string, unknown>)
+      ? cloneSettingsValue(settings as Record<string, unknown>)
       : {};
   return { [definition.id]: base };
 };
