@@ -7,6 +7,8 @@
 # - worker       : background render/publish jobs
 # - captions-api : Python transcription service
 
+# Persistent data root can be overridden via ESTUDIO_DATA_ROOT (default: ./data).
+
 name: estudio
 
 services:
@@ -25,7 +27,7 @@ services:
       - "6379:6379"
     volumes:
       # Persist Redis append-only data between restarts.
-      - ./data/redis:/data
+      - ${ESTUDIO_DATA_ROOT:-./data}/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -47,7 +49,7 @@ services:
       - "5432:5432"
     volumes:
       # Persist database files between container restarts.
-      - ./data/postgres:/var/lib/postgresql/data
+      - ${ESTUDIO_DATA_ROOT:-./data}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U estudio -d estudio"]
       interval: 10s
@@ -90,7 +92,7 @@ services:
       - "3000:3000"
     volumes:
       # Persist generated/app runtime data in local repo storage.
-      - ./data/apps/web:/app/data
+      - ${ESTUDIO_DATA_ROOT:-./data}/apps/web:/app/data
     command: ["pnpm", "start"]
     healthcheck:
       test:
@@ -130,7 +132,7 @@ services:
       # Shared Redis URL for queue workers
       REDIS_URL: redis://redis:6379
     volumes:
-      - ./data/apps/web:/app/data
+      - ${ESTUDIO_DATA_ROOT:-./data}/apps/web:/app/data
     command: ["pnpm", "start:worker"]
 
   captions-api:
@@ -153,7 +155,7 @@ services:
       - "8010:8010"
     volumes:
       # Persist service data/artifacts locally.
-      - ./data/apps/captions-api:/app/data
+      - ${ESTUDIO_DATA_ROOT:-./data}/apps/captions-api:/app/data
     healthcheck:
       test:
         [

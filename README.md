@@ -142,3 +142,60 @@ curl -s http://localhost:8010/v1/diagnostics/runtime
 ```bash
 curl -s -X POST http://localhost:8010/v1/diagnostics/transcription-smoke
 ```
+
+---
+
+## NixOS Module (Compose Service)
+
+This repo exports a NixOS module at:
+
+- `nixosModules.estudio`
+
+Source file:
+
+- `infra/nix/modules/estudio-compose.nix`
+
+### Import Into Your Host Flake
+
+```nix
+# in your host flake outputs
+modules = [
+  inputs.estudio.nixosModules.estudio
+  # ...other modules
+];
+```
+
+### Enable It
+
+```nix
+{
+  services.estudio.compose = {
+    enable = true;
+    runtime = "docker"; # or "podman"
+    repoPath = "/srv/estudio";
+    dataRoot = "/var/lib/estudio"; # default: ${repoPath}/data
+    composeFiles = [
+      "docker-compose.yml"
+      # "docker-compose.nvidia.yml"
+      # "docker-compose.amd.yml"
+    ];
+    
+    buildOnStart = false;
+    pullOnStart = false;
+  };
+}
+```
+
+Apply:
+
+```bash
+sudo nixos-rebuild switch --flake /path/to/flake#your-host
+```
+
+Manage service:
+
+```bash
+sudo systemctl status estudio-compose
+sudo systemctl restart estudio-compose
+sudo systemctl stop estudio-compose
+```

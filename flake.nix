@@ -83,6 +83,15 @@
       nvidiaDriverLibraryPath = "/run/opengl-driver/lib:/run/opengl-driver-32/lib";
     in
     {
+      nixosModules = {
+        # Aggregate module: import this to enable access to all EStudio modules.
+        estudio = { ... }: {
+          imports = [
+            ./infra/nix/modules/estudio-compose.nix
+          ];
+        };
+      };
+
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           # Node / web app
