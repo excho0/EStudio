@@ -299,7 +299,16 @@ export default function EditContentPage() {
       return (await response.json()) as ContentItem;
     },
     onSuccess: (updated) => {
+      const nextFormValues = buildFormValuesFromItem(updated);
+      const nextPaletteMode = updated.paletteMode === "manual" ? "manual" : "auto";
+      const nextPaletteState = Array.isArray(updated.colorPalette)
+        ? updated.colorPalette
+        : [];
+
       setItem(updated);
+      setFormValues(nextFormValues);
+      setPaletteMode(nextPaletteMode);
+      setPaletteState(nextPaletteState);
       setThumbnailFile(null);
       setThumbnailPreview(null);
       setThumbnailVersion(Date.now());
