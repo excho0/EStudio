@@ -64,8 +64,8 @@ services:
     # Main Next.js runtime (API/server + studio UI).
     container_name: estudio-web
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/web/Dockerfile
     restart: unless-stopped
     depends_on:
       # Start only after datastore dependencies are healthy.
@@ -108,8 +108,8 @@ services:
     # Background jobs runtime (render queue, publish queue, etc.).
     container_name: estudio-worker
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/web/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
@@ -139,8 +139,8 @@ services:
     # Python captions/transcription microservice.
     container_name: estudio-captions-api
     build:
-      context: ./apps/captions-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/captions-api/Dockerfile
     restart: unless-stopped
     env_file:
       # Runtime env file. Copy from .env.example and fill real values before compose up.
