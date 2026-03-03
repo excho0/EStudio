@@ -31,6 +31,8 @@ import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { sdk } from "@/lib/sdk";
 import { Separator } from "@/components/ui/separator";
 import type { LucideIcon } from "lucide-react";
+import { SocketEvents } from "@/lib/socket/events";
+import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 
 type JobKind = "render" | "publish" | "caption";
 type JobStatus =
@@ -448,7 +450,8 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handleRenderComplete = (payload: { id: string; jobId?: string; mode?: string }) => {
+    const handleRenderComplete = (payload: { id?: string; jobId?: string; mode?: string }) => {
+      if (!payload.id) return;
       const key = jobKey("render", payload.id, payload.mode, payload.jobId);
       upsert({
         key,
@@ -514,7 +517,7 @@ export function NotificationCenterDrawer() {
       status?: string;
       type?: string;
     }) => {
-      if (!payload.id || payload.type !== "content:status") return;
+      if (!payload.id || (payload.type !== "content.status" && payload.type !== "content:status")) return;
       if (payload.status === "failed") {
         const key = jobKey("render", payload.id);
         upsert({
@@ -594,23 +597,102 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    socket.on("render:progress", handleRenderProgress);
-    socket.on("render:complete", handleRenderComplete);
-    socket.on("render:cancel-requested", handleRenderCancelRequested);
-    socket.on("content:update", handleContentUpdate);
-    socket.on("publish:update", handlePublishUpdate);
-    socket.on("publish:progress", handlePublishProgress);
-    socket.on("caption:update", handleCaptionUpdate);
-
-    return () => {
-      socket.off("render:progress", handleRenderProgress);
-      socket.off("render:complete", handleRenderComplete);
-      socket.off("render:cancel-requested", handleRenderCancelRequested);
-      socket.off("content:update", handleContentUpdate);
-      socket.off("publish:update", handlePublishUpdate);
-      socket.off("publish:progress", handlePublishProgress);
-      socket.off("caption:update", handleCaptionUpdate);
+    type RenderSocketPayload = {
+      id?: string;
+      jobId?: string;
+      mode?: string;
+      error?: string;
     };
+
+    type PublishSocketPayload = {
+      id: string;
+      jobId?: string;
+      error?: string;
+    };
+
+    type CaptionSocketPayload = {
+      id: string;
+      jobId?: string;
+      mode?: string;
+      error?: string;
+    };
+
+    const createRenderStatusHandler = (
+      status: JobStatus,
+      options?: { progress?: number; includeError?: boolean }
+    ) => {
+      return (payload: RenderSocketPayload) => {
+        if (!payload.id) return;
+        const key = jobKey("render", payload.id, payload.mode, payload.jobId);
+        upsert({
+          key,
+          id: payload.id,
+          title: titleByContentIdRef.current.get(payload.id),
+          jobId: payload.jobId,
+          mode: payload.mode,
+          kind: "render",
+          status,
+          progress: options?.progress,
+          error: options?.includeError ? payload.error : undefined,
+          updatedAt: Date.now(),
+        });
+      };
+    };
+
+    const createPublishStatusHandler = (status: string) => {
+      return (payload: PublishSocketPayload) => {
+        handlePublishUpdate({ ...payload, status });
+      };
+    };
+
+    const createCaptionStatusHandler = (
+      status: "queued" | "processing" | "completed" | "failed"
+    ) => {
+      return (payload: CaptionSocketPayload) => {
+        handleCaptionUpdate({ ...payload, status });
+      };
+    };
+
+    const handleRenderQueued = createRenderStatusHandler("queued", { progress: 0 });
+    const handleRenderStarted = createRenderStatusHandler("rendering");
+    const handleRenderFailed = createRenderStatusHandler("failed", {
+      progress: 1,
+      includeError: true,
+    });
+
+    const handlePublishQueued = createPublishStatusHandler("queued");
+    const handlePublishStarted = createPublishStatusHandler("publishing");
+    const handlePublishCompleted = createPublishStatusHandler("published");
+    const handlePublishFailed = createPublishStatusHandler("failed");
+
+    const handleCaptionQueued = createCaptionStatusHandler("queued");
+    const handleCaptionStarted = createCaptionStatusHandler("processing");
+    const handleCaptionCompleted = createCaptionStatusHandler("completed");
+    const handleCaptionFailed = createCaptionStatusHandler("failed");
+
+    const socketSubscriptions = [
+      { event: SocketEvents.render.queued, handler: handleRenderQueued },
+      { event: SocketEvents.render.started, handler: handleRenderStarted },
+      { event: SocketEvents.render.progress, handler: handleRenderProgress },
+      { event: SocketEvents.render.completed, handler: handleRenderComplete },
+      { event: SocketEvents.render.failed, handler: handleRenderFailed },
+      { event: SocketEvents.render.cancelRequested, handler: handleRenderCancelRequested },
+      { event: SocketEvents.content.update, handler: handleContentUpdate },
+      { event: SocketEvents.content.statusChanged, handler: handleContentUpdate },
+      { event: SocketEvents.publish.update, handler: handlePublishUpdate },
+      { event: SocketEvents.publish.queued, handler: handlePublishQueued },
+      { event: SocketEvents.publish.started, handler: handlePublishStarted },
+      { event: SocketEvents.publish.progress, handler: handlePublishProgress },
+      { event: SocketEvents.publish.completed, handler: handlePublishCompleted },
+      { event: SocketEvents.publish.failed, handler: handlePublishFailed },
+      { event: SocketEvents.caption.update, handler: handleCaptionUpdate },
+      { event: SocketEvents.caption.queued, handler: handleCaptionQueued },
+      { event: SocketEvents.caption.started, handler: handleCaptionStarted },
+      { event: SocketEvents.caption.completed, handler: handleCaptionCompleted },
+      { event: SocketEvents.caption.failed, handler: handleCaptionFailed },
+    ] as const;
+
+    return attachSocketSubscriptions(socket, socketSubscriptions);
   }, [socket]);
 
   const combinedJobs = useMemo(() => {

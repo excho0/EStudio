@@ -9,15 +9,7 @@ import si from "systeminformation";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 import { eventBus } from "@/lib/event-bus";
-import type {
-  CaptionUpdatePayload,
-  ContentUpdatePayload,
-  PublishProgressPayload,
-  PublishUpdatePayload,
-  RenderCompletePayload,
-  RenderProgressPayload,
-  SettingsUpdatedPayload,
-} from "@/types";
+import type { AppEventMap } from "@/types";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -109,51 +101,56 @@ app
 
     const resolveUserRoom = (userId?: string | null) => (userId ? `user:${userId}` : null);
 
+    const EVENT_BRIDGE_TOPICS: Array<keyof AppEventMap> = [
+      "content.update",
+      "content.created",
+      "content.updated",
+      "content.deleted",
+      "content.status.changed",
+      "render.queued",
+      "render.started",
+      "render.progress",
+      "render.completed",
+      "render.failed",
+      "render.cancel-requested",
+      "publish.queued",
+      "publish.started",
+      "publish.progress",
+      "publish.completed",
+      "publish.failed",
+      "publish.update",
+      "caption.queued",
+      "caption.started",
+      "caption.completed",
+      "caption.failed",
+      "caption.update",
+      "provider.connection.created",
+      "provider.connection.deleted",
+      "user.profile.updated",
+      "settings.updated",
+    ];
+
+    const extractUserId = (payload: unknown) => {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return null;
+      }
+      const value = (payload as { userId?: unknown }).userId;
+      return typeof value === "string" && value.length > 0 ? value : null;
+    };
+
     const registerRealtimeBridge = async () => {
-      const unsubs = await Promise.all([
-        eventBus.on("content.update", ({ payload }) => {
-          const data = payload as ContentUpdatePayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("content:update", data);
-          else io.emit("content:update", data);
-        }),
-        eventBus.on("render.progress", ({ payload }) => {
-          const data = payload as RenderProgressPayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("render:progress", data);
-          else io.emit("render:progress", data);
-        }),
-        eventBus.on("render.completed", ({ payload }) => {
-          const data = payload as RenderCompletePayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("render:complete", data);
-          else io.emit("render:complete", data);
-        }),
-        eventBus.on("publish.update", ({ payload }) => {
-          const data = payload as PublishUpdatePayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("publish:update", data);
-          else io.emit("publish:update", data);
-        }),
-        eventBus.on("publish.progress", ({ payload }) => {
-          const data = payload as PublishProgressPayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("publish:progress", data);
-          else io.emit("publish:progress", data);
-        }),
-        eventBus.on("caption.update", ({ payload }) => {
-          const data = payload as CaptionUpdatePayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("caption:update", data);
-          else io.emit("caption:update", data);
-        }),
-        eventBus.on("settings.updated", ({ payload }) => {
-          const data = payload as SettingsUpdatedPayload;
-          const room = resolveUserRoom(data.userId);
-          if (room) io.to(room).emit("settings:updated", data);
-          else io.emit("settings:updated", data);
-        }),
-      ]);
+      const unsubs = await Promise.all(
+        EVENT_BRIDGE_TOPICS.map((topic) =>
+          eventBus.on(topic, ({ payload }) => {
+            const room = resolveUserRoom(extractUserId(payload));
+            if (room) {
+              io.to(room).emit(topic, payload);
+              return;
+            }
+            io.emit(topic, payload);
+          })
+        )
+      );
 
       const stop = async () => {
         await Promise.all(unsubs.map(async (unsubscribe) => unsubscribe().catch(() => undefined)));
@@ -308,7 +305,7 @@ app
           };
         });
 
-        io.emit("metrics:update", {
+        io.emit("metrics.update", {
           cpu: {
             load: load.currentLoad,
             temperature: cpuTemp.main ?? null,
@@ -329,8 +326,8 @@ app
     setInterval(emitMetrics, 2000);
 
     io.on("connection", (socket) => {
-      socket.emit("content:update", { type: "connected" });
-      socket.on("user:register", (payload: unknown) => {
+      socket.emit("content.update", { type: "connected" });
+      socket.on("user.register", (payload: unknown) => {
         const userId = (() => {
           if (typeof payload === "string") return payload;
           if (
@@ -357,15 +354,15 @@ app
       let announcedRendered = false;
       setInterval(() => {
         const progress = steps[index % steps.length];
-        io.emit("render:progress", {
+        io.emit("render.progress", {
           id: simulateId,
           rendered: Math.round(progress * 100),
           total: 100,
           progress,
         });
         if (progress >= 1 && !announcedRendered) {
-          io.emit("content:update", {
-            type: "content:status",
+          io.emit("content.update", {
+            type: "content.status",
             id: simulateId,
             status: "rendered",
           });

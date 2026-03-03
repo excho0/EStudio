@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSocketIO } from "./socketIO-provider";
 import type { RenderProgress } from "@/types";
 import { sdk } from "@/lib/sdk";
+import { SocketEvents } from "@/lib/socket/events";
+import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 
 export type { RenderProgress } from "@/types";
 
@@ -86,17 +88,12 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
       }
     };
 
-    socket.on("render:progress", handleProgress);
-    socket.on("render:complete", handleComplete);
-    socket.on("content:update", handleContentUpdate);
-    socket.on("render:cancel-requested", handleComplete);
-
-    return () => {
-      socket.off("render:progress", handleProgress);
-      socket.off("render:complete", handleComplete);
-      socket.off("content:update", handleContentUpdate);
-      socket.off("render:cancel-requested", handleComplete);
-    };
+    return attachSocketSubscriptions(socket, [
+      { event: SocketEvents.render.progress, handler: handleProgress },
+      { event: SocketEvents.render.completed, handler: handleComplete },
+      { event: SocketEvents.content.update, handler: handleContentUpdate },
+      { event: SocketEvents.render.cancelRequested, handler: handleComplete },
+    ] as const);
   }, [socket, paused]);
 
   return useMemo(() => aggregateByContentId(rawProgressMap), [rawProgressMap]);

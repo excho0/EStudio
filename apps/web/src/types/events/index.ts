@@ -38,6 +38,12 @@ export type AppEventMap = {
   "render.progress": RenderProgressPayload;
   "render.completed": RenderCompletePayload | ContentUpdatePayload;
   "render.failed": ContentUpdatePayload;
+  "render.cancel-requested": {
+    userId?: string | null;
+    id: string;
+    mode?: string;
+    jobId?: string;
+  };
   "publish.queued": PublishQueuedPayload | PublishUpdatePayload;
   "publish.started": PublishUpdatePayload;
   "publish.progress": PublishProgressPayload;

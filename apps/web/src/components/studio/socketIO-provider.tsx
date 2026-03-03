@@ -15,6 +15,8 @@ import { sdk } from "@/lib/sdk";
 import type { MetricsPayload } from "@/types";
 import { toast } from "sonner";
 import { notifyRenderComplete } from "@/lib/notifications";
+import { SocketEvents } from "@/lib/socket/events";
+import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 
 type SocketIOContextValue = {
   connected: boolean;
@@ -31,6 +33,8 @@ type WindowWithSocket = Window & {
   __appSocket?: Socket;
   __realtimeToastStartedKeys?: Set<string>;
   __realtimeToastCompletedKeys?: Set<string>;
+  __realtimeCanceledRenderKeys?: Set<string>;
+  __realtimeCanceledRenderIds?: Set<string>;
 };
 
 const getBrowserSocket = () => {
@@ -67,7 +71,45 @@ const getCompletedKeys = () => {
   return win.__realtimeToastCompletedKeys;
 };
 
+const getCanceledRenderKeys = () => {
+  if (typeof window === "undefined") return null;
+  const win = window as WindowWithSocket;
+  if (!win.__realtimeCanceledRenderKeys) {
+    win.__realtimeCanceledRenderKeys = new Set<string>();
+  }
+  return win.__realtimeCanceledRenderKeys;
+};
+
+
+const getCanceledRenderIds = () => {
+  if (typeof window === "undefined") return null;
+  const win = window as WindowWithSocket;
+  if (!win.__realtimeCanceledRenderIds) {
+    win.__realtimeCanceledRenderIds = new Set<string>();
+  }
+  return win.__realtimeCanceledRenderIds;
+};
+
 const shortId = (id: string) => id.slice(0, 8);
+const renderToastKey = (id: string, mode?: string, jobId?: string) =>
+  jobId ? `job:${jobId}` : `${id}:${mode ?? "default"}`;
+const captionToastKey = (id: string, mode?: string) => `${id}:${mode ?? "default"}`;
+const publishToastKey = (id: string) => id;
+
+const getRenderToastAliases = (payload: { id: string; mode?: string; jobId?: string }) => {
+  const aliases = new Set<string>();
+  aliases.add(`render:${renderToastKey(payload.id, payload.mode, payload.jobId)}`);
+  aliases.add(`render:${payload.id}:${payload.mode ?? "default"}`);
+  aliases.add(`render:${payload.id}:default`);
+  return Array.from(aliases);
+};
+
+
+let globalToastSubscriptionsDetach: (() => void) | null = null;
+let globalToastSubscriptionsRefCount = 0;
+let globalStateSubscriptionsDetach: (() => void) | null = null;
+let globalStateSubscriptionsRefCount = 0;
+let globalSubscriptionSocket: Socket | null = null;
 
 export function SocketIOProvider({
   children,
@@ -135,6 +177,15 @@ export function SocketIOProvider({
       toast.message(`${label} started · ${contentLabel}${modeSuffix}`);
     };
 
+    const notifyQueued = async (key: string, label: string, id: string, mode?: string) => {
+      const started = getStartedKeys();
+      if (started?.has(key)) return;
+      started?.add(key);
+      const modeSuffix = mode ? ` · ${mode}` : "";
+      const contentLabel = await resolveContentLabel(id);
+      toast.message(`${label} queued · ${contentLabel}${modeSuffix}`);
+    };
+
     const notifyCompleted = async (key: string, label: string, id: string, mode?: string) => {
       const completed = getCompletedKeys();
       if (completed?.has(key)) return;
@@ -160,7 +211,7 @@ export function SocketIOProvider({
         ) {
           return;
         }
-        socket.emit("user:register", { userId });
+        socket.emit(SocketEvents.userRegister, { userId });
         registeredForSocketRef.current = userId;
         socketIdRef.current = socket.id ?? null;
       } catch {
@@ -168,31 +219,39 @@ export function SocketIOProvider({
       }
     };
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       setConnected(true);
       setStatus("connected");
       void registerUser();
-    });
-    socket.on("disconnect", () => {
+    };
+
+    const handleDisconnect = () => {
       setConnected(false);
       setStatus("disconnected");
-    });
-    socket.on("connect_error", () => {
+    };
+
+    const handleConnectError = () => {
       setConnected(false);
       setStatus("error");
-    });
-    socket.on("content:update", handleUpdate);
-    socket.on("publish:update", () => {
+    };
+
+    const invalidateContent = () => {
+      handleUpdate();
+    };
+
+    const invalidatePublishes = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
       queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
-    });
-    socket.on("render:update", () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rendersBase });
-    });
-    socket.on("settings:updated", () => {
+    };
+
+    const invalidateSettings = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-    });
-    socket.on("metrics:update", setMetrics);
+    };
+
+    const invalidateProfile = () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      queryClient.invalidateQueries({ queryKey: queryKeys.profileConnections });
+    };
 
     const handleRenderProgressToast = (payload: {
       id: string;
@@ -202,7 +261,12 @@ export function SocketIOProvider({
       rendered?: number;
       total?: number;
     }) => {
-      const key = payload.jobId ?? `${payload.id}:${payload.mode ?? "default"}`;
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      if (canceledRenderKeys?.has(key) || canceledRenderIds?.has(payload.id)) {
+        return;
+      }
       const progressValue = Number.isFinite(payload.progress ?? NaN)
         ? Number(payload.progress)
         : 0;
@@ -224,11 +288,17 @@ export function SocketIOProvider({
     };
 
     const handleRenderCompleteToast = (payload: {
-      id: string;
+      id?: string;
       jobId?: string;
       mode?: string;
     }) => {
-      const key = payload.jobId ?? `${payload.id}:${payload.mode ?? "default"}`;
+      if (!payload.id) return;
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      if (canceledRenderKeys?.has(key) || canceledRenderIds?.has(payload.id)) {
+        return;
+      }
       void notifyCompleted(`render:${key}`, "Render", payload.id, payload.mode);
     };
 
@@ -237,7 +307,7 @@ export function SocketIOProvider({
       jobId?: string;
       status?: string;
     }) => {
-      const key = payload.jobId ?? payload.id;
+      const key = publishToastKey(payload.id);
       if (payload.status === "queued" || payload.status === "publishing") {
         void notifyStarted(`publish:${key}`, "Publish", payload.id);
       } else if (payload.status === "published" || payload.status === "published_with_warning") {
@@ -251,7 +321,7 @@ export function SocketIOProvider({
       mode?: string;
       status?: "queued" | "processing" | "completed" | "failed";
     }) => {
-      const key = payload.jobId ?? `${payload.id}:${payload.mode ?? "default"}`;
+      const key = captionToastKey(payload.id, payload.mode);
       if (payload.status === "queued") {
         void notifyStarted(`caption:${key}`, "Captions", payload.id, payload.mode);
       } else if (payload.status === "completed") {
@@ -264,7 +334,11 @@ export function SocketIOProvider({
       jobId?: string;
       mode?: string;
     }) => {
-      const key = payload.jobId ?? `${payload.id}:${payload.mode ?? "default"}`;
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      canceledRenderKeys?.add(key);
+      canceledRenderIds?.add(payload.id);
       const started = getStartedKeys();
       const toastKey = `render-cancel:${key}`;
       if (started?.has(toastKey)) return;
@@ -275,25 +349,208 @@ export function SocketIOProvider({
       });
     };
 
-    socket.on("render:progress", handleRenderProgressToast);
-    socket.on("render:complete", handleRenderCompleteToast);
-    socket.on("publish:update", handlePublishUpdateToast);
-    socket.on("caption:update", handleCaptionUpdateToast);
-    socket.on("render:cancel-requested", handleRenderCancelRequestedToast);
+    const handleRenderQueuedToast = (payload: { id?: string; jobId?: string; mode?: string }) => {
+      if (!payload.id) return;
+      const normalizedPayload = { id: payload.id, mode: payload.mode, jobId: payload.jobId };
+      const aliases = getRenderToastAliases(normalizedPayload);
+      const started = getStartedKeys();
+      if (aliases.some((alias) => started?.has(alias))) {
+        return;
+      }
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      aliases
+        .filter((alias) => alias !== `render:${key}`)
+        .forEach((alias) => started?.add(alias));
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      canceledRenderKeys?.delete(key);
+      canceledRenderIds?.delete(payload.id);
+      void notifyQueued(`render:${key}`, "Render", payload.id, payload.mode);
+    };
+
+    const handleRenderStartedToast = (payload: { id?: string; jobId?: string; mode?: string }) => {
+      if (!payload.id) return;
+      const normalizedPayload = { id: payload.id, mode: payload.mode, jobId: payload.jobId };
+      const aliases = getRenderToastAliases(normalizedPayload);
+      const started = getStartedKeys();
+      if (aliases.some((alias) => started?.has(alias))) {
+        return;
+      }
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      aliases
+        .filter((alias) => alias !== `render:${key}`)
+        .forEach((alias) => started?.add(alias));
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      canceledRenderKeys?.delete(key);
+      canceledRenderIds?.delete(payload.id);
+      void notifyStarted(`render:${key}`, "Render", payload.id, payload.mode);
+    };
+
+    const handleRenderFailedToast = (payload: {
+      id?: string;
+      jobId?: string;
+      mode?: string;
+      error?: string;
+    }) => {
+      if (!payload.id) return;
+      const key = renderToastKey(payload.id, payload.mode, payload.jobId);
+      const canceledRenderKeys = getCanceledRenderKeys();
+      const canceledRenderIds = getCanceledRenderIds();
+      canceledRenderKeys?.delete(key);
+      canceledRenderIds?.delete(payload.id);
+      const completed = getCompletedKeys();
+      const toastKey = `render-failed:${key}`;
+      if (completed?.has(toastKey)) return;
+      completed?.add(toastKey);
+      void resolveContentLabel(payload.id).then((contentLabel) => {
+        const modeSuffix = payload.mode ? ` · ${payload.mode}` : "";
+        const reason = payload.error ? ` (${payload.error})` : "";
+        toast.error(`Render failed · ${contentLabel}${modeSuffix}${reason}`);
+      });
+    };
+
+    const handlePublishQueuedToast = (payload: { id: string; jobId?: string }) => {
+      handlePublishUpdateToast({ ...payload, status: "queued" });
+    };
+
+    const handlePublishStartedToast = (payload: { id: string; jobId?: string }) => {
+      handlePublishUpdateToast({ ...payload, status: "publishing" });
+    };
+
+    const handlePublishCompletedToast = (payload: { id: string; jobId?: string }) => {
+      handlePublishUpdateToast({ ...payload, status: "published" });
+    };
+
+    const handlePublishFailedToast = (payload: { id: string; jobId?: string; error?: string }) => {
+      const key = publishToastKey(payload.id);
+      const completed = getCompletedKeys();
+      const toastKey = `publish-failed:${key}`;
+      if (completed?.has(toastKey)) return;
+      completed?.add(toastKey);
+      void resolveContentLabel(payload.id).then((contentLabel) => {
+        const reason = payload.error ? ` (${payload.error})` : "";
+        toast.error(`Publish failed · ${contentLabel}${reason}`);
+      });
+    };
+
+    const handleCaptionQueuedToast = (payload: { id: string; jobId?: string; mode?: string }) => {
+      handleCaptionUpdateToast({ ...payload, status: "queued" });
+    };
+
+    const handleCaptionStartedToast = (payload: { id: string; jobId?: string; mode?: string }) => {
+      handleCaptionUpdateToast({ ...payload, status: "processing" });
+    };
+
+    const handleCaptionCompletedToast = (payload: { id: string; jobId?: string; mode?: string }) => {
+      handleCaptionUpdateToast({ ...payload, status: "completed" });
+    };
+
+    const handleCaptionFailedToast = (payload: {
+      id?: string;
+      jobId?: string;
+      mode?: string;
+      error?: string;
+    }) => {
+      if (!payload.id) return;
+      const key = renderToastKey(payload.id, payload.mode);
+      const completed = getCompletedKeys();
+      const toastKey = `caption-failed:${key}`;
+      if (completed?.has(toastKey)) return;
+      completed?.add(toastKey);
+      void resolveContentLabel(payload.id).then((contentLabel) => {
+        const modeSuffix = payload.mode ? ` · ${payload.mode}` : "";
+        const reason = payload.error ? ` (${payload.error})` : "";
+        toast.error(`Captions failed · ${contentLabel}${modeSuffix}${reason}`);
+      });
+    };
+
+    const handleMetricsUpdate = (payload: MetricsPayload) => {
+      setMetrics(payload);
+    };
+
+    const stateSubscriptions = [
+      { event: SocketEvents.connect, handler: handleConnect },
+      { event: SocketEvents.disconnect, handler: handleDisconnect },
+      { event: SocketEvents.connectError, handler: handleConnectError },
+      { event: SocketEvents.content.update, handler: invalidateContent },
+      { event: SocketEvents.content.created, handler: invalidateContent },
+      { event: SocketEvents.content.updated, handler: invalidateContent },
+      { event: SocketEvents.content.deleted, handler: invalidateContent },
+      { event: SocketEvents.content.statusChanged, handler: invalidateContent },
+      { event: SocketEvents.publish.update, handler: invalidatePublishes },
+      { event: SocketEvents.publish.queued, handler: invalidatePublishes },
+      { event: SocketEvents.publish.started, handler: invalidatePublishes },
+      { event: SocketEvents.publish.completed, handler: invalidatePublishes },
+      { event: SocketEvents.publish.failed, handler: invalidatePublishes },
+      { event: SocketEvents.settings.updated, handler: invalidateSettings },
+      { event: SocketEvents.userProfile.updated, handler: invalidateProfile },
+      { event: SocketEvents.providerConnection.created, handler: invalidateProfile },
+      { event: SocketEvents.providerConnection.deleted, handler: invalidateProfile },
+      { event: SocketEvents.metricsUpdate, handler: handleMetricsUpdate },
+    ] as const;
+
+    const toastSubscriptions = [
+      { event: SocketEvents.render.queued, handler: handleRenderQueuedToast },
+      { event: SocketEvents.render.started, handler: handleRenderStartedToast },
+      { event: SocketEvents.render.progress, handler: handleRenderProgressToast },
+      { event: SocketEvents.render.completed, handler: handleRenderCompleteToast },
+      { event: SocketEvents.render.failed, handler: handleRenderFailedToast },
+      { event: SocketEvents.publish.update, handler: handlePublishUpdateToast },
+      { event: SocketEvents.publish.queued, handler: handlePublishQueuedToast },
+      { event: SocketEvents.publish.started, handler: handlePublishStartedToast },
+      { event: SocketEvents.publish.completed, handler: handlePublishCompletedToast },
+      { event: SocketEvents.publish.failed, handler: handlePublishFailedToast },
+      { event: SocketEvents.caption.update, handler: handleCaptionUpdateToast },
+      { event: SocketEvents.caption.queued, handler: handleCaptionQueuedToast },
+      { event: SocketEvents.caption.started, handler: handleCaptionStartedToast },
+      { event: SocketEvents.caption.completed, handler: handleCaptionCompletedToast },
+      { event: SocketEvents.caption.failed, handler: handleCaptionFailedToast },
+      { event: SocketEvents.render.cancelRequested, handler: handleRenderCancelRequestedToast },
+    ] as const;
+    if (globalSubscriptionSocket && globalSubscriptionSocket !== socket) {
+      globalStateSubscriptionsDetach?.();
+      globalToastSubscriptionsDetach?.();
+      globalStateSubscriptionsDetach = null;
+      globalToastSubscriptionsDetach = null;
+      globalStateSubscriptionsRefCount = 0;
+      globalToastSubscriptionsRefCount = 0;
+      globalSubscriptionSocket = null;
+    }
+
+    globalSubscriptionSocket = socket;
+    globalStateSubscriptionsRefCount += 1;
+    globalToastSubscriptionsRefCount += 1;
+
+    if (!globalStateSubscriptionsDetach) {
+      globalStateSubscriptionsDetach = attachSocketSubscriptions(socket, stateSubscriptions);
+    }
+    if (!globalToastSubscriptionsDetach) {
+      globalToastSubscriptionsDetach = attachSocketSubscriptions(socket, toastSubscriptions);
+    }
 
     return () => {
-      socket.off("content:update", handleUpdate);
-      socket.off("publish:update");
-      socket.off("render:update");
-      socket.off("settings:updated");
-      socket.off("metrics:update", setMetrics);
-      socket.off("connect_error");
-      socket.off("render:progress", handleRenderProgressToast);
-      socket.off("render:complete", handleRenderCompleteToast);
-      socket.off("publish:update", handlePublishUpdateToast);
-      socket.off("caption:update", handleCaptionUpdateToast);
-      socket.off("render:cancel-requested", handleRenderCancelRequestedToast);
+      globalStateSubscriptionsRefCount -= 1;
+      globalToastSubscriptionsRefCount -= 1;
+
+      if (globalStateSubscriptionsRefCount <= 0) {
+        globalStateSubscriptionsRefCount = 0;
+        globalStateSubscriptionsDetach?.();
+        globalStateSubscriptionsDetach = null;
+      }
+      if (globalToastSubscriptionsRefCount <= 0) {
+        globalToastSubscriptionsRefCount = 0;
+        globalToastSubscriptionsDetach?.();
+        globalToastSubscriptionsDetach = null;
+      }
+      if (
+        globalStateSubscriptionsRefCount === 0 &&
+        globalToastSubscriptionsRefCount === 0
+      ) {
+        globalSubscriptionSocket = null;
+      }
     };
+
   }, [queryClient, socket]);
 
   const value = useMemo(

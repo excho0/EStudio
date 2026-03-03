@@ -209,6 +209,7 @@ export const emitRenderCancelRequested = (payload: {
   mode?: string;
   jobId?: string;
 }) => {
+  emitDomainEvent("render.cancel-requested", payload);
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),

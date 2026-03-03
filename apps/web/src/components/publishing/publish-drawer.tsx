@@ -49,6 +49,8 @@ import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { SocketEvents } from "@/lib/socket/events";
+import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { Link } from "@/components/navigation/route-transition";
 
 type PublishTarget = {
@@ -400,12 +402,10 @@ export function PublishDrawer({
         setPublishStatus(payload.status);
       }
     };
-    socket.on("publish:progress", handleProgress);
-    socket.on("publish:update", handleUpdate);
-    return () => {
-      socket.off("publish:progress", handleProgress);
-      socket.off("publish:update", handleUpdate);
-    };
+    return attachSocketSubscriptions(socket, [
+      { event: SocketEvents.publish.progress, handler: handleProgress },
+      { event: SocketEvents.publish.update, handler: handleUpdate },
+    ] as const);
   }, [socket, activePublishId]);
 
   useEffect(() => {
