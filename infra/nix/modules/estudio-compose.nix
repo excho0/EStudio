@@ -47,12 +47,28 @@ let
     then "${pkgs.podman-compose}/bin/podman-compose"
     else "${pkgs.docker}/bin/docker compose";
 
+  composeFilesCheckSnippet = lib.concatMapStringsSep "\n" (f: ''
+    if [ ! -f ${lib.escapeShellArg f} ]; then
+      echo "Missing compose file: ${f}" >&2
+      exit 1
+    fi
+  '') resolvedComposeFiles;
+
   composeUpScript = pkgs.writeShellApplication {
     name = "estudio-compose-up";
     inherit runtimeInputs;
     text = ''
       set -euo pipefail
+
+      if [ ! -d ${lib.escapeShellArg cfg.repoPath} ]; then
+        echo "repoPath does not exist: ${cfg.repoPath}" >&2
+        exit 1
+      fi
+
       cd ${lib.escapeShellArg cfg.repoPath}
+
+      ${composeFilesCheckSnippet}
+
       exec ${runtimeExec} ${upArgs}
     '';
   };
@@ -62,7 +78,16 @@ let
     inherit runtimeInputs;
     text = ''
       set -euo pipefail
+
+      if [ ! -d ${lib.escapeShellArg cfg.repoPath} ]; then
+        echo "repoPath does not exist: ${cfg.repoPath}" >&2
+        exit 1
+      fi
+
       cd ${lib.escapeShellArg cfg.repoPath}
+
+      ${composeFilesCheckSnippet}
+
       exec ${runtimeExec} ${downArgs}
     '';
   };
@@ -163,20 +188,8 @@ in
         message = "services.estudio.compose.repoPath must be an absolute path.";
       }
       {
-        assertion = builtins.pathExists cfg.repoPath;
-        message = "services.estudio.compose.repoPath does not exist: ${cfg.repoPath}";
-      }
-      {
         assertion = lib.hasPrefix "/" cfg.dataRoot;
         message = "services.estudio.compose.dataRoot must be an absolute path.";
-      }
-      {
-        assertion = builtins.all builtins.pathExists resolvedComposeFiles;
-        message = "One or more compose files do not exist under repoPath: ${toString resolvedComposeFiles}";
-      }
-      {
-        assertion = builtins.all builtins.pathExists cfg.environmentFiles;
-        message = "One or more services.estudio.compose.environmentFiles entries do not exist.";
       }
       {
         assertion = cfg.runtime != "docker" || config.virtualisation.docker.enable;
