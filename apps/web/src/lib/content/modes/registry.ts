@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ContentItem } from "@/types";
 import type { ContentLoopProps } from "@/types";
-import { buildContentLoopPropsFromItem } from "@/remotion/content-loop-props";
+import { buildContentLoopPropsFromItem } from "../../../remotion/content-loop-props";
 import { videoLoopSettingsSchema } from "./schemas";
 
 const getSharedCaptionsData = (settings: unknown): ContentLoopProps["captionsData"] => {

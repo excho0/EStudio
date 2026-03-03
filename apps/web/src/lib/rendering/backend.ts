@@ -60,9 +60,10 @@ const executeLambdaRenderForContent = async ({
   }
 
   const resolveAssetBaseUrl = () => {
+    const explicit = process.env.RENDER_ASSET_BASE_URL?.trim();
+    if (explicit) return explicit;
     if (requestUrl) return new URL(requestUrl).origin;
     return (
-      process.env.RENDER_ASSET_BASE_URL?.trim() ||
       process.env.NEXT_PUBLIC_APP_URL?.trim() ||
       `http://localhost:${process.env.PORT || "3000"}`
     );

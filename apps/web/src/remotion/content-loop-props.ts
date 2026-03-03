@@ -1,5 +1,6 @@
 import type { ContentLoopProps, VideoLoopSettings } from "../types";
 import { captionDocumentSchema } from "../types";
+import { getOutputDefaultsForMode } from "../lib/content/modes";
 
 export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   title: "Content Loop",
@@ -57,6 +58,7 @@ export const buildContentLoopProps = (
 });
 
 type ContentLoopItemLike = Partial<VideoLoopSettings> & {
+  mode?: string | null;
   title?: string | null;
   captionsData?: unknown;
   colorPalette?: string[] | null;
@@ -76,6 +78,8 @@ export const buildContentLoopPropsFromItem = (
       : {};
   const getSetting = <T>(key: string, fallback?: T) =>
     (settings[key] as T | undefined) ?? fallback;
+
+  const outputConfig = getOutputDefaultsForMode(item.mode ?? undefined, settings);
 
   const rawCaptionsData =
     sharedSettings.captionsData ??
@@ -232,15 +236,9 @@ export const buildContentLoopPropsFromItem = (
       getSetting<number>("songDurationSeconds") ??
       item.songDurationSeconds ??
       CONTENT_LOOP_DEFAULTS.songDurationSeconds,
-    fps:
-      getSetting<number>("fps") ??
-      CONTENT_LOOP_DEFAULTS.fps,
-    width:
-      getSetting<number>("width") ??
-      CONTENT_LOOP_DEFAULTS.width,
-    height:
-      getSetting<number>("height") ??
-      CONTENT_LOOP_DEFAULTS.height,
+    fps: outputConfig.fps,
+    width: outputConfig.width,
+    height: outputConfig.height,
     ...overrides,
   });
 };
