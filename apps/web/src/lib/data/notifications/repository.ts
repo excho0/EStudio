@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 import {
   type NotificationItem,
@@ -269,6 +269,57 @@ export async function finalizeActiveRenderNotificationsForContent(
             eq(table.kind, "render"),
             eq(table.contentId, contentId),
             inArray(table.status, activeStatuses)
+          )
+        )
+        .returning({ id: table.id });
+      return result.length;
+    },
+  });
+}
+
+export async function recoverStaleActiveNotifications(staleBeforeMs: number) {
+  const staleBefore = new Date(staleBeforeMs);
+  const activeStatuses: NotificationStatus[] = [
+    "queued",
+    "processing",
+    "publishing",
+    "rendering",
+  ];
+
+  return withNotificationsDb({
+    pg: async ({ db, now, table }) => {
+      const result = await db
+        .update(table)
+        .set({
+          status: "canceled",
+          progress: 1,
+          stage: "Recovered after worker restart",
+          error: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            inArray(table.status, activeStatuses),
+            lt(table.updatedAt, staleBefore)
+          )
+        )
+        .returning({ id: table.id });
+      return result.length;
+    },
+    sqlite: async ({ db, nowMs, table }) => {
+      const result = await db
+        .update(table)
+        .set({
+          status: "canceled",
+          progress: 1,
+          stage: "Recovered after worker restart",
+          error: null,
+          updatedAt: new Date(nowMs),
+        })
+        .where(
+          and(
+            inArray(table.status, activeStatuses),
+            lt(table.updatedAt, staleBefore)
           )
         )
         .returning({ id: table.id });

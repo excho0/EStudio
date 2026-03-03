@@ -6,12 +6,13 @@ import { useSocketIO } from "./socketIO-provider";
 import type { ContentListResponse } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
+import type { ContentStatus } from "@/lib/data/content";
 
 type UseContentListOptions = {
   query?: string;
   page?: number;
   limit?: number;
-  status?: "uploaded" | "rendering" | "rendered" | "failed" | "all";
+  status?: ContentStatus | "all";
   sortBy?: "createdAt" | "updatedAt" | "title" | "status";
   sortDir?: "asc" | "desc";
   enableSocketRefresh?: boolean;

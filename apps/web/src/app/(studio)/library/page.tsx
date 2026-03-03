@@ -36,6 +36,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useContentList } from "@/components/studio/use-content-list";
+import type { ContentStatus } from "@/lib/data/content";
 import type { ContentItem } from "@/types";
 import { useRenderProgress } from "@/components/studio/use-render-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -94,7 +95,7 @@ export default function LibraryPage() {
   const debouncedQuery = useDebouncedValue(query, 350);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<
-    "all" | "uploaded" | "rendering" | "rendered" | "failed"
+    "all" | ContentStatus
   >("all");
   const [sortBy, setSortBy] = useState<
     "createdAt" | "updatedAt" | "title" | "status"
@@ -430,6 +431,13 @@ export default function LibraryPage() {
           className:
             "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
         };
+      case "queued":
+        return {
+          label: "Queued",
+          icon: Play,
+          className:
+            "bg-sky-500/15 text-sky-700 dark:bg-sky-400/20 dark:text-sky-200",
+        };
       case "uploaded":
         return {
           label: "Uploaded",
@@ -614,6 +622,7 @@ export default function LibraryPage() {
           options={[
             { value: "all", label: "All statuses", icon: ListFilter },
             { value: "uploaded", label: "Uploaded", icon: Upload },
+            { value: "queued", label: "Queued", icon: Play },
             { value: "rendering", label: "Rendering", icon: Loader2 },
             { value: "rendered", label: "Rendered", icon: CheckCircle2 },
             { value: "failed", label: "Failed", icon: XCircle },

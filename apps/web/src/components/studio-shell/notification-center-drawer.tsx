@@ -232,8 +232,9 @@ const JobCard = ({
   const StatusIcon = statusMeta.icon;
   const progressValue = toPercent(job.progress);
   const showProgress =
-    typeof progressValue === "number" &&
-    (isActiveStatus(job.status) || progressValue < 100);
+    job.kind === "render" &&
+    job.status === "rendering" &&
+    typeof progressValue === "number";
 
   return (
     <motion.button

@@ -1,7 +1,8 @@
 import { hasAnyRenderedOutput } from "@/lib/content/store";
 import { createScopedSnapshotStore } from "@/lib/rendering/snapshot-store";
+import type { ContentStatus } from "@/lib/data/content";
 
-export type ContentRenderStatus = "uploaded" | "rendering" | "rendered" | "failed";
+export type ContentRenderStatus = ContentStatus;
 
 type StatusCheckpoint = {
   id: string;

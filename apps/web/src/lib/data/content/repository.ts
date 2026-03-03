@@ -22,15 +22,17 @@ import {
   contentQuerySchema,
   contentUpdateSchema,
 } from "./schemas";
+import type { ContentStatus } from "./schemas";
 
 const ALLOWED_STATUS_TRANSITIONS: Record<
-  "uploaded" | "rendering" | "rendered" | "failed",
-  ReadonlyArray<"uploaded" | "rendering" | "rendered" | "failed">
+  ContentStatus,
+  ReadonlyArray<ContentStatus>
 > = {
-  uploaded: ["uploaded", "rendering", "rendered", "failed"],
-  rendering: ["uploaded", "rendering", "rendered", "failed"],
-  rendered: ["rendered", "rendering", "failed"],
-  failed: ["failed", "rendering", "rendered"],
+  uploaded: ["uploaded", "queued", "rendering", "rendered", "failed"],
+  queued: ["uploaded", "queued", "rendering", "rendered", "failed"],
+  rendering: ["uploaded", "queued", "rendering", "rendered", "failed"],
+  rendered: ["rendered", "queued", "rendering", "failed"],
+  failed: ["failed", "queued", "rendering", "rendered"],
 };
 
 export async function listContentItems(

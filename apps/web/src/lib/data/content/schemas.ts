@@ -5,6 +5,9 @@ export const paletteModeSchema = z
   .enum(["auto", "manual"])
   .describe("Palette selection mode.");
 
+export const contentStatusSchema = z.enum(["uploaded", "queued", "rendering", "rendered", "failed"]);
+export type ContentStatus = z.infer<typeof contentStatusSchema>;
+
 /** Canonical content item returned by API/data layer. */
 export const contentItemSchema = z.object({
   id: z.uuid(),
@@ -16,7 +19,7 @@ export const contentItemSchema = z.object({
   paletteMode: paletteModeSchema.default("auto"),
   mode: z.string().default("video_loop"),
   settings: z.record(z.string(), z.unknown()).optional().nullable(),
-  status: z.enum(["uploaded", "rendering", "rendered", "failed"]),
+  status: contentStatusSchema,
   songDurationSeconds: z.number().nonnegative(),
   publishesCount: z.number().int().nonnegative().optional(),
 }).describe("Content item.");
@@ -32,7 +35,7 @@ export const contentListResponseSchema = z.object({
 /** Query params accepted by content listing API. */
 export const contentQuerySchema = z.object({
   q: z.string().trim().optional().default(""),
-  status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  status: contentStatusSchema.optional(),
   sortBy: z.enum(["createdAt", "updatedAt", "title", "status"]).default("createdAt"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().positive().default(1),
@@ -44,7 +47,7 @@ export const contentCreateSchema = z.object({
   id: z.uuid(),
   userId: z.string().min(1),
   title: z.string().min(1),
-  status: z.enum(["uploaded", "rendering", "rendered", "failed"]).default("uploaded"),
+  status: contentStatusSchema.default("uploaded"),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: paletteModeSchema.default("auto"),
   mode: z.string().default("video_loop"),
@@ -55,7 +58,7 @@ export const contentCreateSchema = z.object({
 /** Data shape used when partially updating a content item in persistence layer. */
 export const contentUpdateSchema = z.object({
   title: z.string().min(1).optional(),
-  status: z.enum(["uploaded", "rendering", "rendered", "failed"]).optional(),
+  status: contentStatusSchema.optional(),
   colorPalette: z.array(z.string()).optional().nullable(),
   paletteMode: paletteModeSchema.optional(),
   mode: z.string().optional(),

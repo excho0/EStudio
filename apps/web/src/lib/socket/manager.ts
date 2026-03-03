@@ -17,6 +17,7 @@ import {
   setRenderProgressSnapshot,
 } from "@/lib/rendering/progress-store";
 import { enqueueNotificationPersist } from "@/lib/notifications/persist-queue";
+import type { NotificationStatus } from "@/types";
 
 type GlobalWithSocket = typeof globalThis & {
   io?: SocketIOServer;
@@ -43,14 +44,7 @@ const persistNotification = (payload: {
   contentId: string;
   mode?: string;
   kind: "render" | "publish" | "caption";
-  status:
-    | "queued"
-    | "processing"
-    | "publishing"
-    | "rendering"
-    | "canceled"
-    | "completed"
-    | "failed";
+  status: NotificationStatus;
   progress?: number;
   stage?: string;
   error?: string;
@@ -78,8 +72,14 @@ export const emitContentUpdate = (payload: {
     emitDomainEvent("content.deleted", typedPayload);
   } else if (payload.type === "content:status") {
     emitDomainEvent("content.status.changed", typedPayload);
+    const hasRenderJobContext = typeof payload.jobId === "string" && payload.jobId.length > 0;
+
     if (payload.status === "rendering") {
-      emitDomainEvent("render.started", typedPayload);
+      if (!hasRenderJobContext) {
+        // Status-only updates without a render job context should not trigger render lifecycle events.
+      } else {
+        emitDomainEvent("render.started", typedPayload);
+      }
       if (payload.id) {
         persistNotification({
           userId: payload.userId,
@@ -96,8 +96,10 @@ export const emitContentUpdate = (payload: {
           id: payload.id,
         });
       }
-      emitDomainEvent("render.completed", typedPayload);
-      if (payload.id) {
+      if (hasRenderJobContext) {
+        emitDomainEvent("render.completed", typedPayload);
+      }
+      if (payload.id && hasRenderJobContext) {
         persistNotification({
           userId: payload.userId,
           key: getNotificationKey("render", payload.id, undefined, payload.jobId),
@@ -114,8 +116,10 @@ export const emitContentUpdate = (payload: {
           id: payload.id,
         });
       }
-      emitDomainEvent("render.failed", typedPayload);
-      if (payload.id) {
+      if (hasRenderJobContext) {
+        emitDomainEvent("render.failed", typedPayload);
+      }
+      if (payload.id && hasRenderJobContext) {
         persistNotification({
           userId: payload.userId,
           key: getNotificationKey("render", payload.id, undefined, payload.jobId),
@@ -134,6 +138,26 @@ export const emitContentUpdate = (payload: {
     return;
   }
   io.emit("content:update", payload);
+};
+
+export const emitRenderQueued = (payload: {
+  userId: string;
+  id: string;
+  jobId?: string;
+  backend?: string;
+  mode?: string;
+}) => {
+  persistNotification({
+    userId: payload.userId,
+    key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),
+    contentId: payload.id,
+    mode: payload.mode,
+    kind: "render",
+    status: "queued",
+    progress: 0,
+    stage: "Queued",
+  });
+  emitDomainEvent("render.queued", payload as AppEventMap["render.queued"]);
 };
 
 export const emitRenderProgress = (payload: {
@@ -320,7 +344,7 @@ export const emitCaptionUpdate = (payload: {
   id: string;
   jobId?: string;
   mode?: string;
-  status: "queued" | "processing" | "completed" | "failed";
+  status: Extract<NotificationStatus, "queued" | "processing" | "completed" | "failed">;
   progress?: number;
   error?: string;
 }) => {

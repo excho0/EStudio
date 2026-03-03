@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import IORedis from "ioredis";
-import { eventBus } from "@/lib/event-bus";
 import {
   clearRenderProgressSnapshotsForContent,
   emitContentUpdate,
   emitRenderCancelRequested,
+  emitRenderQueued,
   getRenderProgressSnapshot,
 } from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
@@ -124,17 +124,18 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
       const queued = await withRenderRequestLock(userId, id, requestedMode, async () => {
         await setRenderStatusCheckpoint(userId, id, item.status);
         await enqueueRenderJob({ id, userId, backend, mode: requestedMode, jobId });
-        await updateContentItem(userId, id, { status: "rendering" });
+        await updateContentItem(userId, id, { status: "queued" });
         emitContentUpdate({
           userId,
           type: "content:status",
           id,
           jobId,
-          status: "rendering",
+          status: "queued",
         });
-        void eventBus.emit("render.queued", {
+        emitRenderQueued({
           userId,
           id,
+          jobId,
           backend,
           mode: requestedMode,
         });

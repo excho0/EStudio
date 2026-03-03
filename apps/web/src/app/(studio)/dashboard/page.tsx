@@ -92,6 +92,13 @@ const ValueWithSkeleton = ({
           className:
             "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
         };
+      case "queued":
+        return {
+          label: "Queued",
+          icon: Play,
+          className:
+            "bg-sky-500/15 text-sky-700 dark:bg-sky-400/20 dark:text-sky-200",
+        };
       case "uploaded":
         return {
           label: "Uploaded",

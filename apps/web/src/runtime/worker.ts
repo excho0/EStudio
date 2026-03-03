@@ -11,6 +11,7 @@ import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 import { processCaptionJob } from "@/lib/captions/process-caption-job";
+import { recoverStaleActiveNotifications } from "@/lib/data/notifications";
 
 const redisUrl =
   resolveRedisPoolUrl("render-queue") ||
@@ -27,6 +28,19 @@ const captionConcurrency = Math.max(
   Number(process.env.CAPTION_WORKER_CONCURRENCY || "1")
 );
 const logger = getLogger("runtime-worker");
+
+const recoverStaleNotificationsOnStartup = async () => {
+  const ttlMs = Math.max(
+    60_000,
+    Number(process.env.NOTIFICATIONS_STALE_RECOVERY_MS ?? 15 * 60_000)
+  );
+  const staleBeforeMs = Date.now() - ttlMs;
+  const recovered = await recoverStaleActiveNotifications(staleBeforeMs);
+  logger.info(
+    { recovered, staleBeforeMs, ttlMs },
+    "Stale notification recovery completed."
+  );
+};
 
 if (!redisUrl) {
   logger.error("Missing REDIS_URL/RENDER_QUEUE_REDIS_URL/PUBLISH_QUEUE_REDIS_URL.");
@@ -205,3 +219,10 @@ const shutdown = async (signal: string) => {
 
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+void recoverStaleNotificationsOnStartup().catch((error) => {
+  logger.error(
+    { error: error instanceof Error ? error.message : String(error) },
+    "Failed to recover stale notifications on worker startup."
+  );
+});

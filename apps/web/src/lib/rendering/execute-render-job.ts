@@ -871,6 +871,10 @@ export const startRenderJob = async ({
       chromeMode,
       message,
     });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(message);
   } finally {
     lastProgressPercent.delete(progressKey);
     if (cancelMonitor) {

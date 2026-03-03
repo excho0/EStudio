@@ -17,6 +17,7 @@ export const contentUpdatePayloadSchema = z.object({
 export const renderQueuedPayloadSchema = z.object({
   userId: z.string(),
   id: z.string(),
+  jobId: z.string().optional(),
   backend: renderBackendSchema.optional(),
   mode: z.string().optional(),
 }).describe("Render queued payload.");
