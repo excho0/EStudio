@@ -93,8 +93,10 @@ const getCanceledRenderIds = () => {
 const shortId = (id: string) => id.slice(0, 8);
 const renderToastKey = (id: string, mode?: string, jobId?: string) =>
   jobId ? `job:${jobId}` : `${id}:${mode ?? "default"}`;
-const captionToastKey = (id: string, mode?: string) => `${id}:${mode ?? "default"}`;
-const publishToastKey = (id: string) => id;
+const captionToastKey = (id: string, mode?: string, jobId?: string) =>
+  jobId ? `job:${jobId}` : `${id}:${mode ?? "default"}`;
+const publishToastKey = (id: string, jobId?: string) =>
+  jobId ? `job:${jobId}` : id;
 
 const getRenderToastAliases = (payload: { id: string; mode?: string; jobId?: string }) => {
   const aliases = new Set<string>();
@@ -307,7 +309,7 @@ export function SocketIOProvider({
       jobId?: string;
       status?: string;
     }) => {
-      const key = publishToastKey(payload.id);
+      const key = publishToastKey(payload.id, payload.jobId);
       if (payload.status === "queued" || payload.status === "publishing") {
         void notifyStarted(`publish:${key}`, "Publish", payload.id);
       } else if (payload.status === "published" || payload.status === "published_with_warning") {
@@ -321,7 +323,7 @@ export function SocketIOProvider({
       mode?: string;
       status?: "queued" | "processing" | "completed" | "failed";
     }) => {
-      const key = captionToastKey(payload.id, payload.mode);
+      const key = captionToastKey(payload.id, payload.mode, payload.jobId);
       if (payload.status === "queued") {
         void notifyStarted(`caption:${key}`, "Captions", payload.id, payload.mode);
       } else if (payload.status === "completed") {
@@ -423,7 +425,7 @@ export function SocketIOProvider({
     };
 
     const handlePublishFailedToast = (payload: { id: string; jobId?: string; error?: string }) => {
-      const key = publishToastKey(payload.id);
+      const key = publishToastKey(payload.id, payload.jobId);
       const completed = getCompletedKeys();
       const toastKey = `publish-failed:${key}`;
       if (completed?.has(toastKey)) return;
@@ -453,7 +455,7 @@ export function SocketIOProvider({
       error?: string;
     }) => {
       if (!payload.id) return;
-      const key = renderToastKey(payload.id, payload.mode);
+      const key = captionToastKey(payload.id, payload.mode, payload.jobId);
       const completed = getCompletedKeys();
       const toastKey = `caption-failed:${key}`;
       if (completed?.has(toastKey)) return;

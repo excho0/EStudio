@@ -76,6 +76,7 @@ import { cn } from "@/lib/shared/utils";
 import React from "react";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
+import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import type { ContentColumnMeta } from "@/types";
 import { getOutputDefaultsForMode, normalizeSettingsMap } from "@/lib/content/modes";
 import {
@@ -408,90 +409,6 @@ export default function LibraryPage() {
     handleRender,
   ]);
 
-  const getStatusMeta = useCallback((status: string) => {
-    switch (status) {
-      case "rendered":
-        return {
-          label: "Rendered",
-          icon: CheckCircle2,
-          className:
-            "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200",
-        };
-      case "failed":
-        return {
-          label: "Failed",
-          icon: XCircle,
-          className:
-            "bg-red-500/15 text-red-700 dark:bg-red-400/20 dark:text-red-200",
-        };
-      case "rendering":
-        return {
-          label: "Rendering",
-          icon: Loader2,
-          className:
-            "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
-        };
-      case "queued":
-        return {
-          label: "Queued",
-          icon: Play,
-          className:
-            "bg-sky-500/15 text-sky-700 dark:bg-sky-400/20 dark:text-sky-200",
-        };
-      case "uploaded":
-        return {
-          label: "Uploaded",
-          icon: Upload,
-          className:
-            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
-        };
-      default:
-        return {
-          label: "Queued",
-          icon: Play,
-          className:
-            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
-        };
-    }
-  }, []);
-
-  const renderStatusBadge = useCallback(
-    (status: string, showLabel: boolean, progress?: number) => {
-      const meta = getStatusMeta(status);
-      const Icon = meta.icon;
-      const showProgress = status === "rendering" && typeof progress === "number";
-      const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
-      return (
-        <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
-          <Icon
-            className={`h-4 w-4 shrink-0 ${
-              status === "rendering" ? "animate-spin" : ""
-            }`}
-          />
-          {showLabel ? (
-            <span className="flex items-center gap-2">
-              <span>{meta.label}</span>
-              {progressLabel ? (
-                <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                  {progressLabel}
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="flex items-center gap-2">
-              <span className="sr-only">{meta.label}</span>
-              {progressLabel ? (
-                <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                  {progressLabel}
-                </span>
-              ) : null}
-            </span>
-          )}
-        </Badge>
-      );
-    },
-    [getStatusMeta]
-  );
 
   const columns = useMemo<ColumnDef<ContentItem, unknown>[]>(() => [
     {
@@ -523,12 +440,13 @@ export default function LibraryPage() {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) =>
-        renderStatusBadge(
-          getEffectiveStatus(row.original),
-          true,
-          renderProgress[row.original.id]?.progress
-        ),
+      cell: ({ row }) => (
+        <JobStatusBadge
+          status={getEffectiveStatus(row.original)}
+          showLabel
+          progress={renderProgress[row.original.id]?.progress}
+        />
+      ),
     },
     {
       id: "settings",
@@ -573,8 +491,7 @@ export default function LibraryPage() {
     getActionItems,
     getEffectiveStatus,
     openActionMenuId,
-    renderProgress,
-    renderStatusBadge,
+    renderProgress
   ]);
 
   const table = useReactTable({
@@ -1104,11 +1021,7 @@ export default function LibraryPage() {
                                   {formatDate(item.createdAt)}
                                 </div>
                                 <div className="mt-2">
-                                  {renderStatusBadge(
-                                    getEffectiveStatus(item),
-                                    false,
-                                    renderProgress[item.id]?.progress
-                                  )}
+                                  {<JobStatusBadge status={getEffectiveStatus(item)} progress={renderProgress[item.id]?.progress} />}
                                 </div>
                               </div>
                             </div>
@@ -1150,11 +1063,7 @@ export default function LibraryPage() {
                                     {formatDate(item.createdAt)}
                                   </div>
                                   <div className="mt-2">
-                                    {renderStatusBadge(
-                                      getEffectiveStatus(item),
-                                      false,
-                                      renderProgress[item.id]?.progress
-                                    )}
+                                    {<JobStatusBadge status={getEffectiveStatus(item)} progress={renderProgress[item.id]?.progress} />}
                                   </div>
                                 </div>
                               </div>

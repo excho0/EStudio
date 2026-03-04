@@ -277,7 +277,7 @@ export async function finalizeActiveRenderNotificationsForContent(
   });
 }
 
-export async function recoverStaleActiveNotifications(staleBeforeMs: number) {
+export async function recoverStaleJobActivities(staleBeforeMs: number) {
   const staleBefore = new Date(staleBeforeMs);
   const activeStatuses: NotificationStatus[] = [
     "queued",
@@ -327,3 +327,187 @@ export async function recoverStaleActiveNotifications(staleBeforeMs: number) {
     },
   });
 }
+
+
+export type StaleJobActivityRecord = NotificationItem;
+
+export async function listStaleJobActivities(staleBeforeMs: number, limit = 500) {
+  const staleBefore = new Date(staleBeforeMs);
+  const safeLimit = Math.min(Math.max(limit, 1), 2000);
+  const activeStatuses: NotificationStatus[] = [
+    "queued",
+    "processing",
+    "publishing",
+    "rendering",
+  ];
+
+  return withNotificationsDb({
+    pg: async ({ db, table }) => {
+      const rows = await db
+        .select()
+        .from(table)
+        .where(and(inArray(table.status, activeStatuses), lt(table.updatedAt, staleBefore)))
+        .orderBy(table.updatedAt)
+        .limit(safeLimit);
+
+      return rows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        userId: row.userId,
+        contentId: row.contentId,
+        mode: row.mode ?? undefined,
+        kind: row.kind as NotificationKind,
+        status: row.status as NotificationStatus,
+        progress: row.progress ?? undefined,
+        stage: row.stage ?? undefined,
+        error: row.error ?? undefined,
+        metadata: (row.metadata ?? null) as Record<string, unknown> | null,
+        readAt: toUnixMs(row.readAt),
+        createdAt: toUnixMs(row.createdAt) ?? Date.now(),
+        updatedAt: toUnixMs(row.updatedAt) ?? Date.now(),
+      }));
+    },
+    sqlite: async ({ db, table }) => {
+      const rows = await db
+        .select()
+        .from(table)
+        .where(and(inArray(table.status, activeStatuses), lt(table.updatedAt, staleBefore)))
+        .orderBy(table.updatedAt)
+        .limit(safeLimit);
+
+      return rows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        userId: row.userId,
+        contentId: row.contentId,
+        mode: row.mode ?? undefined,
+        kind: row.kind as NotificationKind,
+        status: row.status as NotificationStatus,
+        progress: row.progress ?? undefined,
+        stage: row.stage ?? undefined,
+        error: row.error ?? undefined,
+        metadata: parseSqliteMetadata(row.metadata ?? null),
+        readAt: toUnixMs(row.readAt),
+        createdAt: toUnixMs(row.createdAt) ?? Date.now(),
+        updatedAt: toUnixMs(row.updatedAt) ?? Date.now(),
+      }));
+    },
+  });
+}
+
+export async function updateJobActivityStateById(
+  id: string,
+  updates: {
+    status: NotificationStatus;
+    progress?: number;
+    stage?: string | null;
+    error?: string | null;
+    updatedAt?: number;
+  }
+) {
+  return withNotificationsDb({
+    pg: async ({ db, now, table }) => {
+      const updatedAtDate = new Date(updates.updatedAt ?? now.getTime());
+      const result = await db
+        .update(table)
+        .set({
+          status: updates.status,
+          progress: updates.progress,
+          stage: updates.stage ?? null,
+          error: updates.error ?? null,
+          updatedAt: updatedAtDate,
+        })
+        .where(eq(table.id, id))
+        .returning({ id: table.id });
+      return result.length > 0;
+    },
+    sqlite: async ({ db, nowMs, table }) => {
+      const updatedAtDate = new Date(updates.updatedAt ?? nowMs);
+      const result = await db
+        .update(table)
+        .set({
+          status: updates.status,
+          progress: updates.progress,
+          stage: updates.stage ?? null,
+          error: updates.error ?? null,
+          updatedAt: updatedAtDate,
+        })
+        .where(eq(table.id, id))
+        .returning({ id: table.id });
+      return result.length > 0;
+    },
+  });
+}
+
+
+export async function listActiveJobActivities(limit = 500) {
+  const safeLimit = Math.min(Math.max(limit, 1), 2000);
+  const activeStatuses: NotificationStatus[] = [
+    "queued",
+    "processing",
+    "publishing",
+    "rendering",
+  ];
+
+  return withNotificationsDb({
+    pg: async ({ db, table }) => {
+      const rows = await db
+        .select()
+        .from(table)
+        .where(inArray(table.status, activeStatuses))
+        .orderBy(table.updatedAt)
+        .limit(safeLimit);
+
+      return rows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        userId: row.userId,
+        contentId: row.contentId,
+        mode: row.mode ?? undefined,
+        kind: row.kind as NotificationKind,
+        status: row.status as NotificationStatus,
+        progress: row.progress ?? undefined,
+        stage: row.stage ?? undefined,
+        error: row.error ?? undefined,
+        metadata: (row.metadata ?? null) as Record<string, unknown> | null,
+        readAt: toUnixMs(row.readAt),
+        createdAt: toUnixMs(row.createdAt) ?? Date.now(),
+        updatedAt: toUnixMs(row.updatedAt) ?? Date.now(),
+      }));
+    },
+    sqlite: async ({ db, table }) => {
+      const rows = await db
+        .select()
+        .from(table)
+        .where(inArray(table.status, activeStatuses))
+        .orderBy(table.updatedAt)
+        .limit(safeLimit);
+
+      return rows.map((row) => ({
+        id: row.id,
+        key: row.key,
+        userId: row.userId,
+        contentId: row.contentId,
+        mode: row.mode ?? undefined,
+        kind: row.kind as NotificationKind,
+        status: row.status as NotificationStatus,
+        progress: row.progress ?? undefined,
+        stage: row.stage ?? undefined,
+        error: row.error ?? undefined,
+        metadata: parseSqliteMetadata(row.metadata ?? null),
+        readAt: toUnixMs(row.readAt),
+        createdAt: toUnixMs(row.createdAt) ?? Date.now(),
+        updatedAt: toUnixMs(row.updatedAt) ?? Date.now(),
+      }));
+    },
+  });
+}
+
+
+// Backward-compatible aliases
+export const updateNotificationStateById = updateJobActivityStateById;
+export const listActiveNotifications = listActiveJobActivities;
+
+export const listStaleActiveNotifications = listStaleJobActivities;
+export const recoverStaleActiveNotifications = recoverStaleJobActivities;
+export type StaleNotificationRecord = StaleJobActivityRecord;

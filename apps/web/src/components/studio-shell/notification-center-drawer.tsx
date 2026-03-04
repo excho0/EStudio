@@ -7,10 +7,10 @@ import {
   CheckCircle2,
   Clapperboard,
   Loader2,
-  Sparkles,
   Upload,
   X,
   XCircle,
+  Captions,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import type { LucideIcon } from "lucide-react";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
+import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 
 type JobKind = "render" | "publish" | "caption";
 type JobStatus =
@@ -107,29 +108,10 @@ const JOB_KIND_REGISTRY: Record<
 > = {
   render: { label: "Render", icon: Clapperboard, href: (id) => `/renders/${id}` },
   publish: { label: "Publish", icon: Upload, href: (id) => `/publishes/${id}` },
-  caption: { label: "Captions", icon: Sparkles, href: (id) => `/edit/${id}` },
-};
-
-const JOB_STATUS_REGISTRY: Record<
-  JobStatus,
-  {
-    label: string;
-    icon: LucideIcon;
-    badgeVariant: "secondary" | "destructive";
-    iconClassName?: string;
-  }
-> = {
-  queued: { label: "Queued", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
-  processing: { label: "Processing", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
-  publishing: { label: "Publishing", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
-  rendering: { label: "Rendering", icon: Loader2, badgeVariant: "secondary", iconClassName: "animate-spin" },
-  canceled: { label: "Canceled", icon: CircleSlash, badgeVariant: "secondary" },
-  completed: { label: "Completed", icon: CheckCircle2, badgeVariant: "secondary" },
-  failed: { label: "Failed", icon: XCircle, badgeVariant: "destructive" },
+  caption: { label: "Captions", icon: Captions, href: (id) => `/edit/${id}` },
 };
 
 const resolveKindMeta = (kind: JobKind) => JOB_KIND_REGISTRY[kind];
-const resolveStatusMeta = (status: JobStatus) => JOB_STATUS_REGISTRY[status];
 const resolvePublishStatus = (status: string): JobStatus =>
   status === "queued"
     ? "queued"
@@ -191,7 +173,10 @@ const dedupeJobs = (items: ActivityJob[]) => {
 const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
   const map = new Map<string, ActivityJob>();
   for (const item of items) {
-    const subjectKey = `${item.kind}:${item.id}:${item.mode ?? "default"}`;
+    // Keep per-job entries visible when we have a concrete job id.
+    const subjectKey = item.jobId
+      ? item.key
+      : `${item.kind}:${item.id}:${item.mode ?? "default"}`;
     const existing = map.get(subjectKey);
     if (!existing) {
       map.set(subjectKey, item);
@@ -227,13 +212,16 @@ const JobCard = ({
   onOpen: (href: string) => void;
 }) => {
   const kindMeta = resolveKindMeta(job.kind);
-  const statusMeta = resolveStatusMeta(job.status);
   const KindIcon = kindMeta.icon;
-  const StatusIcon = statusMeta.icon;
   const progressValue = toPercent(job.progress);
+  const isProgressStatus =
+    job.status === "queued" ||
+    job.status === "processing" ||
+    job.status === "publishing" ||
+    job.status === "rendering";
   const showProgress =
-    job.kind === "render" &&
-    job.status === "rendering" &&
+    isProgressStatus &&
+    (job.kind === "render" || job.kind === "caption" || job.kind === "publish") &&
     typeof progressValue === "number";
 
   return (
@@ -254,13 +242,7 @@ const JobCard = ({
             {kindMeta.label} · {job.title?.trim() || `#${shortId(job.id)}`}
           </p>
         </div>
-        <Badge
-          variant={statusMeta.badgeVariant}
-          className="h-6 rounded-full px-2 text-xs"
-        >
-          <StatusIcon className={`mr-1 h-3 w-3 ${statusMeta.iconClassName ?? ""}`} />
-          {statusMeta.label}
-        </Badge>
+        <JobStatusBadge status={job.status} showLabel />
       </div>
 
       <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
@@ -584,6 +566,15 @@ export function NotificationCenterDrawer() {
       error?: string;
     }) => {
       const key = jobKey("caption", payload.id, payload.mode, payload.jobId);
+      const normalizedStatus = normalizeJobStatus(payload.status);
+      const fallbackProgress =
+        normalizedStatus === "queued"
+          ? 0
+          : normalizedStatus === "processing"
+            ? 0.1
+            : normalizedStatus === "completed" || normalizedStatus === "failed"
+              ? 1
+              : undefined;
       upsert({
         key,
         id: payload.id,
@@ -591,8 +582,8 @@ export function NotificationCenterDrawer() {
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "caption",
-        status: normalizeJobStatus(payload.status),
-        progress: payload.progress,
+        status: normalizedStatus,
+        progress: payload.progress ?? fallbackProgress,
         error: payload.error,
         updatedAt: Date.now(),
       });

@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { useContentList } from "@/components/studio/use-content-list";
 import type { ContentItem } from "@/types";
@@ -27,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { StatRow } from "@/components/ui/stat-row";
+import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 
 const CardHeaderRow = ({
   label,
@@ -68,92 +68,6 @@ const ValueWithSkeleton = ({
   </div>
 );
 
-
-  const getStatusMeta = (status: string) => {
-    switch (status) {
-      case "rendered":
-        return {
-          label: "Rendered",
-          icon: CheckCircle2,
-          className:
-            "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-200",
-        };
-      case "failed":
-        return {
-          label: "Failed",
-          icon: XCircle,
-          className:
-            "bg-red-500/15 text-red-700 dark:bg-red-400/20 dark:text-red-200",
-        };
-      case "rendering":
-        return {
-          label: "Rendering",
-          icon: Loader2,
-          className:
-            "bg-amber-500/15 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200",
-        };
-      case "queued":
-        return {
-          label: "Queued",
-          icon: Play,
-          className:
-            "bg-sky-500/15 text-sky-700 dark:bg-sky-400/20 dark:text-sky-200",
-        };
-      case "uploaded":
-        return {
-          label: "Uploaded",
-          icon: Upload,
-          className:
-            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
-        };
-      default:
-        return {
-          label: "Queued",
-          icon: Play,
-          className:
-            "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-zinc-100",
-        };
-    }
-  };
-
-const renderStatusBadge = (
-    status: string,
-    showLabel: boolean,
-    progress?: number
-  ) => {
-    const meta = getStatusMeta(status);
-    const Icon = meta.icon;
-    const showProgress = status === "rendering" && typeof progress === "number";
-    const progressLabel = showProgress ? `${Math.round(progress * 100)}%` : null;
-    return (
-      <Badge className={`inline-flex items-center gap-2 ${meta.className}`}>
-        <Icon
-          className={`h-4 w-4 shrink-0 ${
-            status === "rendering" ? "animate-spin" : ""
-          }`}
-        />
-        {showLabel ? (
-          <span className="flex items-center gap-2">
-            <span>{meta.label}</span>
-            {progressLabel ? (
-              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                {progressLabel}
-              </span>
-            ) : null}
-          </span>
-        ) : (
-          <span className="flex items-center gap-2">
-            <span className="sr-only">{meta.label}</span>
-            {progressLabel ? (
-              <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-700/80 dark:text-amber-100/80">
-                {progressLabel}
-              </span>
-            ) : null}
-          </span>
-        )}
-      </Badge>
-    );
-  };
 
 export default function DashboardOverviewPage() {
   const { items, loading } = useContentList();
@@ -283,11 +197,7 @@ export default function DashboardOverviewPage() {
                         </div>
                       </div>
                     </div>
-                    {renderStatusBadge(
-                      getEffectiveStatus(item),
-                      true,
-                      renderProgress[item.id]?.progress
-                    )}
+                    {<JobStatusBadge status={getEffectiveStatus(item)} showLabel progress={renderProgress[item.id]?.progress} />}
                   </div>
                   <StatRow show={getEffectiveStatus(item) === "rendering"}>
                     <Progress
