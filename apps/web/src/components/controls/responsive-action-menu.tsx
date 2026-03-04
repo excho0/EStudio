@@ -70,6 +70,7 @@ export function ResponsiveActionMenu({
   items,
   title = "Actions",
   triggerClassName,
+  triggerIcon: TriggerIcon = MoreHorizontal,
   open,
   onOpenChange,
 }: {
@@ -77,6 +78,7 @@ export function ResponsiveActionMenu({
   title?: string;
   triggerLabel?: string;
   triggerClassName?: string;
+  triggerIcon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -100,7 +102,7 @@ export function ResponsiveActionMenu({
   const startTransition =
     transition?.startTransition ?? ((href: string) => router.push(href));
 
-  const trigger = (
+  const triggerButton = (
     <Button
       variant="outline"
       size="sm"
@@ -109,9 +111,10 @@ export function ResponsiveActionMenu({
         triggerClassName
       )}
     >
-      <MoreHorizontal className="h-4 w-4" />
+      <TriggerIcon className="h-4 w-4" />
     </Button>
   );
+
 
   if (isCompactLayout) {
     return (
@@ -121,7 +124,7 @@ export function ResponsiveActionMenu({
           setOpen(nextOpen);
         }}
       >
-        <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+        <DrawerTrigger asChild>{triggerButton}</DrawerTrigger>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{title}</DrawerTitle>
@@ -268,7 +271,7 @@ export function ResponsiveActionMenu({
         setOpen(nextOpen);
       }}
     >
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {items.map((item, index) => {
           if (item.type === "separator") {

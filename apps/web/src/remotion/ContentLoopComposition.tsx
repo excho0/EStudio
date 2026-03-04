@@ -144,6 +144,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   thumbnailSrc,
   videoSrc,
   audioSrc,
+  previewMode = "full",
   visualizationEnabled = true,
   visualizationBars = 128,
   edgeRaysEnabled = true,
@@ -758,8 +759,13 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   }, [thumbnailSrc, isRendering]);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#050505", color: "white" }}>
-      {videoSrc ? (
+    <AbsoluteFill
+      style={{
+        backgroundColor: previewMode === "performance" ? "#000000" : "#050505",
+        color: "white",
+      }}
+    >
+      {previewMode !== "performance" && videoSrc ? (
         <>
           <AbsoluteFill
             style={{
@@ -797,7 +803,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
             </AbsoluteFill>
           ) : null}
         </>
-      ) : (
+      ) : previewMode !== "performance" ? (
         <AbsoluteFill
           style={{
             justifyContent: "center",
@@ -810,8 +816,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         >
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
-      )}
-      {edgeRaysEnabled && glowIntensity > 0 && (
+      ) : null}
+      {previewMode !== "performance" && edgeRaysEnabled && glowIntensity > 0 && (
         <AbsoluteFill
           style={{
             pointerEvents: "none",
@@ -894,7 +900,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       )}
       {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
       <CaptionsLayer {...captionsLayerProps} />
-      {visualizationEnabled && smoothBars?.bars ? (
+      {previewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",

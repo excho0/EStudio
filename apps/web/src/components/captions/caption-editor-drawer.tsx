@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, RotateCw, Save } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, Info, RotateCw, Save } from "lucide-react";
 import type { PlayerRef } from "@remotion/player";
 import type { CaptionDocument, CaptionSegment } from "@/types";
 import { captionDocumentSchema } from "@/types";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -32,6 +34,7 @@ import { CaptionEditorToolbar } from "./editor/caption-editor-toolbar";
 import { CaptionEditorTimeline } from "./editor/caption-editor-timeline";
 import { CaptionEditorInspector } from "./editor/caption-editor-inspector";
 import { useCaptionEditorShortcuts } from "./editor/use-caption-editor-shortcuts";
+import type { ContentModePreviewVariant } from "@/lib/content/modes/ui-registry";
 
 type CaptionEditorDrawerProps = {
   open: boolean;
@@ -39,16 +42,18 @@ type CaptionEditorDrawerProps = {
   value: CaptionDocument | null;
   mode: string;
   language: string;
-  onSave: (next: CaptionDocument) => Promise<void> | void;
+  onSave: (next: CaptionDocument, options?: { source?: "manual" | "autosave" }) => Promise<void> | void;
   preview: CaptionEditorPreviewProps | null;
+  previewModes?: ContentModePreviewVariant[];
 };
 
 export type CaptionEditorProps = {
   value: CaptionDocument | null;
   mode: string;
   language: string;
-  onSave: (next: CaptionDocument) => Promise<void> | void;
+  onSave: (next: CaptionDocument, options?: { source?: "manual" | "autosave" }) => Promise<void> | void;
   preview: CaptionEditorPreviewProps | null;
+  previewModes?: ContentModePreviewVariant[];
   active?: boolean;
   onRequestClose?: () => void;
   closeHref?: string;
@@ -91,6 +96,8 @@ const getWheelPrimaryDelta = (event: Pick<WheelEvent, "deltaX" | "deltaY">) =>
   Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
 const DRAG_EDGE_PX = 56;
 const DRAG_MAX_AUTO_SCROLL_STEP = 28;
+
+const AUTOSAVE_DEBOUNCE_MS = 5_000;
 
 const COMPACT_PLAYBACK_TUNING = {
   sampleEveryTicks: 2,
@@ -168,6 +175,7 @@ export function CaptionEditorDrawer({
   language,
   onSave,
   preview,
+  previewModes,
 }: CaptionEditorDrawerProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -190,6 +198,7 @@ export function CaptionEditorDrawer({
           language={language}
           onSave={onSave}
           preview={preview}
+          previewModes={previewModes}
           active={open}
           onRequestClose={() => onOpenChange(false)}
         />
@@ -204,6 +213,7 @@ export function CaptionEditor({
   language,
   onSave,
   preview,
+  previewModes,
   active = true,
   onRequestClose,
   closeHref,
@@ -230,6 +240,8 @@ export function CaptionEditor({
   const [mobileSelectionMode, setMobileSelectionMode] = useState(false);
   const [volume, setVolume] = useState(1);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [globalOffsetDialogOpen, setGlobalOffsetDialogOpen] = useState(false);
+  const [activePreviewMode, setActivePreviewMode] = useState<"full" | "performance">("full");
   const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState(() =>
     String(normalizeCaptionDocument(value, mode, language).globalOffsetMs ?? 0)
   );
@@ -259,6 +271,7 @@ export function CaptionEditor({
   const wasOpenRef = useRef(false);
   const baselineDraftRef = useRef<string>("");
   const suppressOffsetInputEffectRef = useRef(false);
+  const previewSwitchSnapshotRef = useRef<{ frame: number; wasPlaying: boolean } | null>(null);
 
   const draftSnapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const isDirty = draftSnapshot !== baselineDraftRef.current;
@@ -328,11 +341,68 @@ export function CaptionEditor({
   }, [draft, preview]);
   const resolvedPreview = useMemo<CaptionEditorPreviewProps | null>(() => {
     if (!preview || !livePreviewInputProps) return null;
+
+    if (activePreviewMode !== "full") {
+      const base = livePreviewInputProps as Record<string, unknown>;
+      const safeText = (value: unknown, fallback: string) =>
+        typeof value === "string" && value.trim().length > 0 ? value : fallback;
+      const safeNumber = (value: unknown, fallback: number) =>
+        typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+      return {
+        ...preview,
+        inputProps: {
+          ...base,
+          audioSrc: safeText(base.audioSrc, ""),
+          captionsData:
+            base.captionsData ??
+            (base.settings && typeof base.settings === "object"
+              ? (base.settings as Record<string, unknown>).__shared &&
+                typeof (base.settings as Record<string, unknown>).__shared === "object"
+                ? ((base.settings as Record<string, unknown>).__shared as Record<string, unknown>)
+                    .captionsData
+                : null
+              : null),
+          captionsStyle:
+            safeText(base.captionsStyle, "subtitle") === "tiktok" ? "tiktok" : "subtitle",
+          captionsAnimationPreset: safeText(base.captionsAnimationPreset, "smooth"),
+          captionsWordsPerPage: safeNumber(base.captionsWordsPerPage, 4),
+          captionHighlightColor: safeText(base.captionHighlightColor, "#FFD000"),
+          previewMode: activePreviewMode,
+        },
+      };
+    }
+
     return {
       ...preview,
       inputProps: livePreviewInputProps,
     };
-  }, [livePreviewInputProps, preview]);
+  }, [activePreviewMode, livePreviewInputProps, preview]);
+
+  useEffect(() => {
+    const snapshot = previewSwitchSnapshotRef.current;
+    if (!snapshot || !preview || !active) return;
+
+    let rafId: number | null = null;
+    rafId = window.requestAnimationFrame(() => {
+      const player = playerRef.current;
+      if (!player) return;
+      const nextFrame = clamp(snapshot.frame, 0, Math.max(0, preview.durationInFrames - 1));
+      lastPlayerFrameRef.current = nextFrame;
+      player.seekTo(nextFrame);
+      player.setVolume(volume);
+      if (snapshot.wasPlaying) {
+        player.play();
+      }
+      previewSwitchSnapshotRef.current = null;
+    });
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [active, preview, resolvedPreview, volume]);
 
   useEffect(() => {
     const isOpening = active && !wasOpenRef.current;
@@ -353,6 +423,7 @@ export function CaptionEditor({
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
     setMobileSelectionMode(false);
+    setActivePreviewMode("full");
     setCursorMs(0);
     const initialOffset = next.globalOffsetMs ?? 0;
     suppressOffsetInputEffectRef.current = true;
@@ -1301,41 +1372,97 @@ export function CaptionEditor({
     };
   }, [active]);
 
-  const handleSave = async () => {
-    if (isSaving) return;
-    const normalized = {
-      ...draft,
-      generatedAt: new Date().toISOString(),
-      globalOffsetMs: Math.round(draft.globalOffsetMs ?? 0),
-      segments: [...draft.segments]
-        .map((segment) => {
-          const startMs = Math.max(0, Math.round(segment.startMs));
-          const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
-          return { ...segment, startMs, endMs, text: segment.text.trim() };
-        })
-        .filter((segment) => segment.text.length > 0)
-        .sort((a, b) => a.startMs - b.startMs),
-    };
+  const buildNormalizedDraft = (source: CaptionDocument): CaptionDocument => ({
+    ...source,
+    generatedAt: new Date().toISOString(),
+    globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
+    segments: [...source.segments]
+      .map((segment) => {
+        const startMs = Math.max(0, Math.round(segment.startMs));
+        const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
+        return { ...segment, startMs, endMs, text: segment.text.trim() };
+      })
+      .filter((segment) => segment.text.length > 0)
+      .sort((a, b) => a.startMs - b.startMs),
+  });
 
-    const parsed = captionDocumentSchema.safeParse(normalized);
+  const persistDraft = async (
+    source: CaptionDocument,
+    options?: {
+      closeAfterSave?: boolean;
+      toastMode?: "none" | "autosave";
+      resetHistory?: boolean;
+    }
+  ) => {
+    const parsed = captionDocumentSchema.safeParse(buildNormalizedDraft(source));
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Invalid captions data.");
-      return;
+      return false;
     }
+
     setIsSaving(true);
+    const savePromise = Promise.resolve(
+      onSave(parsed.data, {
+        source: options?.toastMode === "autosave" ? "autosave" : "manual",
+      })
+    );
+
     try {
-      await onSave(parsed.data);
+      if (options?.toastMode === "autosave") {
+        await toast.promise(savePromise, {
+          loading: "Autosaving captions...",
+          success: "Captions autosaved.",
+          error: (err) =>
+            err instanceof Error ? err.message : "Failed to autosave captions.",
+        });
+      } else {
+        await savePromise;
+      }
       setDraft(parsed.data);
       baselineDraftRef.current = JSON.stringify(parsed.data);
-      setHistory({ past: [], future: [] });
-      onRequestClose?.();
+      if (options?.resetHistory ?? true) {
+        setHistory({ past: [], future: [] });
+      }
+      setError(null);
+      if (options?.closeAfterSave) {
+        onRequestClose?.();
+      }
+      return true;
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Failed to save captions."
       );
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    if (isSaving) return;
+    if (!isDirty) return;
+    if (history.past.length === 0) return;
+
+    const timeout = window.setTimeout(() => {
+      void persistDraft(draftRef.current, {
+        toastMode: "autosave",
+        resetHistory: false,
+      });
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [active, history.past.length, isDirty, isSaving]);
+
+  const handleSave = async () => {
+    if (isSaving) return;
+    await persistDraft(draftRef.current, {
+      closeAfterSave: true,
+      toastMode: "none",
+      resetHistory: true,
+    });
   };
 
   return (
@@ -1379,8 +1506,22 @@ export function CaptionEditor({
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <div className="hidden items-center gap-2 md:flex">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Global offset (ms)</span>
+            <div className="hidden items-center gap-1 lg:flex">
+              <Tooltip disableMobileDrawer delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={"ghost"}
+                    className="inline-flex h-8 w-8 text-muted-foreground rounded-full transition-colors"
+                    aria-label="About global offset"
+                  >
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  Shift all caption timings by this amount in milliseconds.
+                </TooltipContent>
+              </Tooltip>
               <Input
                 value={globalOffsetMsInput}
                 onChange={(event) => setGlobalOffsetMsInput(event.target.value)}
@@ -1414,7 +1555,7 @@ export function CaptionEditor({
           <CaptionEditorToolbar
             isMobileSelectionMode={mobileSelectionMode}
             selectedCount={selectedIndices.length}
-            canEditSelected={selectedIndices.length > 0}
+            canEditSelected={selectedIndices.length === 1 && !mobileSelectionMode}
             isPlaying={isPlaying}
             volume={volume}
             canCopy={selectedIndices.length > 0}
@@ -1439,6 +1580,7 @@ export function CaptionEditor({
             onZoomOut={() => setZoomAnchored(zoomPxPerSecond - 10)}
             onZoomIn={() => setZoomAnchored(zoomPxPerSecond + 10)}
             onEditSelected={() => setMobileInspectorOpen(true)}
+            onOpenGlobalOffsetEditor={() => setGlobalOffsetDialogOpen(true)}
             onToggleMobileSelectionMode={() =>
               setMobileSelectionMode((current) => {
                 const next = !current;
@@ -1449,6 +1591,18 @@ export function CaptionEditor({
                 return next;
               })
             }
+            previewModes={previewModes}
+            activePreviewMode={activePreviewMode}
+            onSelectPreviewMode={(mode) => {
+              const player = playerRef.current;
+              previewSwitchSnapshotRef.current = player
+                ? {
+                    frame: player.getCurrentFrame(),
+                    wasPlaying: player.isPlaying(),
+                  }
+                : null;
+              setActivePreviewMode(mode);
+            }}
           />
 
           <div className="flex mt-2 min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
@@ -1530,6 +1684,37 @@ export function CaptionEditor({
 
 
         </div>
+          <Dialog open={globalOffsetDialogOpen} onOpenChange={setGlobalOffsetDialogOpen}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Global Offset (ms)</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Shift all caption timings by the amount below in milliseconds.
+                </p>
+                <Input
+                  value={globalOffsetMsInput}
+                  onChange={(event) => setGlobalOffsetMsInput(event.target.value)}
+                  className="h-10 text-right"
+                  inputMode="numeric"
+                  aria-label="Global captions offset in milliseconds"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setGlobalOffsetDialogOpen(false)}
+                    className="w-full"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
         {isCompactLayout ? (
           <Drawer open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
             <DrawerContent>

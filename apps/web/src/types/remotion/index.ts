@@ -7,6 +7,7 @@ type ContentLoopRuntimeProps = {
   videoSrc: string;
   audioSrc: string;
   colorPalette?: string[];
+  previewMode?: "full" | "performance";
   captionsData?: CaptionDocument | null;
   renderShaderEnabled?: boolean;
   renderShaderDebugMode?: "none" | "passthrough" | "uv" | "solid";

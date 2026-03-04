@@ -1,10 +1,11 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { SquareDashedMousePointer, Trash2 } from "lucide-react";
 import type { CaptionSegment } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Props = {
   sortedSegmentsLength: number;
@@ -44,15 +45,22 @@ export function CaptionEditorInspector({
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">{selectedIndices.length} segments selected</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-red-500 hover:text-red-500"
-            onClick={onRemoveSelected}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <Tooltip disableMobileDrawer delayDuration={100}>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-red-500 hover:text-red-500"
+                onClick={onRemoveSelected}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              Remove all selected segments
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
           Multi-select mode is active. Use keyboard shortcuts:
@@ -68,8 +76,9 @@ export function CaptionEditorInspector({
 
   if (!selectedSegment || selectedIndex === null) {
     return (
-      <div className="flex h-full items-center justify-center rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        Select a segment from timeline to edit.
+      <div className="flex flex-col gap-2 h-full items-center text-center justify-center rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        <SquareDashedMousePointer className="flex shrink-0" />
+        <span>Select a segment from timeline to edit.</span>
       </div>
     );
   }
@@ -78,15 +87,22 @@ export function CaptionEditorInspector({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">Segment {selectedIndex + 1}</p>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-red-500 hover:text-red-500"
-          onClick={() => onRemoveSingle(selectedIndex)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <Tooltip disableMobileDrawer delayDuration={100}>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-red-500 hover:text-red-500"
+              onClick={() => onRemoveSingle(selectedIndex)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            Remove segment
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">

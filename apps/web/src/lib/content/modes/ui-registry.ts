@@ -91,9 +91,17 @@ export type ContentModeSection = {
   }>;
 };
 
+export type ContentModePreviewVariant = {
+  id: "full" | "performance";
+  label: string;
+  icon?: LucideIcon;
+  description?: string;
+};
+
 export type ContentModeUiDefinition = {
   icon: LucideIcon;
   previewComponent?: ComponentType<ContentLoopProps>;
+  previewModes?: ContentModePreviewVariant[];
   sections: ContentModeSection[];
 };
 
@@ -679,11 +687,19 @@ export const contentModeUiRegistry: Record<string, ContentModeUiDefinition> = {
   video_loop: {
     icon: Video,
     previewComponent: ContentLoopComposition,
+    previewModes: [
+      { id: "full", label: "Full Preview", icon: Monitor, description: "All effects and visuals." },
+      { id: "performance", label: "Captions + Audio Only", icon: Captions, description: "Show only captions over a black background while keeping audio playback." },
+    ],
     sections: videoLoopSections,
   },
   video_loop_short: {
     icon: Video,
     previewComponent: ContentLoopComposition,
+    previewModes: [
+      { id: "full", label: "Full Preview", icon: Monitor, description: "All effects and visuals." },
+      { id: "performance", label: "Captions + Audio Only", icon: Captions, description: "Show only captions over a black background while keeping audio playback." },
+    ],
     sections: videoLoopSections,
   },
 };

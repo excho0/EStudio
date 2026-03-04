@@ -121,15 +121,24 @@ export default function EditCaptionsPage() {
   );
 
   const saveMutation = useMutation({
-    mutationFn: async (next: CaptionDocument) => {
+    mutationFn: async ({
+      next,
+      source = "manual",
+    }: {
+      next: CaptionDocument;
+      source?: "manual" | "autosave";
+    }) => {
       if (!item) throw new Error("Content item not found.");
-      return sdk.content.update(item.id, {
+      const updated = await sdk.content.update(item.id, {
         settings: buildSettingsWithSharedCaptions(mode, item.settings ?? {}, next),
       });
+      return { updated, source };
     },
-    onSuccess: (updated) => {
+    onSuccess: ({ updated, source }) => {
       queryClient.setQueryData(queryKeys.contentItem(updated.id), updated);
-      toast.success("Captions saved.");
+      if (source === "manual") {
+        toast.success("Captions saved.");
+      }
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to save captions.");
@@ -151,11 +160,12 @@ export default function EditCaptionsPage() {
         value={sharedCaptionsData}
         mode={mode}
         language={String(resolvedSettings.captionsLanguage ?? "en")}
-        onSave={async (next) => {
-          await saveMutation.mutateAsync(next);
+        onSave={async (next, options) => {
+          await saveMutation.mutateAsync({ next, source: options?.source ?? "manual" });
         }}
         closeHref={`/edit/${params.id}`}
         preview={captionsEditorPreview}
+        previewModes={modeUi.previewModes}
       />
   );
 }

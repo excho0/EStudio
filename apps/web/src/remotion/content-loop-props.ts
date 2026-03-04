@@ -7,6 +7,7 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   thumbnailSrc: "",
   videoSrc: "",
   audioSrc: "",
+  previewMode: "full",
   visualizationEnabled: true,
   visualizationBars: 128,
   edgeRaysEnabled: true,
