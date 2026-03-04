@@ -1,10 +1,17 @@
 import React from "react";
-import { AbsoluteFill, Sequence } from "remotion";
+import { AbsoluteFill, Sequence, useRemotionEnvironment } from "remotion";
 import { hexToRgba, type CaptionPage } from "../utils";
+
+const CAPTION_FONT_STACK =
+  "Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 type CaptionsLayerProps = {
   captionsEnabled: boolean;
   captionsStyle: "subtitle" | "tiktok";
+  captionsPosition: "top" | "center" | "bottom" | "custom";
+  captionsOffsetX: number;
+  captionsOffsetY: number;
+  captionsScalePercent: number;
   effectiveCaptionsStyle: "subtitle" | "tiktok";
   captionPages: CaptionPage[];
   hasActiveCaption: boolean;
@@ -20,6 +27,10 @@ type CaptionsLayerProps = {
 export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsEnabled,
   captionsStyle,
+  captionsPosition,
+  captionsOffsetX,
+  captionsOffsetY,
+  captionsScalePercent,
   effectiveCaptionsStyle,
   captionPages,
   hasActiveCaption,
@@ -36,6 +47,51 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   }
 
   const effectiveCaptionOpacity = captionOpacity * layerOpacity;
+  const captionScale = Math.max(
+    0.5,
+    Math.min(2, Number.isFinite(captionsScalePercent) ? captionsScalePercent / 100 : 1)
+  );
+  const bottomPadding = effectiveCaptionsStyle === "tiktok" ? 98 : 64;
+  const topPadding = effectiveCaptionsStyle === "tiktok" ? 84 : 56;
+  const customOffsetX = Number.isFinite(captionsOffsetX) ? captionsOffsetX : 0;
+  const customOffsetY = Number.isFinite(captionsOffsetY) ? captionsOffsetY : 0;
+  const customPositionTransform =
+    captionsPosition === "custom"
+      ? `translate(${customOffsetX.toFixed(1)}px, ${customOffsetY.toFixed(1)}px)`
+      : undefined;
+  const baseLayoutStyle = (() => {
+    switch (captionsPosition) {
+      case "top":
+        return {
+          justifyContent: "flex-start" as const,
+          alignItems: "center" as const,
+          padding: `${topPadding}px 24px 0`,
+          textAlign: "center" as const,
+        };
+      case "center":
+        return {
+          justifyContent: "center" as const,
+          alignItems: "center" as const,
+          padding: "0 24px",
+          textAlign: "center" as const,
+        };
+      case "custom":
+        return {
+          justifyContent: "center" as const,
+          alignItems: "center" as const,
+          padding: "0 24px",
+          textAlign: "center" as const,
+        };
+      case "bottom":
+      default:
+        return {
+          justifyContent: "flex-end" as const,
+          alignItems: "center" as const,
+          padding: `0 24px ${bottomPadding}px`,
+          textAlign: "center" as const,
+        };
+    }
+  })();
 
   if (effectiveCaptionsStyle === "tiktok" && captionPages.length > 0) {
     return (
@@ -59,24 +115,25 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
             >
               <AbsoluteFill
                 style={{
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  padding: "0 28px 98px",
+                  justifyContent: baseLayoutStyle.justifyContent,
+                  alignItems: baseLayoutStyle.alignItems,
+                  padding: baseLayoutStyle.padding,
+                  transform: customPositionTransform,
                 }}
               >
                 <div
                   style={{
                     maxWidth: "88%",
-                    fontSize: 42,
+                    fontSize: 42 * captionScale,
                     fontWeight: 900,
                     lineHeight: 1.12,
                     letterSpacing: 0.2,
-                    textAlign: "center",
-                    textTransform: "uppercase",
+                    fontFamily: CAPTION_FONT_STACK,
+                    textAlign: baseLayoutStyle.textAlign,
+                    textTransform: "capitalize",
                     color: "#FFFFFF",
-                    textShadow:
-                      "0 2px 8px rgba(0,0,0,0.82), 0 0 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,255,255,0.1)",
-                    WebkitTextStroke: "0.8px rgba(0,0,0,0.5)",
+                    textShadow: "0 2px 8px rgba(0,0,0,0.82), 0 0 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,255,255,0.1)",
+                    WebkitTextStroke: "0.3px rgba(0,0,0,0.5)",
                     opacity: effectiveCaptionOpacity,
                     transform: captionTransform,
                     filter: `blur(${captionBlur.toFixed(2)}px)`,
@@ -93,7 +150,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                           color: isActive ? captionHighlightColor : "#FFFFFF",
                           textShadow: isActive
                             ? `0 0 12px ${hexToRgba(captionHighlightColor, 0.85)}, 0 2px 8px rgba(0,0,0,0.82)`
-                            : "0 2px 8px rgba(0,0,0,0.82)",
+                            : "0 2px 6px rgba(0,0,0,0.82)",
                           transition: "color 90ms linear",
                         }}
                       >
@@ -133,18 +190,20 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
             >
               <AbsoluteFill
                 style={{
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  padding: captionsStyle === "tiktok" ? "0 24px 84px" : "0 24px 64px",
+                  justifyContent: baseLayoutStyle.justifyContent,
+                  alignItems: baseLayoutStyle.alignItems,
+                  padding: baseLayoutStyle.padding,
+                  transform: customPositionTransform,
                 }}
               >
                 <div
                   style={{
                     maxWidth: "86%",
-                    fontSize: 40,
+                    fontSize: 40 * captionScale,
                     fontWeight: 700,
                     lineHeight: 1.2,
-                    textAlign: "center",
+                    fontFamily: CAPTION_FONT_STACK,
+                    textAlign: baseLayoutStyle.textAlign,
                     color: "#FFFFFF",
                     background:
                       "linear-gradient(180deg, rgba(18,22,32,0.68) 0%, rgba(8,10,16,0.56) 100%)",

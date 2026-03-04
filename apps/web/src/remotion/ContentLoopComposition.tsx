@@ -55,7 +55,8 @@ const LoopVideo: React.FC<LoopVideoProps> = (props) => {
 const SegmentLayer: React.FC<{
   duration: number;
   videoSrc: string;
-  videoFrames: number;
+  playableVideoFrames: number;
+  windowStartFrame: number;
   startFrom: number;
   playbackRate?: number;
   sharpenEnabled?: boolean;
@@ -72,7 +73,8 @@ const SegmentLayer: React.FC<{
 }> = ({
   duration,
   videoSrc,
-  videoFrames,
+  playableVideoFrames,
+  windowStartFrame,
   startFrom,
   playbackRate,
   sharpenEnabled = false,
@@ -88,7 +90,7 @@ const SegmentLayer: React.FC<{
   scale,
 }) => {
   const { width, height, fps } = useVideoConfig();
-  const slices = buildVideoSlices(startFrom, duration, videoFrames);
+  const slices = buildVideoSlices(startFrom, duration, playableVideoFrames);
   const masterStrength = Math.max(
     0,
     Math.min(1, Number.isFinite(sharpenMaster) ? sharpenMaster : sharpenAmount)
@@ -123,7 +125,7 @@ const SegmentLayer: React.FC<{
         >
           <LoopVideo
             src={videoSrc}
-            startFrom={slice.startFrom}
+            startFrom={windowStartFrame + slice.startFrom}
             endAt={slice.startFrom + slice.duration}
             muted
             playbackRate={playbackRate}
@@ -173,10 +175,17 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   audioFadeInOffsetSeconds = 0,
   audioFadeOutOffsetSeconds = 0,
   videoDurationSeconds,
+  songDurationSeconds,
+  songRangeStartSeconds = 0,
+  songRangeEndSeconds = null,
   playbackRate = 1,
   overlapRatio = null,
   captionsEnabled = false,
   captionsStyle = "subtitle",
+  captionsPosition = "bottom",
+  captionsOffsetX = 0,
+  captionsOffsetY = 0,
+  captionsScalePercent = 100,
   captionsAnimationPreset = "smooth",
   captionsWordsPerPage = 4,
   captionsData = null,
@@ -259,10 +268,29 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     Number.isFinite(overlapRatio) && overlapRatio !== null
       ? Math.min(0.9, Math.max(0, overlapRatio))
       : null;
-  const videoFrames = Math.max(
+  const sourceVideoFrames = Math.max(
     1,
     Math.round((videoDurationSeconds ?? segmentDurationSeconds) * fps)
   );
+  const songTotalFrames = Math.max(
+    1,
+    Math.round(Math.max(0, songDurationSeconds ?? durationInFrames / fps) * fps)
+  );
+  const rangeStartFrames = clamp(
+    Math.round(Math.max(0, songRangeStartSeconds) * fps),
+    0,
+    songTotalFrames - 1
+  );
+  const rawRangeEndFrames =
+    songRangeEndSeconds === null
+      ? songTotalFrames
+      : Math.round(Math.max(0, songRangeEndSeconds) * fps);
+  const rangeEndFrames = clamp(
+    rawRangeEndFrames,
+    rangeStartFrames + 1,
+    songTotalFrames
+  );
+  const playableVideoFrames = sourceVideoFrames;
   const defaultOverlapFrames =
     fadeFrames > 0 && segmentFrames > 1
       ? Math.min(fadeFrames, segmentFrames - 1)
@@ -616,7 +644,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     : undefined;
 
 
-  const maxSegmentStartFrame = Math.max(0, videoFrames - segmentFrames);
+  const maxSegmentStartFrame = Math.max(0, playableVideoFrames - segmentFrames);
   const timelineMs = (frame / fps) * 1000;
   const {
     effectiveCaptionsStyle,
@@ -635,6 +663,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         captionsSegments: captionsData?.segments ?? [],
         captionsGlobalOffsetMs: captionsData?.globalOffsetMs ?? 0,
         timelineMs,
+        rangeStartMs: (rangeStartFrames / fps) * 1000,
+        rangeEndMs: (rangeEndFrames / fps) * 1000,
       }),
     [
       captionsAnimationPreset,
@@ -668,7 +698,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
             <SegmentLayer
               duration={segmentFrames}
               videoSrc={videoSrc}
-              videoFrames={videoFrames}
+              playableVideoFrames={playableVideoFrames}
+              windowStartFrame={0}
               startFrom={
                 maxSegmentStartFrame === 0
                   ? 0
@@ -709,7 +740,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       segments,
       segmentStepFrames,
       transitionFrames,
-      videoFrames,
+      playableVideoFrames,
       videoSrc,
       maxSegmentStartFrame,
       resolvedPlaybackRate,
@@ -730,6 +761,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const captionsLayerProps = {
     captionsEnabled,
     captionsStyle,
+    captionsPosition,
+    captionsOffsetX,
+    captionsOffsetY,
+    captionsScalePercent,
     effectiveCaptionsStyle,
     captionPages,
     hasActiveCaption,
@@ -898,7 +933,14 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           ))}
         </AbsoluteFill>
       )}
-      {audioSrc ? <Html5Audio src={audioSrc} volume={audioVolume} /> : null}
+      {audioSrc ? (
+        <Html5Audio
+          src={audioSrc}
+          volume={audioVolume}
+          startFrom={rangeStartFrames}
+          endAt={rangeEndFrames}
+        />
+      ) : null}
       <CaptionsLayer {...captionsLayerProps} />
       {previewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill

@@ -62,6 +62,9 @@ import {
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
+  shouldRenderField,
+  shouldRenderGroup,
+  shouldRenderSection,
   resolveFieldActionState,
 } from "@/lib/content/modes/ui-helpers";
 import { sdk } from "@/lib/sdk";
@@ -227,6 +230,9 @@ export default function DashboardUploadPage() {
   const reviewAudioFadeOutOffset = getSettingNumber("audioFadeOutOffsetSeconds", 0);
 
   const renderModeField = (field: ContentModeField) => {
+    if (!shouldRenderField(fieldMap, currentSettings, field)) {
+      return null;
+    }
     const disabled = isFieldDisabled(fieldMap, currentSettings, field);
     if (field.input === "action") {
       const actionState = resolveFieldActionState({
@@ -741,6 +747,15 @@ export default function DashboardUploadPage() {
                   <ModeSettingsRenderer
                     sections={modeUi.sections}
                     renderField={renderModeField}
+                    shouldRenderField={(field) =>
+                      shouldRenderField(fieldMap, currentSettings, field)
+                    }
+                    shouldRenderGroup={(group) =>
+                      shouldRenderGroup(fieldMap, currentSettings, group)
+                    }
+                    shouldRenderSection={(section) =>
+                      shouldRenderSection(fieldMap, currentSettings, section)
+                    }
                   />
                 </div>
 

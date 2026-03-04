@@ -18,6 +18,10 @@ import {
   Blend,
   Subtitles,
   Pencil,
+  ArrowUp,
+  Circle,
+  ArrowDown,
+  Move,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
@@ -30,7 +34,19 @@ export type ContentModeFieldInput =
   | "slider"
   | "toggle"
   | "select"
-  | "action";
+  | "action"
+  | "range";
+
+export type ContentModeConditionRule = {
+  key: string;
+  equals?: string | number | boolean;
+  notEquals?: string | number | boolean;
+};
+
+export type ContentModeConditionSet = {
+  all?: ContentModeConditionRule[];
+  any?: ContentModeConditionRule[];
+};
 
 export type ContentModeField = {
   key: string;
@@ -44,18 +60,8 @@ export type ContentModeField = {
   options?: Array<{ label: string; value: string; icon?: LucideIcon }>;
   suffix?: string;
   disableRoutes?: string[];
-  disabledWhen?: {
-    all?: Array<{
-      key: string;
-      equals?: string | number | boolean;
-      notEquals?: string | number | boolean;
-    }>;
-    any?: Array<{
-      key: string;
-      equals?: string | number | boolean;
-      notEquals?: string | number | boolean;
-    }>;
-  };
+  disabledWhen?: ContentModeConditionSet;
+  renderIf?: ContentModeConditionSet;
   resetsOnValue?: Array<{
     when: string | number | boolean;
     keys: string[];
@@ -80,6 +86,7 @@ export type ContentModeSection = {
   fields: ContentModeField[];
   layout?: "grid" | "list";
   disableRoutes?: string[];
+  renderIf?: ContentModeConditionSet;
   groups?: Array<{
     id: string;
     title: string;
@@ -88,6 +95,7 @@ export type ContentModeSection = {
     fields: ContentModeField[];
     layout?: "grid" | "list";
     disableRoutes?: string[];
+    renderIf?: ContentModeConditionSet;
   }>;
 };
 
@@ -120,6 +128,17 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+      },
+      {
+        key: "songPlaybackRange",
+        label: "Song Playback Range",
+        disableRoutes: ["/upload"],
+        tooltip: "Pick the part of the song you want to use. The video will play over this selected section.",
+        input: "range",
+        min: 0,
+        max: 600,
+        step: 1,
+        suffix: "s",
       },
       {
         key: "introFadeSeconds",
@@ -235,6 +254,70 @@ const videoLoopSections: ContentModeSection[] = [
           { label: "Subtitle", value: "subtitle", icon: Captions },
           { label: "TikTok-style", value: "tiktok", icon: MessageSquareText },
         ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsPosition",
+        label: "Position",
+        tooltip: "Choose where captions appear on screen.",
+        input: "select",
+        defaultValue: "bottom",
+        options: [
+          { label: "Top", value: "top", icon: ArrowUp },
+          { label: "Center", value: "center", icon: Circle },
+          { label: "Bottom", value: "bottom", icon: ArrowDown },
+          { label: "Custom", value: "custom", icon: Move },
+        ],
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsOffsetX",
+        label: "Caption X Offset",
+        tooltip: "Move captions left or right when position is Custom.",
+        input: "slider",
+        min: -600,
+        max: 600,
+        step: 2,
+        defaultValue: 0,
+        suffix: "px",
+        renderIf: {
+          all: [{ key: "captionsPosition", equals: "custom" }],
+        },
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsOffsetY",
+        label: "Caption Y Offset",
+        tooltip: "Move captions up or down when position is Custom.",
+        input: "slider",
+        min: -1200,
+        max: 1200,
+        step: 2,
+        defaultValue: 0,
+        suffix: "px",
+        renderIf: {
+          all: [{ key: "captionsPosition", equals: "custom" }],
+        },
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
+        key: "captionsScalePercent",
+        label: "Caption Scale",
+        tooltip: "Scale caption size relative to the default style.",
+        input: "slider",
+        min: 50,
+        max: 200,
+        step: 5,
+        defaultValue: 100,
+        suffix: "%",
         disabledWhen: {
           all: [{ key: "captionsEnabled", equals: false }],
         },
@@ -647,8 +730,8 @@ const videoLoopSections: ContentModeSection[] = [
         max: 120,
         step: 1,
         defaultValue: 60,
-        disabledWhen: {
-          all: [{ key: "outputConfig.preset", notEquals: "custom" }],
+        renderIf: {
+          all: [{ key: "outputConfig.preset", equals: "custom" }],
         },
       },
       {
@@ -661,8 +744,8 @@ const videoLoopSections: ContentModeSection[] = [
         max: 8192,
         step: 1,
         defaultValue: 1280,
-        disabledWhen: {
-          all: [{ key: "outputConfig.preset", notEquals: "custom" }],
+        renderIf: {
+          all: [{ key: "outputConfig.preset", equals: "custom" }],
         },
       },
       {
@@ -675,8 +758,8 @@ const videoLoopSections: ContentModeSection[] = [
         max: 8192,
         step: 1,
         defaultValue: 720,
-        disabledWhen: {
-          all: [{ key: "outputConfig.preset", notEquals: "custom" }],
+        renderIf: {
+          all: [{ key: "outputConfig.preset", equals: "custom" }],
         },
       },
     ],

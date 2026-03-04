@@ -1,4 +1,9 @@
-import type { ContentModeField, ContentModeSection } from "./ui-registry";
+import type {
+  ContentModeConditionRule,
+  ContentModeConditionSet,
+  ContentModeField,
+  ContentModeSection,
+} from "./ui-registry";
 
 const getValueAtPath = (obj: Record<string, unknown>, path: string) => {
   const parts = path.split(".");
@@ -172,23 +177,20 @@ const resolveComparableValue = (
   return field?.defaultValue;
 };
 
-const matchesRule = (
-  value: unknown,
-  rule: { equals?: string | number | boolean; notEquals?: string | number | boolean }
-) => {
+const matchesRule = (value: unknown, rule: ContentModeConditionRule) => {
   if (rule.equals !== undefined) return value === rule.equals;
   if (rule.notEquals !== undefined) return value !== rule.notEquals;
   return false;
 };
 
-export const isFieldDisabled = (
+const matchesConditionSet = (
   fieldMap: Record<string, ContentModeField>,
   settings: Record<string, unknown>,
-  field: ContentModeField
+  conditions?: ContentModeConditionSet
 ) => {
-  if (!field.disabledWhen) return false;
-  const allRules = field.disabledWhen.all ?? [];
-  const anyRules = field.disabledWhen.any ?? [];
+  if (!conditions) return false;
+  const allRules = conditions.all ?? [];
+  const anyRules = conditions.any ?? [];
   const allMatched =
     allRules.length > 0 &&
     allRules.every((rule) =>
@@ -200,6 +202,41 @@ export const isFieldDisabled = (
       matchesRule(resolveComparableValue(fieldMap, settings, rule.key), rule)
     );
   return allMatched || anyMatched;
+};
+
+export const isFieldDisabled = (
+  fieldMap: Record<string, ContentModeField>,
+  settings: Record<string, unknown>,
+  field: ContentModeField
+) => {
+  return matchesConditionSet(fieldMap, settings, field.disabledWhen);
+};
+
+export const shouldRenderField = (
+  fieldMap: Record<string, ContentModeField>,
+  settings: Record<string, unknown>,
+  field: ContentModeField
+) => {
+  if (!field.renderIf) return true;
+  return matchesConditionSet(fieldMap, settings, field.renderIf);
+};
+
+export const shouldRenderSection = (
+  fieldMap: Record<string, ContentModeField>,
+  settings: Record<string, unknown>,
+  section: ContentModeSection
+) => {
+  if (!section.renderIf) return true;
+  return matchesConditionSet(fieldMap, settings, section.renderIf);
+};
+
+export const shouldRenderGroup = (
+  fieldMap: Record<string, ContentModeField>,
+  settings: Record<string, unknown>,
+  group: NonNullable<ContentModeSection["groups"]>[number]
+) => {
+  if (!group.renderIf) return true;
+  return matchesConditionSet(fieldMap, settings, group.renderIf);
 };
 
 export type FieldActionHandler = (

@@ -53,6 +53,7 @@
         gdk-pixbuf
         libgbm
         expat
+        zlib
         fontconfig
         freetype
         cups

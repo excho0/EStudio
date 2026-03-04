@@ -40,12 +40,18 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   overlapRatio: 0.25,
   captionsEnabled: false,
   captionsStyle: "subtitle",
+  captionsPosition: "bottom",
+  captionsOffsetX: 0,
+  captionsOffsetY: 0,
+  captionsScalePercent: 100,
   captionsAnimationPreset: "smooth",
   captionsWordsPerPage: 4,
   captionsData: null,
   renderShaderEnabled: false,
   renderShaderDebugMode: "none",
   songDurationSeconds: 30,
+  songRangeStartSeconds: 0,
+  songRangeEndSeconds: null,
   fps: 30,
   width: 1280,
   height: 720,
@@ -212,6 +218,22 @@ export const buildContentLoopPropsFromItem = (
       getSetting<"subtitle" | "tiktok">("captionsStyle") ??
       item.captionsStyle ??
       CONTENT_LOOP_DEFAULTS.captionsStyle,
+    captionsPosition:
+      getSetting<"top" | "center" | "bottom" | "custom">("captionsPosition") ??
+      item.captionsPosition ??
+      CONTENT_LOOP_DEFAULTS.captionsPosition,
+    captionsOffsetX:
+      getSetting<number>("captionsOffsetX") ??
+      item.captionsOffsetX ??
+      CONTENT_LOOP_DEFAULTS.captionsOffsetX,
+    captionsOffsetY:
+      getSetting<number>("captionsOffsetY") ??
+      item.captionsOffsetY ??
+      CONTENT_LOOP_DEFAULTS.captionsOffsetY,
+    captionsScalePercent:
+      getSetting<number>("captionsScalePercent") ??
+      item.captionsScalePercent ??
+      CONTENT_LOOP_DEFAULTS.captionsScalePercent,
     captionsAnimationPreset:
       getSetting<"smooth" | "cinematic" | "punch" | "minimal">(
         "captionsAnimationPreset"
@@ -234,9 +256,15 @@ export const buildContentLoopPropsFromItem = (
       CONTENT_LOOP_DEFAULTS.scalePercent,
     colorPalette: item.colorPalette ?? CONTENT_LOOP_DEFAULTS.colorPalette,
     songDurationSeconds:
-      getSetting<number>("songDurationSeconds") ??
-      item.songDurationSeconds ??
-      CONTENT_LOOP_DEFAULTS.songDurationSeconds,
+      item.songDurationSeconds ?? CONTENT_LOOP_DEFAULTS.songDurationSeconds,
+    songRangeStartSeconds:
+      getSetting<number>("songRangeStartSeconds") ??
+      item.songRangeStartSeconds ??
+      CONTENT_LOOP_DEFAULTS.songRangeStartSeconds,
+    songRangeEndSeconds:
+      getSetting<number>("songRangeEndSeconds") ??
+      item.songRangeEndSeconds ??
+      CONTENT_LOOP_DEFAULTS.songRangeEndSeconds,
     fps: outputConfig.fps,
     width: outputConfig.width,
     height: outputConfig.height,
@@ -257,7 +285,11 @@ export const resolveContentLoopMetadata = (props: ContentLoopProps) => {
   const songDurationSeconds = Number.isFinite(props.songDurationSeconds ?? NaN)
     ? props.songDurationSeconds ?? 1
     : 1;
-  const durationInFrames = Math.max(1, Math.round(songDurationSeconds * fps!));
+  const rangeStart = Math.max(0, Number(props.songRangeStartSeconds ?? 0));
+  const rangeEndRaw = Number(props.songRangeEndSeconds ?? songDurationSeconds);
+  const rangeEnd = Math.max(rangeStart + 0.001, Math.min(songDurationSeconds, rangeEndRaw));
+  const effectiveDurationSeconds = Math.max(0.001, rangeEnd - rangeStart);
+  const durationInFrames = Math.max(1, Math.round(effectiveDurationSeconds * fps!));
 
   return {
     fps,

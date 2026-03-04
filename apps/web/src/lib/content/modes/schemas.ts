@@ -23,6 +23,8 @@ export const videoLoopSettingsSchema = z
   .object({
     segmentDurationSeconds: z.number().nonnegative().default(4),
     videoDurationSeconds: z.number().nonnegative().nullable().default(null),
+    songRangeStartSeconds: z.number().nonnegative().default(0),
+    songRangeEndSeconds: z.number().nonnegative().nullable().default(null),
     fadeDurationSeconds: z.number().nonnegative().default(1),
     introFadeSeconds: z.number().nonnegative().default(0),
     outroFadeSeconds: z.number().nonnegative().default(0),
@@ -54,6 +56,10 @@ export const videoLoopSettingsSchema = z
     captionsEnabled: z.boolean().default(false),
     captionsLanguage: z.string().min(2).max(16).default("en"),
     captionsStyle: z.enum(["subtitle", "tiktok"]).default("subtitle"),
+    captionsPosition: z.enum(["top", "center", "bottom", "custom"]).default("bottom"),
+    captionsOffsetX: z.number().min(-600).max(600).default(0),
+    captionsOffsetY: z.number().min(-1200).max(1200).default(0),
+    captionsScalePercent: z.number().min(50).max(200).default(100),
     captionsAnimationPreset: z
       .enum(["smooth", "cinematic", "punch", "minimal"])
       .default("smooth"),

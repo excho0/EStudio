@@ -71,6 +71,9 @@ import {
   buildFieldMap,
   getFieldValue as getFieldValueFromSettings,
   isFieldDisabled,
+  shouldRenderField,
+  shouldRenderGroup,
+  shouldRenderSection,
   resolveFieldActionState,
   type FieldActionHandler,
 } from "@/lib/content/modes/ui-helpers";
@@ -80,6 +83,7 @@ import {
 } from "@/components/content-settings/label-with-tooltip";
 import {
   SettingSliderRow,
+  SettingRangeSliderRow,
   SettingToggleRow,
 } from "@/components/content-settings/fields";
 import StickyBox from "@/components/ui/sticky-box";
@@ -103,6 +107,13 @@ const defaultFormValues = {
 };
 
 type FormValues = EditFormValues;
+
+const formatSecondsToMinutes = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(whole / 60);
+  const secs = whole % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+};
 
 const buildFormValuesFromItem = (item: ContentItem): FormValues => {
   const settingsMap = normalizeSettingsMap(
@@ -299,6 +310,7 @@ export default function EditContentPage() {
       return (await response.json()) as ContentItem;
     },
     onSuccess: (updated) => {
+      const didUploadThumbnail = Boolean(thumbnailFile);
       const nextFormValues = buildFormValuesFromItem(updated);
       const nextPaletteMode = updated.paletteMode === "manual" ? "manual" : "auto";
       const nextPaletteState = Array.isArray(updated.colorPalette)
@@ -311,7 +323,9 @@ export default function EditContentPage() {
       setPaletteState(nextPaletteState);
       setThumbnailFile(null);
       setThumbnailPreview(null);
-      setThumbnailVersion(Date.now());
+      if (didUploadThumbnail) {
+        setThumbnailVersion(Date.now());
+      }
       setInitialSnapshot(buildSnapshotFromItem(updated));
       queryClient.setQueryData(queryKeys.contentItem(params.id), updated);
       toast.success("Content updated.");
@@ -383,11 +397,23 @@ export default function EditContentPage() {
   const segmentDurationSeconds = getSettingNumber("segmentDurationSeconds", 4);
   const songDurationSeconds = Math.max(
     0,
-    Number(formValues.songDurationSeconds || 0) ||
-      (typeof item?.songDurationSeconds === "number" ? item.songDurationSeconds : 0)
+    Number(formValues.songDurationSeconds || 0) || Number(item?.songDurationSeconds ?? 0)
   );
+  const rangeStartSeconds = Math.max(0, Number(resolvedSettings.songRangeStartSeconds ?? 0));
+  const rangeEndRaw = Number(
+    resolvedSettings.songRangeEndSeconds ?? (songDurationSeconds > 0 ? songDurationSeconds : 0)
+  );
+  const rangeEndSeconds =
+    songDurationSeconds > 0
+      ? Math.min(songDurationSeconds, Math.max(rangeStartSeconds, rangeEndRaw))
+      : Math.max(rangeStartSeconds, rangeEndRaw);
+  const rangedDurationSeconds = Math.max(0, rangeEndSeconds - rangeStartSeconds);
   const previewDurationSeconds =
-    songDurationSeconds > 0 ? songDurationSeconds : segmentDurationSeconds;
+    rangedDurationSeconds > 0
+      ? rangedDurationSeconds
+      : songDurationSeconds > 0
+        ? songDurationSeconds
+        : segmentDurationSeconds;
   const safeDurationInFrames = Math.max(
     1,
     Math.round(previewDurationSeconds * resolvedFps)
@@ -529,6 +555,9 @@ export default function EditContentPage() {
   };
 
   const renderModeField = (field: ContentModeField) => {
+    if (!shouldRenderField(fieldMap, currentSettings, field)) {
+      return null;
+    }
     const disabled = isFieldDisabled(fieldMap, currentSettings, field);
     if (field.input === "action") {
       const actionState = resolveFieldActionState({
@@ -612,6 +641,41 @@ export default function EditContentPage() {
             }))}
           />
         </div>
+      );
+    }
+        if (field.input === "range" && field.key === "songPlaybackRange") {
+      const maxSongDuration = songDurationSeconds > 0 ? songDurationSeconds : field.max ?? 600;
+      const rawStart = getFieldValue("songRangeStartSeconds");
+      const rawEnd = getFieldValue("songRangeEndSeconds");
+      const start = Math.max(0, Number(rawStart ?? 0));
+      const parsedEnd = Number(rawEnd);
+      const endSource =
+        rawEnd === null ||
+        rawEnd === undefined ||
+        rawEnd === "" ||
+        !Number.isFinite(parsedEnd) ||
+        parsedEnd <= 0
+          ? maxSongDuration
+          : parsedEnd;
+      const end = Math.max(start, endSource);
+      return (
+        <SettingRangeSliderRow
+          key={field.key}
+          id={field.key}
+          label={field.label}
+          tip={field.tooltip ?? ""}
+          value={[Math.min(start, maxSongDuration), Math.min(end, maxSongDuration)]}
+          min={0}
+          max={Math.max(1, maxSongDuration)}
+          step={field.step ?? 1}
+          suffix={field.suffix}
+          formatValue={formatSecondsToMinutes}
+          disabled={disabled}
+          onValueChange={([nextStart, nextEnd]) => {
+            updateFormValue("songRangeStartSeconds", nextStart);
+            updateFormValue("songRangeEndSeconds", nextEnd);
+          }}
+        />
       );
     }
     if (field.input === "slider") {
@@ -1036,6 +1100,15 @@ export default function EditContentPage() {
                 <ModeSettingsRenderer
                   sections={modeUi.sections}
                   renderField={renderModeField}
+                  shouldRenderField={(field) =>
+                    shouldRenderField(fieldMap, currentSettings, field)
+                  }
+                  shouldRenderGroup={(group) =>
+                    shouldRenderGroup(fieldMap, currentSettings, group)
+                  }
+                  shouldRenderSection={(section) =>
+                    shouldRenderSection(fieldMap, currentSettings, section)
+                  }
                 />
 
                 <input

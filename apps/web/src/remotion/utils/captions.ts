@@ -194,6 +194,8 @@ export const resolveCaptionRuntime = ({
   captionsSegments,
   captionsGlobalOffsetMs,
   timelineMs,
+  rangeStartMs,
+  rangeEndMs,
 }: {
   captionsEnabled: boolean;
   captionsStyle: CaptionStyle;
@@ -202,10 +204,12 @@ export const resolveCaptionRuntime = ({
   captionsSegments: CaptionSegment[];
   captionsGlobalOffsetMs?: number;
   timelineMs: number;
+  rangeStartMs?: number;
+  rangeEndMs?: number | null;
 }) => {
   const effectiveCaptionsStyle: CaptionStyle = captionsStyle;
   const globalOffsetMs = Math.round(captionsGlobalOffsetMs ?? 0);
-  const runtimeSegments =
+  const offsetSegments =
     globalOffsetMs === 0
       ? captionsSegments
       : captionsSegments.map((segment) => {
@@ -213,6 +217,32 @@ export const resolveCaptionRuntime = ({
           const endMs = Math.max(startMs + 1, segment.endMs + globalOffsetMs);
           return { ...segment, startMs, endMs };
         });
+
+  const hasRangeBounds =
+    Number.isFinite(rangeStartMs ?? NaN) || Number.isFinite(rangeEndMs ?? NaN);
+  const clippedRangeStartMs = hasRangeBounds
+    ? Math.max(0, Math.round(rangeStartMs ?? 0))
+    : 0;
+  const clippedRangeEndMs =
+    hasRangeBounds && Number.isFinite(rangeEndMs ?? NaN)
+      ? Math.max(clippedRangeStartMs + 1, Math.round(rangeEndMs as number))
+      : null;
+
+  const runtimeSegments = hasRangeBounds
+    ? offsetSegments
+        .map((segment) => {
+          const startMs = Math.max(segment.startMs, clippedRangeStartMs);
+          const boundedEnd = clippedRangeEndMs ?? segment.endMs;
+          const endMs = Math.min(segment.endMs, boundedEnd);
+          if (endMs <= startMs) return null;
+          return {
+            ...segment,
+            startMs: startMs - clippedRangeStartMs,
+            endMs: Math.max(startMs + 1, endMs) - clippedRangeStartMs,
+          };
+        })
+        .filter((segment): segment is CaptionSegment => segment !== null)
+    : offsetSegments;
 
   if (!captionsEnabled || runtimeSegments.length === 0) {
     return {
@@ -276,12 +306,26 @@ export const resolveCaptionRuntime = ({
   const motionPreset = getMotionPreset(captionsAnimationPreset, captionVariant);
   const ease = smoothStep(presence);
 
-  const captionTranslateY = lerp(motionPreset.fromY, 0, presence);
-  const captionTranslateX = lerp(motionPreset.fromX, 0, presence);
-  const captionScale = lerp(motionPreset.fromScale, 1, presence);
-  const captionRotate = lerp(motionPreset.fromRotate, 0, presence);
-  const captionBlur = lerp(motionPreset.blurFrom, 0, presence);
-  const captionPulse = 1 + Math.sin(enterProgress * Math.PI) * motionPreset.pulseAmount * ease;
+  // Keep TikTok style visually stable to avoid micro-jitter on caption page changes.
+  const useStableTiktokMotion = effectiveCaptionsStyle === "tiktok";
+  const captionTranslateY = useStableTiktokMotion
+    ? lerp(10, 0, presence)
+    : lerp(motionPreset.fromY, 0, presence);
+  const captionTranslateX = useStableTiktokMotion
+    ? 0
+    : lerp(motionPreset.fromX, 0, presence);
+  const captionScale = useStableTiktokMotion
+    ? lerp(0.992, 1, presence)
+    : lerp(motionPreset.fromScale, 1, presence);
+  const captionRotate = useStableTiktokMotion
+    ? 0
+    : lerp(motionPreset.fromRotate, 0, presence);
+  const captionBlur = useStableTiktokMotion
+    ? lerp(1.4, 0, presence)
+    : lerp(motionPreset.blurFrom, 0, presence);
+  const captionPulse = useStableTiktokMotion
+    ? 1
+    : 1 + Math.sin(enterProgress * Math.PI) * motionPreset.pulseAmount * ease;
   const captionDepth = lerp(motionPreset.depthFrom, 0, ease);
   const captionOpacity = clamp(ease, 0, 1);
   const captionTransform = `translate3d(${captionTranslateX.toFixed(2)}px, ${captionTranslateY.toFixed(
