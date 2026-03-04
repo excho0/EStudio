@@ -110,7 +110,11 @@ export default function EditCaptionsPage() {
       previewProps
         ? {
             component: previewComponent as ComponentType<Record<string, unknown>>,
-            inputProps: previewProps as Record<string, unknown>,
+            inputProps: {
+              ...(previewProps as Record<string, unknown>),
+              songRangeStartSeconds: 0,
+              songRangeEndSeconds: null,
+            },
             durationInFrames: safeDurationInFrames,
             fps: previewOutput.fps,
             compositionWidth: previewOutput.width,
@@ -161,7 +165,10 @@ export default function EditCaptionsPage() {
         mode={mode}
         language={String(resolvedSettings.captionsLanguage ?? "en")}
         onSave={async (next, options) => {
-          await saveMutation.mutateAsync({ next, source: options?.source ?? "manual" });
+          await saveMutation.mutateAsync({
+            next,
+            source: options?.source ?? "manual",
+          });
         }}
         closeHref={`/edit/${params.id}`}
         preview={captionsEditorPreview}

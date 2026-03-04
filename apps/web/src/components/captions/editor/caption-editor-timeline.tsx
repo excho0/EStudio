@@ -30,6 +30,7 @@ type Props = {
   sortedSegments: CaptionSegment[];
   selectedIndices: number[];
   toSeconds: (ms: number) => string;
+  timeOffsetMs?: number;
   suspendAutoFollow: (ms?: number) => void;
   onSetCursorFromClientX: (clientX: number, followViewport?: boolean) => void;
   onStartDrag: (event: React.PointerEvent<HTMLDivElement>, index: number, mode: "move" | "start" | "end") => void;
@@ -67,6 +68,7 @@ export function CaptionEditorTimeline({
   sortedSegments,
   selectedIndices,
   toSeconds,
+  timeOffsetMs = 0,
   suspendAutoFollow,
   onSetCursorFromClientX,
   onStartDrag,
@@ -261,7 +263,7 @@ export function CaptionEditorTimeline({
                   style={{ left }}
                 >
                   <span className="absolute left-1 top-1 text-[10px] text-muted-foreground">
-                    {toSeconds(tickMs)}s
+                    {toSeconds(Math.max(0, tickMs + timeOffsetMs))}s
                   </span>
                 </div>
               );
@@ -280,7 +282,7 @@ export function CaptionEditorTimeline({
               )}
               style={{ left: `${cursorMs * pxPerMs}px` }}
             >
-              {toSeconds(cursorMs)}s
+              {toSeconds(Math.max(0, cursorMs + timeOffsetMs))}s
             </div>
           </div>
           <div

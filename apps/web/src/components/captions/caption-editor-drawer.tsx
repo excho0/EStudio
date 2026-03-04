@@ -311,6 +311,18 @@ export function CaptionEditor({
     return Math.max(previewDurationMs, maxEnd + 2_000, 5_000);
   }, [preview, sortedSegments]);
 
+  const timelineTimeOffsetMs = useMemo(() => {
+    const base = (preview?.inputProps ?? {}) as Record<string, unknown>;
+    const settings =
+      base.settings && typeof base.settings === "object" && !Array.isArray(base.settings)
+        ? (base.settings as Record<string, unknown>)
+        : {};
+    const rawStart = settings.songRangeStartSeconds ?? base.songRangeStartSeconds ?? 0;
+    const parsed = Number(rawStart);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.round(parsed * 1000);
+  }, [preview]);
+
   const timelineWidth = Math.max(900, Math.round((durationMs / 1000) * zoomPxPerSecond));
   const selectedSegment =
     selectedIndex !== null ? sortedSegments[selectedIndex] ?? null : null;
@@ -327,14 +339,32 @@ export function CaptionEditor({
       !Array.isArray(settings.__shared)
         ? (settings.__shared as Record<string, unknown>)
         : {};
+
+    const rangeStartSeconds = Number(settings.songRangeStartSeconds ?? base.songRangeStartSeconds ?? 0);
+    const rangeStartMs = Number.isFinite(rangeStartSeconds)
+      ? Math.max(0, Math.round(rangeStartSeconds * 1000))
+      : 0;
+
+    const previewCaptionsData: CaptionDocument =
+      rangeStartMs > 0
+        ? {
+            ...draft,
+            segments: draft.segments.map((segment) => ({
+              ...segment,
+              startMs: Math.max(0, segment.startMs + rangeStartMs),
+              endMs: Math.max(segment.startMs + rangeStartMs + 1, segment.endMs + rangeStartMs),
+            })),
+          }
+        : draft;
+
     return {
       ...base,
-      captionsData: draft,
+      captionsData: previewCaptionsData,
       settings: {
         ...settings,
         __shared: {
           ...shared,
-          captionsData: draft,
+          captionsData: previewCaptionsData,
         },
       },
     };
@@ -1624,6 +1654,7 @@ export function CaptionEditor({
               sortedSegments={sortedSegments}
               selectedIndices={selectedIndices}
               toSeconds={toSeconds}
+              timeOffsetMs={timelineTimeOffsetMs}
               suspendAutoFollow={suspendAutoFollow}
               onSetCursorFromClientX={setCursorFromClientX}
               onStartDrag={startDrag}

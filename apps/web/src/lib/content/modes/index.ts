@@ -119,7 +119,6 @@ export const resolveContentSettings = (mode: string | undefined, settings: unkno
           ...(scoped as Record<string, unknown>),
         }
       : {};
-  delete cleaned.songDurationSeconds;
   delete cleaned.fps;
   delete cleaned.width;
   delete cleaned.height;
@@ -148,7 +147,6 @@ export const mergeContentSettings = (
     ...(settingsMap[definition.id] ?? {}),
   } as Record<string, unknown>;
   Object.assign(merged, patchMap[definition.id] ?? {});
-  delete merged.songDurationSeconds;
   delete merged.fps;
   delete merged.width;
   delete merged.height;
