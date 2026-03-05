@@ -3,13 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
-  CircleSlash,
-  CheckCircle2,
   Clapperboard,
-  Loader2,
   Upload,
   X,
-  XCircle,
   Captions,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -34,43 +30,27 @@ import type { LucideIcon } from "lucide-react";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import type {
+  AppEventMap,
+  NotificationItem,
+  NotificationKind,
+  NotificationStatus,
+} from "@/types";
 
-type JobKind = "render" | "publish" | "caption";
-type JobStatus =
-  | "queued"
-  | "processing"
-  | "publishing"
-  | "rendering"
-  | "canceled"
-  | "completed"
-  | "failed";
+type JobKind = NotificationKind;
+type JobStatus = NotificationStatus;
 
-type ActivityJob = {
-  key: string;
-  id: string;
-  title?: string;
+type ActivityHydratedItem = Pick<
+  NotificationItem,
+  "key" | "contentId" | "mode" | "kind" | "status" | "progress" | "stage" | "error" | "updatedAt"
+> & {
   jobId?: string;
-  mode?: string;
-  kind: JobKind;
-  status: JobStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-  updatedAt: number;
+  contentTitle?: string;
 };
 
-type ActivityHydratedItem = {
-  key: string;
-  contentId: string;
-  contentTitle?: string;
-  jobId?: string;
-  mode?: string;
-  kind: JobKind;
-  status: JobStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-  updatedAt: number;
+type ActivityJob = Omit<ActivityHydratedItem, "contentId" | "contentTitle"> & {
+  id: string;
+  title?: string;
 };
 
 const isActiveStatus = (status: JobStatus) =>
@@ -215,7 +195,6 @@ const JobCard = ({
   const KindIcon = kindMeta.icon;
   const progressValue = toPercent(job.progress);
   const isProgressStatus =
-    job.status === "queued" ||
     job.status === "processing" ||
     job.status === "publishing" ||
     job.status === "rendering";
@@ -397,14 +376,7 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handleRenderProgress = (payload: {
-      id: string;
-      jobId?: string;
-      mode?: string;
-      progress?: number;
-      rendered?: number;
-      total?: number;
-    }) => {
+    const handleRenderProgress = (payload: AppEventMap["render.progress"]) => {
       const progressValue = Number.isFinite(payload.progress ?? NaN)
         ? Number(payload.progress)
         : 0;
@@ -433,15 +405,16 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handleRenderComplete = (payload: { id?: string; jobId?: string; mode?: string }) => {
+    const handleRenderComplete = (payload: AppEventMap["render.completed"]) => {
       if (!payload.id) return;
-      const key = jobKey("render", payload.id, payload.mode, payload.jobId);
+      const mode = "mode" in payload ? payload.mode : undefined;
+      const key = jobKey("render", payload.id, mode, payload.jobId);
       upsert({
         key,
         id: payload.id,
         title: titleByContentIdRef.current.get(payload.id),
         jobId: payload.jobId,
-        mode: payload.mode,
+        mode,
         kind: "render",
         status: "completed",
         progress: 1,
@@ -449,11 +422,9 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handleRenderCancelRequested = (payload: {
-      id: string;
-      jobId?: string;
-      mode?: string;
-    }) => {
+    const handleRenderCancelRequested = (
+      payload: AppEventMap["render.cancel-requested"]
+    ) => {
       const now = Date.now();
       setJobs((current) => {
         const next = { ...current };
@@ -495,11 +466,7 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handleContentUpdate = (payload: {
-      id?: string;
-      status?: string;
-      type?: string;
-    }) => {
+    const handleContentUpdate = (payload: AppEventMap["content.update"]) => {
       if (!payload.id || payload.type !== "content.status") return;
       if (payload.status === "failed") {
         const key = jobKey("render", payload.id);
@@ -515,12 +482,7 @@ export function NotificationCenterDrawer() {
       }
     };
 
-    const handlePublishUpdate = (payload: {
-      id: string;
-      jobId?: string;
-      status: string;
-      error?: string;
-    }) => {
+    const handlePublishUpdate = (payload: AppEventMap["publish.update"]) => {
       const key = jobKey("publish", payload.id, undefined, payload.jobId);
       const status = resolvePublishStatus(payload.status);
       upsert({
@@ -536,12 +498,7 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    const handlePublishProgress = (payload: {
-      id: string;
-      jobId?: string;
-      stage?: string;
-      progress?: number;
-    }) => {
+    const handlePublishProgress = (payload: AppEventMap["publish.progress"]) => {
       const key = jobKey("publish", payload.id, undefined, payload.jobId);
       upsert({
         key,
@@ -557,14 +514,7 @@ export function NotificationCenterDrawer() {
       // Progress replay after reconnect should not retrigger start toast.
     };
 
-    const handleCaptionUpdate = (payload: {
-      id: string;
-      jobId?: string;
-      mode?: string;
-      status: "queued" | "processing" | "completed" | "failed";
-      progress?: number;
-      error?: string;
-    }) => {
+    const handleCaptionUpdate = (payload: AppEventMap["caption.update"]) => {
       const key = jobKey("caption", payload.id, payload.mode, payload.jobId);
       const normalizedStatus = normalizeJobStatus(payload.status);
       const fallbackProgress =
@@ -589,78 +539,80 @@ export function NotificationCenterDrawer() {
       });
     };
 
-    type RenderSocketPayload = {
-      id?: string;
-      jobId?: string;
-      mode?: string;
-      error?: string;
+    const handleRenderQueued = (payload: AppEventMap["render.queued"]) => {
+      const key = jobKey("render", payload.id, payload.mode, payload.jobId);
+      upsert({
+        key,
+        id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
+        jobId: payload.jobId,
+        mode: payload.mode,
+        kind: "render",
+        status: "queued",
+        progress: 0,
+        updatedAt: Date.now(),
+      });
     };
 
-    type PublishSocketPayload = {
-      id: string;
-      jobId?: string;
-      error?: string;
+    const handleRenderStarted = (payload: AppEventMap["render.started"]) => {
+      if (!payload.id) return;
+      const key = jobKey("render", payload.id, undefined, payload.jobId);
+      upsert({
+        key,
+        id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
+        jobId: payload.jobId,
+        kind: "render",
+        status: "rendering",
+        updatedAt: Date.now(),
+      });
     };
 
-    type CaptionSocketPayload = {
-      id: string;
-      jobId?: string;
-      mode?: string;
-      error?: string;
+    const handleRenderFailed = (payload: AppEventMap["render.failed"]) => {
+      if (!payload.id) return;
+      const key = jobKey("render", payload.id, undefined, payload.jobId);
+      upsert({
+        key,
+        id: payload.id,
+        title: titleByContentIdRef.current.get(payload.id),
+        jobId: payload.jobId,
+        kind: "render",
+        status: "failed",
+        progress: 1,
+        updatedAt: Date.now(),
+      });
     };
 
-    const createRenderStatusHandler = (
-      status: JobStatus,
-      options?: { progress?: number; includeError?: boolean }
-    ) => {
-      return (payload: RenderSocketPayload) => {
-        if (!payload.id) return;
-        const key = jobKey("render", payload.id, payload.mode, payload.jobId);
-        upsert({
-          key,
-          id: payload.id,
-          title: titleByContentIdRef.current.get(payload.id),
-          jobId: payload.jobId,
-          mode: payload.mode,
-          kind: "render",
-          status,
-          progress: options?.progress,
-          error: options?.includeError ? payload.error : undefined,
-          updatedAt: Date.now(),
-        });
-      };
+    const handlePublishQueued = (payload: AppEventMap["publish.queued"]) => {
+      const jobId = "jobId" in payload ? payload.jobId : undefined;
+      handlePublishUpdate({
+        id: payload.id,
+        jobId,
+        status: "queued",
+      });
+    };
+    const handlePublishStarted = (payload: AppEventMap["publish.started"]) => {
+      handlePublishUpdate({ ...payload, status: "publishing" });
+    };
+    const handlePublishCompleted = (payload: AppEventMap["publish.completed"]) => {
+      handlePublishUpdate({ ...payload, status: "published" });
+    };
+    const handlePublishFailed = (payload: AppEventMap["publish.failed"]) => {
+      handlePublishUpdate({ ...payload, status: "failed" });
     };
 
-    const createPublishStatusHandler = (status: string) => {
-      return (payload: PublishSocketPayload) => {
-        handlePublishUpdate({ ...payload, status });
-      };
+    const handleCaptionQueued = (payload: AppEventMap["caption.queued"]) => {
+      handleCaptionUpdate({ ...payload, status: "queued" });
     };
-
-    const createCaptionStatusHandler = (
-      status: "queued" | "processing" | "completed" | "failed"
-    ) => {
-      return (payload: CaptionSocketPayload) => {
-        handleCaptionUpdate({ ...payload, status });
-      };
+    const handleCaptionStarted = (payload: AppEventMap["caption.started"]) => {
+      handleCaptionUpdate({ ...payload, status: "processing" });
     };
-
-    const handleRenderQueued = createRenderStatusHandler("queued", { progress: 0 });
-    const handleRenderStarted = createRenderStatusHandler("rendering");
-    const handleRenderFailed = createRenderStatusHandler("failed", {
-      progress: 1,
-      includeError: true,
-    });
-
-    const handlePublishQueued = createPublishStatusHandler("queued");
-    const handlePublishStarted = createPublishStatusHandler("publishing");
-    const handlePublishCompleted = createPublishStatusHandler("published");
-    const handlePublishFailed = createPublishStatusHandler("failed");
-
-    const handleCaptionQueued = createCaptionStatusHandler("queued");
-    const handleCaptionStarted = createCaptionStatusHandler("processing");
-    const handleCaptionCompleted = createCaptionStatusHandler("completed");
-    const handleCaptionFailed = createCaptionStatusHandler("failed");
+    const handleCaptionCompleted = (payload: AppEventMap["caption.completed"]) => {
+      handleCaptionUpdate({ ...payload, status: "completed" });
+    };
+    const handleCaptionFailed = (payload: AppEventMap["caption.failed"]) => {
+      handleCaptionUpdate({ ...payload, status: "failed" });
+    };
 
     const socketSubscriptions = [
       { event: SocketEvents.render.queued, handler: handleRenderQueued },
