@@ -127,7 +127,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
         await updateContentItem(userId, id, { status: "queued" });
         emitContentUpdate({
           userId,
-          type: "content:status",
+          type: "content.status",
           id,
           jobId,
           status: "queued",
@@ -214,7 +214,7 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
     if (item.status === "rendering") {
       const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
-      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+      emitContentUpdate({ userId, type: "content.status", id, status: nextStatus });
     }
     await clearRenderProgressSnapshotsForContent({ userId, id });
     await finalizeActiveRenderNotificationsForContent(userId, id);
@@ -246,7 +246,7 @@ export const handleCancelRenderRequest = async (userId: string, id: string) => {
   if (latest?.status === "rendering") {
     const nextStatus = await resolveRollbackContentStatus(userId, id);
     await updateContentItem(userId, id, { status: nextStatus });
-    emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+    emitContentUpdate({ userId, type: "content.status", id, status: nextStatus });
   }
   await clearRenderProgressSnapshotsForContent({ userId, id });
   await clearRenderCancellation(userId, id);

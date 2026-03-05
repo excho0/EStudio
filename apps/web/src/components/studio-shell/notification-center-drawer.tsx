@@ -500,7 +500,7 @@ export function NotificationCenterDrawer() {
       status?: string;
       type?: string;
     }) => {
-      if (!payload.id || (payload.type !== "content.status" && payload.type !== "content:status")) return;
+      if (!payload.id || payload.type !== "content.status") return;
       if (payload.status === "failed") {
         const key = jobKey("render", payload.id);
         upsert({

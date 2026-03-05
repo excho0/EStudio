@@ -284,7 +284,7 @@ export const handleCreateContent = async (request: Request, userId: string) => {
       ...created,
       assets: { thumbnailPath, videoPath, songPath },
     });
-    emitContentUpdate({ userId, type: "content:created", item: created });
+    emitContentUpdate({ userId, type: "content.created", item: created });
     await enqueueCaptionOnCreate({
       id: created.id,
       userId,
@@ -350,7 +350,7 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     ...created,
     assets: { thumbnailPath, videoPath, songPath },
   });
-  emitContentUpdate({ userId, type: "content:created", item: created });
+  emitContentUpdate({ userId, type: "content.created", item: created });
   await enqueueCaptionOnCreate({
     id: created.id,
     userId,

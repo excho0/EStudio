@@ -9,7 +9,7 @@ import si from "systeminformation";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 import { eventBus } from "@/lib/event-bus";
-import type { AppEventMap } from "@/types";
+import { APP_EVENT_TOPICS } from "@/lib/socket/events";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -101,35 +101,6 @@ app
 
     const resolveUserRoom = (userId?: string | null) => (userId ? `user:${userId}` : null);
 
-    const EVENT_BRIDGE_TOPICS: Array<keyof AppEventMap> = [
-      "content.update",
-      "content.created",
-      "content.updated",
-      "content.deleted",
-      "content.status.changed",
-      "render.queued",
-      "render.started",
-      "render.progress",
-      "render.completed",
-      "render.failed",
-      "render.cancel-requested",
-      "publish.queued",
-      "publish.started",
-      "publish.progress",
-      "publish.completed",
-      "publish.failed",
-      "publish.update",
-      "caption.queued",
-      "caption.started",
-      "caption.completed",
-      "caption.failed",
-      "caption.update",
-      "provider.connection.created",
-      "provider.connection.deleted",
-      "user.profile.updated",
-      "settings.updated",
-    ];
-
     const extractUserId = (payload: unknown) => {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return null;
@@ -140,7 +111,7 @@ app
 
     const registerRealtimeBridge = async () => {
       const unsubs = await Promise.all(
-        EVENT_BRIDGE_TOPICS.map((topic) =>
+        APP_EVENT_TOPICS.map((topic) =>
           eventBus.on(topic, ({ payload }) => {
             const room = resolveUserRoom(extractUserId(payload));
             if (room) {
@@ -155,16 +126,10 @@ app
       const stop = async () => {
         await Promise.all(unsubs.map(async (unsubscribe) => unsubscribe().catch(() => undefined)));
       };
-
-      process.on("SIGTERM", () => {
-        void stop();
-      });
-      process.on("SIGINT", () => {
-        void stop();
-      });
+      return { stop };
     };
 
-    await registerRealtimeBridge();
+    const realtimeBridge = await registerRealtimeBridge();
 
     const readNvidiaSmi = () =>
       new Promise<NvidiaSmiEntry[] | null>((resolve) => {
@@ -375,6 +340,40 @@ app
         }
       }, 2000);
     }
+
+    let shuttingDown = false;
+    const shutdown = async (signal: "SIGINT" | "SIGTERM") => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info({ signal }, "Shutting down runtime server.");
+      const forceExitTimer = setTimeout(() => {
+        logger.warn({ signal }, "Graceful shutdown timed out. Exiting.");
+        process.exit(1);
+      }, 10_000);
+
+      try {
+        await realtimeBridge.stop();
+        await new Promise<void>((resolve) => {
+          io.close(() => resolve());
+        });
+        await new Promise<void>((resolve) => {
+          httpServer.close(() => resolve());
+        });
+        clearTimeout(forceExitTimer);
+        process.exit(0);
+      } catch (error) {
+        clearTimeout(forceExitTimer);
+        logger.error({ error, signal }, "Failed during graceful shutdown.");
+        process.exit(1);
+      }
+    };
+
+    process.once("SIGINT", () => {
+      void shutdown("SIGINT");
+    });
+    process.once("SIGTERM", () => {
+      void shutdown("SIGTERM");
+    });
 
     httpServer.listen(port, () => {
       logger.info({ port }, "Server ready.");

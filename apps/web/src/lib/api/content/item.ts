@@ -161,7 +161,7 @@ export const handlePatchContentItem = async (
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  emitContentUpdate({ userId, type: "content:updated", id });
+  emitContentUpdate({ userId, type: "content.updated", id });
   await writeContentManifest(userId, updated.id, updated);
 
   return NextResponse.json(updated);
@@ -189,7 +189,7 @@ export const handleDeleteContentItem = async (
   await deleteContentItem(userId, id);
   await deleteContentManifest(userId, id);
 
-  emitContentUpdate({ userId, type: "content:deleted", id });
+  emitContentUpdate({ userId, type: "content.deleted", id });
 
   return NextResponse.json({ ok: true });
 };

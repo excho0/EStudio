@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type {
   contentUpdatePayloadSchema,
+  contentUpdateTypeSchema,
   captionUpdatePayloadSchema,
   providerConnectionPayloadSchema,
   publishProgressPayloadSchema,
@@ -15,6 +16,7 @@ import type {
 import type { renderBackendSchema } from "@/lib/data/render";
 
 export type ContentUpdatePayload = z.infer<typeof contentUpdatePayloadSchema>;
+export type ContentUpdateType = z.infer<typeof contentUpdateTypeSchema>;
 export type RenderBackend = z.infer<typeof renderBackendSchema>;
 export type RenderQueuedPayload = z.infer<typeof renderQueuedPayloadSchema>;
 export type RenderProgressPayload = z.infer<typeof renderProgressPayloadSchema>;

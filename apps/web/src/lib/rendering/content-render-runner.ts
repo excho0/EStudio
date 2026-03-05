@@ -111,7 +111,7 @@ export const executeRenderForContent = async ({
   await ensureContentStore(userId);
   await setRenderStatusCheckpoint(userId, id, item.status);
   await updateContentItem(userId, id, { status: "rendering" });
-  emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendering" });
+  emitContentUpdate({ userId, type: "content.status", id, jobId, status: "rendering" });
 
   const renderDirKey = getContentRenderDir(userId, id);
   await storage.ensureDir(renderDirKey);
@@ -208,7 +208,7 @@ export const executeRenderForContent = async ({
     if (error instanceof RenderCanceledError) {
       const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
-      emitContentUpdate({ userId, type: "content:status", id, status: nextStatus });
+      emitContentUpdate({ userId, type: "content.status", id, status: nextStatus });
       await clearRenderCancellation(userId, id);
       await clearRenderStatusCheckpoint(userId, id);
       return {

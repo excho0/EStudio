@@ -1,9 +1,7 @@
-import type { Server as SocketIOServer } from "socket.io";
 import { eventBus } from "@/lib/event-bus";
 import type {
   AppEventMap,
   CaptionUpdatePayload,
-  ContentUpdatePayload,
   PublishProgressPayload,
   PublishUpdatePayload,
   RenderCompletePayload,
@@ -18,12 +16,6 @@ import {
 } from "@/lib/rendering/progress-store";
 import { enqueueNotificationPersist } from "@/lib/notifications/persist-queue";
 import type { NotificationStatus } from "@/types";
-
-type GlobalWithSocket = typeof globalThis & {
-  io?: SocketIOServer;
-};
-
-const resolveRoom = (userId?: string | null) => (userId ? `user:${userId}` : null);
 const emitDomainEvent = <TTopic extends keyof AppEventMap>(
   topic: TTopic,
   payload: AppEventMap[TTopic]
@@ -52,33 +44,23 @@ const persistNotification = (payload: {
   void enqueueNotificationPersist(payload);
 };
 
-export const getSocketServer = () => (globalThis as GlobalWithSocket).io ?? null;
-
-export const emitContentUpdate = (payload: {
-  userId?: string | null;
-  type: string;
-  id?: string;
-  jobId?: string;
-  status?: string;
-  item?: unknown;
-}) => {
-  const typedPayload = payload as ContentUpdatePayload;
-  emitDomainEvent("content.update", typedPayload);
-  if (payload.type === "content:created") {
-    emitDomainEvent("content.created", typedPayload);
-  } else if (payload.type === "content:updated") {
-    emitDomainEvent("content.updated", typedPayload);
-  } else if (payload.type === "content:deleted") {
-    emitDomainEvent("content.deleted", typedPayload);
-  } else if (payload.type === "content:status") {
-    emitDomainEvent("content.status.changed", typedPayload);
+export const emitContentUpdate = (payload: AppEventMap["content.update"]) => {
+  emitDomainEvent("content.update", payload);
+  if (payload.type === "content.created") {
+    emitDomainEvent("content.created", payload);
+  } else if (payload.type === "content.updated") {
+    emitDomainEvent("content.updated", payload);
+  } else if (payload.type === "content.deleted") {
+    emitDomainEvent("content.deleted", payload);
+  } else if (payload.type === "content.status") {
+    emitDomainEvent("content.status.changed", payload);
     const hasRenderJobContext = typeof payload.jobId === "string" && payload.jobId.length > 0;
 
     if (payload.status === "rendering") {
       if (!hasRenderJobContext) {
         // Status-only updates without a render job context should not trigger render lifecycle events.
       } else {
-        emitDomainEvent("render.started", typedPayload);
+        emitDomainEvent("render.started", payload);
       }
       if (payload.id) {
         persistNotification({
@@ -97,7 +79,7 @@ export const emitContentUpdate = (payload: {
         });
       }
       if (hasRenderJobContext) {
-        emitDomainEvent("render.completed", typedPayload);
+        emitDomainEvent("render.completed", payload);
       }
       if (payload.id && hasRenderJobContext) {
         persistNotification({
@@ -117,7 +99,7 @@ export const emitContentUpdate = (payload: {
         });
       }
       if (hasRenderJobContext) {
-        emitDomainEvent("render.failed", typedPayload);
+        emitDomainEvent("render.failed", payload);
       }
       if (payload.id && hasRenderJobContext) {
         persistNotification({
@@ -130,14 +112,6 @@ export const emitContentUpdate = (payload: {
       }
     }
   }
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("content:update", payload);
-    return;
-  }
-  io.emit("content:update", payload);
 };
 
 export const emitRenderQueued = (payload: {
@@ -182,14 +156,6 @@ export const emitRenderProgress = (payload: {
     progress: payload.progress,
   });
   emitDomainEvent("render.progress", payload as RenderProgressPayload);
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("render:progress", payload);
-    return;
-  }
-  io.emit("render:progress", payload);
 };
 
 export const emitRenderComplete = (payload: {
@@ -217,14 +183,6 @@ export const emitRenderComplete = (payload: {
     progress: 1,
   });
   emitDomainEvent("render.completed", payload as RenderCompletePayload);
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("render:complete", payload);
-    return;
-  }
-  io.emit("render:complete", payload);
 };
 
 export const emitRenderCancelRequested = (payload: {
@@ -244,14 +202,6 @@ export const emitRenderCancelRequested = (payload: {
     progress: 1,
     stage: "Canceled",
   });
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("render:cancel-requested", payload);
-    return;
-  }
-  io.emit("render:cancel-requested", payload);
 };
 
 export const emitPublishUpdate = (payload: {
@@ -292,14 +242,6 @@ export const emitPublishUpdate = (payload: {
         : undefined,
     error: payload.error,
   });
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("publish:update", payload);
-    return;
-  }
-  io.emit("publish:update", payload);
 };
 
 export const emitPublishProgress = (payload: {
@@ -321,22 +263,6 @@ export const emitPublishProgress = (payload: {
     stage: payload.stage,
   });
   emitDomainEvent("publish.progress", payload as PublishProgressPayload);
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  const eventPayload = {
-    id: payload.id,
-    jobId: payload.jobId,
-    stage: payload.stage,
-    progress: payload.progress,
-    bytesUploaded: payload.bytesUploaded,
-    bytesTotal: payload.bytesTotal,
-  };
-  if (room) {
-    io.to(room).emit("publish:progress", eventPayload);
-    return;
-  }
-  io.emit("publish:progress", eventPayload);
 };
 
 export const emitCaptionUpdate = (payload: {
@@ -376,14 +302,6 @@ export const emitCaptionUpdate = (payload: {
   } else if (payload.status === "failed") {
     emitDomainEvent("caption.failed", typedPayload);
   }
-  const io = getSocketServer();
-  if (!io) return;
-  const room = resolveRoom(payload.userId);
-  if (room) {
-    io.to(room).emit("caption:update", payload);
-    return;
-  }
-  io.emit("caption:update", payload);
 };
 
 export const emitSettingsUpdated = (payload: {
@@ -395,9 +313,6 @@ export const emitSettingsUpdated = (payload: {
   };
 }) => {
   emitDomainEvent("settings.updated", payload as SettingsUpdatedPayload);
-  const io = getSocketServer();
-  if (!io) return;
-  io.to(`user:${payload.userId}`).emit("settings:updated", payload);
 };
 
 export {

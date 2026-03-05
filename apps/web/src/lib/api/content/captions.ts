@@ -135,7 +135,7 @@ export const handleSaveCaptions = async (
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  emitContentUpdate({ userId, type: "content:updated", id });
+  emitContentUpdate({ userId, type: "content.updated", id });
   return NextResponse.json({
     ok: true,
     id,

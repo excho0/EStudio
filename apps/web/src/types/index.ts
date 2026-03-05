@@ -70,6 +70,7 @@ export type {
 export type {
   AppEventMap,
   CaptionUpdatePayload,
+  ContentUpdateType,
   ContentUpdatePayload,
   RenderProgressPayload,
   RenderCompletePayload,

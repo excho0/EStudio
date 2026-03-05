@@ -1,4 +1,5 @@
 import type { AppEventMap, MetricsPayload } from "@/types";
+import { z } from "zod";
 
 export const SocketEvents = {
   connect: "connect",
@@ -47,6 +48,38 @@ export const SocketEvents = {
     updated: "settings.updated",
   },
 } as const;
+
+const APP_EVENT_TOPICS_VALUES = [
+  SocketEvents.content.update,
+  SocketEvents.content.created,
+  SocketEvents.content.updated,
+  SocketEvents.content.deleted,
+  SocketEvents.content.statusChanged,
+  SocketEvents.render.queued,
+  SocketEvents.render.started,
+  SocketEvents.render.progress,
+  SocketEvents.render.completed,
+  SocketEvents.render.failed,
+  SocketEvents.render.cancelRequested,
+  SocketEvents.publish.queued,
+  SocketEvents.publish.started,
+  SocketEvents.publish.progress,
+  SocketEvents.publish.completed,
+  SocketEvents.publish.failed,
+  SocketEvents.publish.update,
+  SocketEvents.caption.queued,
+  SocketEvents.caption.started,
+  SocketEvents.caption.completed,
+  SocketEvents.caption.failed,
+  SocketEvents.caption.update,
+  SocketEvents.providerConnection.created,
+  SocketEvents.providerConnection.deleted,
+  SocketEvents.userProfile.updated,
+  SocketEvents.settings.updated,
+] as const satisfies ReadonlyArray<keyof AppEventMap>;
+
+export const appEventTopicSchema = z.enum(APP_EVENT_TOPICS_VALUES);
+export const APP_EVENT_TOPICS = appEventTopicSchema.options;
 
 export type SocketEventPayloadMap = AppEventMap & {
   connect: undefined;

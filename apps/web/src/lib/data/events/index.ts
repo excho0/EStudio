@@ -4,9 +4,17 @@ import { renderBackendSchema } from "@/lib/data/render";
 import { appSettingsSchema } from "@/lib/data/settings";
 
 /** Generic content update event payload. */
+export const contentUpdateTypeSchema = z.enum([
+  "content.created",
+  "content.updated",
+  "content.deleted",
+  "content.status",
+  "content.rendered",
+]);
+
 export const contentUpdatePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
-  type: z.string(),
+  type: contentUpdateTypeSchema,
   id: z.string().optional(),
   jobId: z.string().optional(),
   status: z.string().optional(),

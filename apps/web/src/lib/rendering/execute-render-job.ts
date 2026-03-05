@@ -840,8 +840,8 @@ export const startRenderJob = async ({
     });
     await clearRenderStatusCheckpoint(userId, id);
     lastProgressPercent.delete(progressKey);
-    emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendered" });
-    emitContentUpdate({ userId, type: "content:rendered", id, item: updated });
+    emitContentUpdate({ userId, type: "content.status", id, jobId, status: "rendered" });
+    emitContentUpdate({ userId, type: "content.rendered", id, item: updated });
     emitRenderComplete({
       userId,
       id,
@@ -862,7 +862,7 @@ export const startRenderJob = async ({
     const nextStatus = await resolveRollbackContentStatus(userId, id);
     await updateContentItem(userId, id, { status: nextStatus });
     await clearRenderStatusCheckpoint(userId, id);
-    emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+    emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
     const message = error instanceof Error ? error.message : "Render failed";
     renderLogger.error({
       event: "render-failed",

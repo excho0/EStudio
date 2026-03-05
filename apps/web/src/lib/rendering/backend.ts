@@ -158,7 +158,7 @@ const executeLambdaRenderForContent = async ({
   await ensureContentStore(userId);
   await setRenderStatusCheckpoint(userId, id, item.status);
   await updateContentItem(userId, id, { status: "rendering" });
-  emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendering" });
+  emitContentUpdate({ userId, type: "content.status", id, jobId, status: "rendering" });
 
   const storage = getStorage();
   const renderDirKey = getContentRenderDir(userId, id);
@@ -201,7 +201,7 @@ const executeLambdaRenderForContent = async ({
     if (cancelRequested) {
       const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
-      emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+      emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
       await clearRenderProgressSnapshot({ userId, id, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
       await clearRenderStatusCheckpoint(userId, id);
@@ -236,7 +236,7 @@ const executeLambdaRenderForContent = async ({
     if (fatalError) {
       const nextStatus = await resolveRollbackContentStatus(userId, id);
       await updateContentItem(userId, id, { status: nextStatus });
-      emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+      emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
       await clearRenderStatusCheckpoint(userId, id);
       throw new ContentRenderError(`Lambda render failed: ${fatalError}`, 500);
     }
@@ -249,7 +249,7 @@ const executeLambdaRenderForContent = async ({
       if (!outputFile) {
         const nextStatus = await resolveRollbackContentStatus(userId, id);
         await updateContentItem(userId, id, { status: nextStatus });
-        emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+        emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
         await clearRenderStatusCheckpoint(userId, id);
         throw new ContentRenderError("Lambda render completed without output file URL.", 500);
       }
@@ -258,7 +258,7 @@ const executeLambdaRenderForContent = async ({
       if (!outputResponse.ok) {
         const nextStatus = await resolveRollbackContentStatus(userId, id);
         await updateContentItem(userId, id, { status: nextStatus });
-        emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+        emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
         await clearRenderStatusCheckpoint(userId, id);
         throw new ContentRenderError(
           `Failed to download lambda output: HTTP ${outputResponse.status}`,
@@ -269,7 +269,7 @@ const executeLambdaRenderForContent = async ({
       const outputBuffer = Buffer.from(await outputResponse.arrayBuffer());
       await storage.writeFile(outputKey, outputBuffer);
       await updateContentItem(userId, id, { status: "rendered" });
-      emitContentUpdate({ userId, type: "content:status", id, jobId, status: "rendered" });
+      emitContentUpdate({ userId, type: "content.status", id, jobId, status: "rendered" });
       emitRenderComplete({ userId, id, jobId, mode: resolved.mode });
       await clearRenderCancellation(userId, id);
       await clearRenderStatusCheckpoint(userId, id);
@@ -287,7 +287,7 @@ const executeLambdaRenderForContent = async ({
 
   const nextStatus = await resolveRollbackContentStatus(userId, id);
   await updateContentItem(userId, id, { status: nextStatus });
-  emitContentUpdate({ userId, type: "content:status", id, jobId, status: nextStatus });
+  emitContentUpdate({ userId, type: "content.status", id, jobId, status: nextStatus });
   await clearRenderStatusCheckpoint(userId, id);
   throw new ContentRenderError("Lambda render timed out while waiting for completion.", 504);
 };
