@@ -54,6 +54,67 @@ const getTokenHighlightStrength = (
   return Math.max(0, Math.min(1, enter * exit));
 };
 
+type CaptionTokenStyleVariant = "subtitle" | "tiktok";
+
+const getCaptionPageWindow = (
+  page: CaptionPage,
+  nextPage: CaptionPage | null,
+  fps: number
+) => {
+  const startFrame = Math.floor((page.startMs / 1000) * fps);
+  const endFrame = Math.max(
+    startFrame + 1,
+    nextPage
+      ? Math.floor((nextPage.startMs / 1000) * fps)
+      : Math.ceil(((page.startMs + page.durationMs) / 1000) * fps)
+  );
+  const durationInFrames = Math.max(1, endFrame - startFrame);
+  return { startFrame, durationInFrames };
+};
+
+const getCaptionTokenStyle = ({
+  variant,
+  highlightStrength,
+  captionHighlightColor,
+}: {
+  variant: CaptionTokenStyleVariant;
+  highlightStrength: number;
+  captionHighlightColor: string;
+}) => {
+  const tokenColor = mixHex("#FFFFFF", captionHighlightColor, highlightStrength);
+  if (variant === "tiktok") {
+    const glowAlpha = 0.15 + highlightStrength * 0.22;
+    const glowRadius = 1.4 + highlightStrength * 1.8;
+    const depthAlpha = 0.18 + highlightStrength * 0.22;
+    return {
+      color: tokenColor,
+      filter:
+        highlightStrength > 0.001
+          ? `brightness(${(1 + highlightStrength * 0.06).toFixed(2)})`
+          : undefined,
+      textShadow:
+        highlightStrength > 0.001
+          ? `0 -1px 0 ${hexToRgba(captionHighlightColor, depthAlpha)}, 0 1px 0 ${hexToRgba("#000000", 0.28)}, 0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
+              captionHighlightColor,
+              glowAlpha
+            )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
+          : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
+    } as const;
+  }
+  const glowAlpha = 0.14 + highlightStrength * 0.2;
+  const glowRadius = 1.2 + highlightStrength * 1.6;
+  return {
+    color: tokenColor,
+    textShadow:
+      highlightStrength > 0.001
+        ? `0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
+            captionHighlightColor,
+            glowAlpha
+          )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
+        : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
+  } as const;
+};
+
 export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsEnabled,
   captionsStyle,
@@ -122,20 +183,39 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
         };
     }
   })();
+  const renderCaptionTokens = (
+    page: CaptionPage,
+    variant: CaptionTokenStyleVariant
+  ) =>
+    page.tokens.map((token, tokenIndex) => {
+      const highlightStrength = getTokenHighlightStrength(
+        token.fromMs,
+        token.toMs,
+        timelineMs
+      );
+      const tokenStyle = getCaptionTokenStyle({
+        variant,
+        highlightStrength,
+        captionHighlightColor,
+      });
+      return (
+        <span key={`${token.fromMs}-${token.toMs}-${token.text}`} style={tokenStyle}>
+          {token.text}
+          {tokenIndex < page.tokens.length - 1 ? " " : ""}
+        </span>
+      );
+    });
 
   if (effectiveCaptionsStyle === "tiktok" && captionPages.length > 0) {
     return (
       <AbsoluteFill style={{ pointerEvents: "none", zIndex: 30 }}>
         {captionPages.map((page, index) => {
           const nextPage = captionPages[index + 1] ?? null;
-          const startFrame = Math.floor((page.startMs / 1000) * fps);
-          const endFrame = Math.max(
-            startFrame + 1,
-            nextPage
-              ? Math.floor((nextPage.startMs / 1000) * fps)
-              : Math.ceil(((page.startMs + page.durationMs) / 1000) * fps)
+          const { startFrame, durationInFrames } = getCaptionPageWindow(
+            page,
+            nextPage,
+            fps
           );
-          const durationInFrames = Math.max(1, endFrame - startFrame);
           if (durationInFrames <= 0) return null;
           return (
             <Sequence
@@ -169,38 +249,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     whiteSpace: "pre-wrap",
                   }}
                 >
-                  {page.tokens.map((token, tokenIndex) => {
-                    const highlightStrength = getTokenHighlightStrength(
-                      token.fromMs,
-                      token.toMs,
-                      timelineMs
-                    );
-                    const tokenColor = mixHex(
-                      "#FFFFFF",
-                      captionHighlightColor,
-                      highlightStrength
-                    );
-                    const glowAlpha = 0.15 + highlightStrength * 0.22;
-                    const glowRadius = 1.4 + highlightStrength * 1.8;
-                    return (
-                      <span
-                        key={`${token.fromMs}-${token.toMs}-${token.text}`}
-                        style={{
-                          color: tokenColor,
-                          textShadow:
-                            highlightStrength > 0.001
-                              ? `0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
-                                  captionHighlightColor,
-                                  glowAlpha
-                                )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
-                              : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
-                        }}
-                      >
-                        {token.text}
-                        {tokenIndex < page.tokens.length - 1 ? " " : ""}
-                      </span>
-                    );
-                  })}
+                  {renderCaptionTokens(page, "tiktok")}
                 </div>
               </AbsoluteFill>
             </Sequence>
@@ -215,14 +264,11 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
       <AbsoluteFill style={{ pointerEvents: "none", zIndex: 30 }}>
         {captionPages.map((page, index) => {
           const nextPage = captionPages[index + 1] ?? null;
-          const startFrame = Math.floor((page.startMs / 1000) * fps);
-          const endFrame = Math.max(
-            startFrame + 1,
-            nextPage
-              ? Math.floor((nextPage.startMs / 1000) * fps)
-              : Math.ceil(((page.startMs + page.durationMs) / 1000) * fps)
+          const { startFrame, durationInFrames } = getCaptionPageWindow(
+            page,
+            nextPage,
+            fps
           );
-          const durationInFrames = Math.max(1, endFrame - startFrame);
           if (durationInFrames <= 0) return null;
           return (
             <Sequence
@@ -263,38 +309,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     willChange: "transform, opacity, filter",
                   }}
                 >
-                  {page.tokens.map((token, tokenIndex) => {
-                    const highlightStrength = getTokenHighlightStrength(
-                      token.fromMs,
-                      token.toMs,
-                      timelineMs
-                    );
-                    const tokenColor = mixHex(
-                      "#FFFFFF",
-                      captionHighlightColor,
-                      highlightStrength
-                    );
-                    const glowAlpha = 0.14 + highlightStrength * 0.2;
-                    const glowRadius = 1.2 + highlightStrength * 1.6;
-                    return (
-                      <span
-                        key={`${token.fromMs}-${token.toMs}-${token.text}`}
-                        style={{
-                          color: tokenColor,
-                          textShadow:
-                            highlightStrength > 0.001
-                              ? `0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
-                                  captionHighlightColor,
-                                  glowAlpha
-                                )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
-                              : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
-                        }}
-                      >
-                        {token.text}
-                        {tokenIndex < page.tokens.length - 1 ? " " : ""}
-                      </span>
-                    );
-                  })}
+                  {renderCaptionTokens(page, "subtitle")}
                 </div>
               </AbsoluteFill>
             </Sequence>
