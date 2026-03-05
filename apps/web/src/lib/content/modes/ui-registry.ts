@@ -228,6 +228,22 @@ const videoLoopSections: ContentModeSection[] = [
         input: "toggle",
       },
       {
+        key: "captionsEdit",
+        label: "Edit Captions",
+        tooltip: "Open the interactive caption editor to tweak words and timing.",
+        input: "action",
+        action: {
+          id: "captions.edit",
+          label: "Add / Edit Caption Segments",
+          icon: Pencil,
+          variant: "outline",
+          size: "sm",
+        },
+        disabledWhen: {
+          all: [{ key: "captionsEnabled", equals: false }],
+        },
+      },
+      {
         key: "captionsLanguage",
         label: "Language",
         tooltip: "ISO language hint for this mode (for example: en, es).",
@@ -348,40 +364,6 @@ const videoLoopSections: ContentModeSection[] = [
         max: 12,
         step: 1,
         defaultValue: 4,
-        disabledWhen: {
-          all: [{ key: "captionsEnabled", equals: false }],
-        },
-      },
-      {
-        key: "captionsGenerate",
-        label: "Captions",
-        tooltip:
-          "Generate captions now using global caption settings.",
-        input: "action",
-        action: {
-          id: "captions.generate",
-          label: "Generate Captions",
-          loadingLabel: "Generating captions...",
-          icon: Subtitles,
-          variant: "outline",
-          size: "sm",
-        },
-        disabledWhen: {
-          all: [{ key: "captionsEnabled", equals: false }],
-        },
-      },
-      {
-        key: "captionsEdit",
-        label: "Edit Captions",
-        tooltip: "Open the interactive caption editor to tweak words and timing.",
-        input: "action",
-        action: {
-          id: "captions.edit",
-          label: "Edit Captions",
-          icon: Pencil,
-          variant: "outline",
-          size: "sm",
-        },
         disabledWhen: {
           all: [{ key: "captionsEnabled", equals: false }],
         },

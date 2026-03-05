@@ -5,6 +5,7 @@ import {
   Check,
   Clipboard,
   Copy,
+  Loader2,
   Minus,
   Monitor,
   Pause,
@@ -14,6 +15,7 @@ import {
   Redo2,
   Save,
   SlidersHorizontal,
+  Sparkles,
   SquareDashedMousePointer,
   SquareMousePointer,
   Trash2,
@@ -28,6 +30,12 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ResponsiveActionMenu, type ActionItem } from "@/components/controls/responsive-action-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { ContentModePreviewVariant } from "@/lib/content/modes/ui-registry";
 
 type CaptionEditorToolbarProps = {
@@ -43,6 +51,8 @@ type CaptionEditorToolbarProps = {
   canUndo: boolean;
   canRedo: boolean;
   segmentCount: number;
+  onGenerateSegments?: () => void;
+  isGeneratingSegments?: boolean;
   onTogglePlay: () => void;
   onVolumeChange: (value: number) => void;
   onAddSegment: () => void;
@@ -73,6 +83,8 @@ export function CaptionEditorToolbar({
   canUndo,
   canRedo,
   segmentCount,
+  onGenerateSegments,
+  isGeneratingSegments = false,
   onTogglePlay,
   onVolumeChange,
   onAddSegment,
@@ -94,6 +106,12 @@ export function CaptionEditorToolbar({
   const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1024px)");
   const isCompactLayout = isMobile || isTablet;
   const [mobileVolumeOpen, setMobileVolumeOpen] = useState(false);
+  const hasNoCaptions = segmentCount === 0;
+
+  const triggerGenerateFromMenu = () => {
+    if (!onGenerateSegments || isGeneratingSegments) return;
+    onGenerateSegments();
+  };
   const previewModeItems = useMemo<ActionItem[]>(
     () =>
       previewModes.map((mode) => ({
@@ -110,12 +128,23 @@ export function CaptionEditorToolbar({
   }, [activePreviewMode, previewModes]);
 
   const mobileItems = useMemo<ActionItem[]>(
-    () => [
+    () => {
+      const items: ActionItem[] = [];
+      if (hasNoCaptions && onGenerateSegments) {
+        items.push({
+          label: "Generate captions",
+          icon: Captions,
+          onSelect: triggerGenerateFromMenu,
+          disabled: isGeneratingSegments,
+        });
+        items.push({ type: "separator" });
+      }
+      items.push(
       {
         label: "Global offset",
         icon: SlidersHorizontal,
         onSelect: onOpenGlobalOffsetEditor,
-        disabled: !onOpenGlobalOffsetEditor,
+        disabled: hasNoCaptions || !onOpenGlobalOffsetEditor,
       },
       { type: "separator" },
       // {
@@ -141,32 +170,33 @@ export function CaptionEditorToolbar({
         label: "Add segment",
         icon: Plus,
         onSelect: onAddSegment,
+        disabled: hasNoCaptions,
       },
       {
         label: "Edit selected",
         icon: Pencil,
         onSelect: onEditSelected,
-        disabled: !canEditSelected,
+        disabled: hasNoCaptions || !canEditSelected,
       },
       { type: "separator" },
       {
         label: "Copy selected",
         icon: Clipboard,
         onSelect: onCopy,
-        disabled: !canCopy,
+        disabled: hasNoCaptions || !canCopy,
       },
       {
         label: "Paste",
         icon: Copy,
         onSelect: onPaste,
-        disabled: !canPaste,
+        disabled: hasNoCaptions || !canPaste,
       },
       { type: "separator" },
       {
         label: "Delete selected",
         icon: Trash2,
         onSelect: onDelete,
-        disabled: !canDelete,
+        disabled: hasNoCaptions || !canDelete,
         destructive: true,
       },
       // { type: "separator" },
@@ -180,8 +210,12 @@ export function CaptionEditorToolbar({
       //   icon: Plus,
       //   onSelect: onZoomIn,
       // },
-    ],
+      );
+      return items;
+    },
     [
+      hasNoCaptions,
+      isGeneratingSegments,
       canCopy,
       canDelete,
       canPaste,
@@ -189,13 +223,16 @@ export function CaptionEditorToolbar({
       onCopy,
       onDelete,
       onEditSelected,
+      onGenerateSegments,
       onPaste,
       onOpenGlobalOffsetEditor,
+      triggerGenerateFromMenu,
     ]
   );
 
   if (isCompactLayout) {
     return (
+      <>
         <div className="my-3 flex justify-between gap-2">
           <div className="flex flex-row justify-center items-center gap-2">
             <Tooltip disableMobileDrawer delayDuration={100}>
@@ -289,12 +326,38 @@ export function CaptionEditorToolbar({
             <ResponsiveActionMenu items={mobileItems} title="Caption Actions" />
           </div>
         </div>
+        <Dialog open={isGeneratingSegments}>
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-sm overflow-hidden rounded-2xl bg-linear-to-br from-background via-background to-primary/8  dark:from-zinc-950 dark:via-zinc-950 dark:to-primary/18"
+            onInteractOutside={(event) => event.preventDefault()}
+            onEscapeKeyDown={(event) => event.preventDefault()}
+          >
+            <div className="pointer-events-none absolute -top-18 -right-16 h-44 w-44 rounded-full bg-primary/18 blur-3xl dark:bg-primary/30" />
+            <div className="pointer-events-none absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-primary/12 blur-3xl dark:bg-primary/22" />
+            <DialogHeader className="flex flex-row gap-2 items-center text-center justify-center">
+              <Sparkles className="h-5 w-5 flex shrink-0 text-primary dark:text-primary/90" />
+              <DialogTitle className="text-left text-lg">Generating Captions</DialogTitle>
+            </DialogHeader>
+            <div className="relative mt-1 flex items-center gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xs dark:border-zinc-700/70 dark:bg-zinc-900/70">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-foreground">
+                <Loader2 className="h-4 w-4 animate-spin dark:text-primary flex shrink-0" />
+              </div>
+              <div className="flex min-w-0 flex-col">
+                <span className="font-medium text-foreground">Transcribing and aligning words...</span>
+                <span className="text-xs text-muted-foreground">This can take a few seconds.</span>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
   return (
-    <div className="my-3 flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
+    <>
+      <div className="my-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
         <Tooltip disableMobileDrawer delayDuration={100}>
           <TooltipTrigger asChild>
             <Button type="button" variant="secondary" size="sm" onClick={onTogglePlay}>
@@ -317,8 +380,8 @@ export function CaptionEditorToolbar({
           />
         </div>
       </div>
-      <div className="flex flex-row gap-2">
-        <div className="flex flex-row gap-1">
+        <div className="flex flex-row gap-2">
+          <div className="flex flex-row gap-1">
           {previewModeItems.length > 0 ? (
             <ResponsiveActionMenu
               items={previewModeItems}
@@ -357,18 +420,19 @@ export function CaptionEditorToolbar({
             <TooltipContent side="top">Redo</TooltipContent>
           </Tooltip>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5">
-          <Captions className="h-4 w-4 flex shrink-0 text-muted-foreground" />
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Timeline
-          </span>
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
-          <span className="text-sm font-semibold tabular-nums">{segmentCount}</span>
-          <span className="text-xs text-muted-foreground">
-            segment{segmentCount === 1 ? "" : "s"}
-          </span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5">
+            <Captions className="h-4 w-4 flex shrink-0 text-muted-foreground" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Timeline
+            </span>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
+            <span className="text-sm font-semibold tabular-nums">{segmentCount}</span>
+            <span className="text-xs text-muted-foreground">
+              segment{segmentCount === 1 ? "" : "s"}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -181,6 +181,8 @@ const getMotionPreset = (
 
 const smoothStep = (value: number) => value * value * (3 - 2 * value);
 
+const snapPx = (value: number) => Math.round(value);
+
 const getProgress = (value: number, start: number, end: number) => {
   if (end <= start) return value >= end ? 1 : 0;
   return clamp((value - start) / (end - start), 0, 1);
@@ -326,11 +328,13 @@ export const resolveCaptionRuntime = ({
   const captionPulse = useStableTiktokMotion
     ? 1
     : 1 + Math.sin(enterProgress * Math.PI) * motionPreset.pulseAmount * ease;
-  const captionDepth = lerp(motionPreset.depthFrom, 0, ease);
+  const captionDepth = useStableTiktokMotion ? 0 : lerp(motionPreset.depthFrom, 0, ease);
   const captionOpacity = clamp(ease, 0, 1);
-  const captionTransform = `translate3d(${captionTranslateX.toFixed(2)}px, ${captionTranslateY.toFixed(
+  const captionTransform = `translate3d(${snapPx(captionTranslateX).toFixed(1)}px, ${snapPx(
+    captionTranslateY
+  ).toFixed(1)}px, ${snapPx(captionDepth).toFixed(1)}px) rotate(${captionRotate.toFixed(
     2
-  )}px, ${captionDepth.toFixed(2)}px) rotate(${captionRotate.toFixed(2)}deg) scale(${(
+  )}deg) scale(${(
     captionScale * captionPulse
   ).toFixed(3)})`;
 

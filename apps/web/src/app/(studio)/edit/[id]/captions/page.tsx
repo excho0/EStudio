@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -40,11 +40,43 @@ const buildSettingsWithSharedCaptions = (
   };
 };
 
+const parseSharedCaptionsData = (settings: unknown): CaptionDocument | null => {
+  const settingsMap = normalizeSettingsMap(undefined, settings ?? {});
+  const shared = settingsMap.__shared;
+  if (!shared || typeof shared !== "object" || Array.isArray(shared)) {
+    return null;
+  }
+  const parsed = captionDocumentSchema
+    .nullable()
+    .safeParse((shared as Record<string, unknown>).captionsData ?? null);
+  return parsed.success ? parsed.data : null;
+};
+
+const getCaptionsSignature = (captions: CaptionDocument | null): string => {
+  if (!captions) return "none";
+  return JSON.stringify({
+    backend: captions.backend,
+    language: captions.language,
+    generatedAt: captions.generatedAt,
+    globalOffsetMs: captions.globalOffsetMs ?? 0,
+    segments: captions.segments.map((segment) => [
+      segment.startMs,
+      segment.endMs,
+      segment.text,
+    ]),
+  });
+};
+
 export default function EditCaptionsPage() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [generationWatch, setGenerationWatch] = useState<{
+    contentId: string;
+    baselineSignature: string;
+    startedAt: number;
+  } | null>(null);
 
   const contentQuery = useQuery<ContentItem>({
     queryKey: queryKeys.contentItem(params.id),
@@ -58,28 +90,22 @@ export default function EditCaptionsPage() {
     () => normalizeSettingsMap(mode, item?.settings ?? {}),
     [item?.settings, mode]
   );
-  const resolvedSettings = useMemo(() => {
+  const modeDefinition = useMemo(() => getContentModeDefinition(mode), [mode]);
+  const resolvedSettings = useMemo<typeof modeDefinition.defaults>(() => {
     try {
-      return resolveContentSettings(mode, settingsMap).settings as Record<string, unknown>;
+      return resolveContentSettings(mode, settingsMap)
+        .settings as typeof modeDefinition.defaults;
     } catch {
-      return getContentModeDefinition(mode).defaults as Record<string, unknown>;
+      return modeDefinition.defaults;
     }
-  }, [mode, settingsMap]);
+  }, [mode, modeDefinition.defaults, settingsMap]);
 
   const sharedCaptionsData = useMemo(() => {
-    const shared = settingsMap.__shared;
-    if (!shared || typeof shared !== "object" || Array.isArray(shared)) {
-      return null;
-    }
-    const parsed = captionDocumentSchema
-      .nullable()
-      .safeParse((shared as Record<string, unknown>).captionsData ?? null);
-    return parsed.success ? parsed.data : null;
+    return parseSharedCaptionsData(settingsMap);
   }, [settingsMap]);
 
   const previewOutput = getOutputDefaultsForMode(mode, resolvedSettings);
   const modeUi = useMemo(() => getContentModeUi(mode, pathname), [mode, pathname]);
-  const modeDefinition = useMemo(() => getContentModeDefinition(mode), [mode]);
   const previewComponent = modeUi.previewComponent ?? ContentLoopComposition;
 
   const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
@@ -149,6 +175,70 @@ export default function EditCaptionsPage() {
     },
   });
 
+  const generateCaptionsMutation = useMutation({
+    mutationFn: async () => {
+      if (!item) throw new Error("Content item not found.");
+      await sdk.content.triggerCaptions(item.id, {
+        mode,
+        language: String(resolvedSettings.captionsLanguage ?? "en"),
+      });
+    },
+    onSuccess: () => {
+      if (!item) return;
+      setGenerationWatch({
+        contentId: item.id,
+        baselineSignature: getCaptionsSignature(sharedCaptionsData),
+        startedAt: Date.now(),
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to generate captions."
+      );
+    },
+  });
+
+  useEffect(() => {
+    if (!generationWatch) return;
+    let cancelled = false;
+    const maxWaitMs = 180_000;
+    const pollIntervalMs = 2_000;
+
+    const poll = async () => {
+      if (cancelled) return;
+      if (Date.now() - generationWatch.startedAt > maxWaitMs) {
+        setGenerationWatch(null);
+        toast.error("Caption generation timed out.");
+        return;
+      }
+
+      try {
+        const refreshed = await queryClient.fetchQuery<ContentItem>({
+          queryKey: queryKeys.contentItem(generationWatch.contentId),
+          queryFn: async () => sdk.content.get(generationWatch.contentId),
+        });
+        const nextCaptions = parseSharedCaptionsData(refreshed.settings ?? {});
+        const nextSignature = getCaptionsSignature(nextCaptions);
+        if (nextSignature !== generationWatch.baselineSignature) {
+          setGenerationWatch(null);
+          return;
+        }
+      } catch {
+        // Ignore transient polling failures and retry on next tick.
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, pollIntervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [generationWatch, queryClient]);
+
   if (contentQuery.isLoading) {
     return null;
   }
@@ -164,6 +254,12 @@ export default function EditCaptionsPage() {
         value={sharedCaptionsData}
         mode={mode}
         language={String(resolvedSettings.captionsLanguage ?? "en")}
+        isGeneratingSegments={
+          generateCaptionsMutation.isPending || generationWatch?.contentId === item.id
+        }
+        onGenerateSegments={async () => {
+          await generateCaptionsMutation.mutateAsync();
+        }}
         onSave={async (next, options) => {
           await saveMutation.mutateAsync({
             next,

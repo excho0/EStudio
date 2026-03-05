@@ -42,6 +42,8 @@ type CaptionEditorDrawerProps = {
   value: CaptionDocument | null;
   mode: string;
   language: string;
+  onGenerateSegments?: () => Promise<void> | void;
+  isGeneratingSegments?: boolean;
   onSave: (next: CaptionDocument, options?: { source?: "manual" | "autosave" }) => Promise<void> | void;
   preview: CaptionEditorPreviewProps | null;
   previewModes?: ContentModePreviewVariant[];
@@ -51,6 +53,8 @@ export type CaptionEditorProps = {
   value: CaptionDocument | null;
   mode: string;
   language: string;
+  onGenerateSegments?: () => Promise<void> | void;
+  isGeneratingSegments?: boolean;
   onSave: (next: CaptionDocument, options?: { source?: "manual" | "autosave" }) => Promise<void> | void;
   preview: CaptionEditorPreviewProps | null;
   previewModes?: ContentModePreviewVariant[];
@@ -173,6 +177,8 @@ export function CaptionEditorDrawer({
   value,
   mode,
   language,
+  onGenerateSegments,
+  isGeneratingSegments = false,
   onSave,
   preview,
   previewModes,
@@ -196,6 +202,8 @@ export function CaptionEditorDrawer({
           value={value}
           mode={mode}
           language={language}
+          onGenerateSegments={onGenerateSegments}
+          isGeneratingSegments={isGeneratingSegments}
           onSave={onSave}
           preview={preview}
           previewModes={previewModes}
@@ -211,6 +219,8 @@ export function CaptionEditor({
   value,
   mode,
   language,
+  onGenerateSegments,
+  isGeneratingSegments = false,
   onSave,
   preview,
   previewModes,
@@ -269,16 +279,14 @@ export function CaptionEditor({
   const followSuspendUntilRef = useRef(0);
   const mobilePlaybackTickRef = useRef(0);
   const wasOpenRef = useRef(false);
+  const hydratedValueSnapshotRef = useRef("");
   const baselineDraftRef = useRef<string>("");
   const suppressOffsetInputEffectRef = useRef(false);
   const previewSwitchSnapshotRef = useRef<{ frame: number; wasPlaying: boolean } | null>(null);
 
   const draftSnapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const isDirty = draftSnapshot !== baselineDraftRef.current;
-  const canSave = useMemo(
-    () => draft.segments.length > 0 && isDirty,
-    [draft.segments.length, isDirty]
-  );
+  const canSave = useMemo(() => isDirty, [isDirty]);
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
 
@@ -439,16 +447,17 @@ export function CaptionEditor({
     wasOpenRef.current = active;
     if (!active) return;
 
-    // Hydrate from source value when dialog opens (or when value arrives after open
-    // and current draft is still empty).
-    const shouldHydrate =
-      isOpening || (draft.segments.length === 0 && (value?.segments.length ?? 0) > 0);
+    // Hydrate from source value only when opening. Re-hydrating while open can
+    // resurrect stale segments after autosave/delete-all due to delayed cache updates.
+    const shouldHydrate = isOpening;
     if (!shouldHydrate) return;
 
     const next = normalizeCaptionDocument(value, mode, language);
+    const nextSnapshot = JSON.stringify(next);
     setDraft(next);
     setHistory({ past: [], future: [] });
-    baselineDraftRef.current = JSON.stringify(next);
+    baselineDraftRef.current = nextSnapshot;
+    hydratedValueSnapshotRef.current = nextSnapshot;
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
@@ -459,7 +468,32 @@ export function CaptionEditor({
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(initialOffset));
     setError(null);
-  }, [active, draft.segments.length, language, mode, value]);
+  }, [active, language, mode, value]);
+
+  useEffect(() => {
+    if (!active) return;
+    if (isDirty) return;
+    const next = normalizeCaptionDocument(value, mode, language);
+    const nextSnapshot = JSON.stringify(next);
+    if (nextSnapshot === hydratedValueSnapshotRef.current) return;
+
+    const currentSnapshot = JSON.stringify(draftRef.current);
+    hydratedValueSnapshotRef.current = nextSnapshot;
+    if (currentSnapshot === nextSnapshot) return;
+
+    setDraft(next);
+    setHistory({ past: [], future: [] });
+    baselineDraftRef.current = nextSnapshot;
+    const hasSegments = (next.segments?.length ?? 0) > 0;
+    setSelectedIndex(hasSegments ? 0 : null);
+    setSelectedIndices(hasSegments ? [0] : []);
+    setMobileSelectionMode(false);
+    setActivePreviewMode("full");
+    setCursorMs(0);
+    suppressOffsetInputEffectRef.current = true;
+    setGlobalOffsetMsInput(String(next.globalOffsetMs ?? 0));
+    setError(null);
+  }, [active, isDirty, language, mode, value]);
 
   const handleRestore = () => {
     if (!baselineDraftRef.current) return;
@@ -678,6 +712,17 @@ export function CaptionEditor({
     setSelectedIndices([resolved]);
   };
 
+  const generateSegments = () => {
+    if (isGeneratingSegments) {
+      return;
+    }
+    if (onGenerateSegments) {
+      void onGenerateSegments();
+      return;
+    }
+    addSegment();
+  };
+
   const removeSegment = (index: number) => {
     applyDraftUpdate((current) => {
       const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
@@ -703,7 +748,6 @@ export function CaptionEditor({
   };
 
   const removeSelectedSegments = () => {
-    if (selectedIndices.length === 0) return;
     applyDraftUpdate((current) => {
       const sorted = [...current.segments].sort((a, b) => a.startMs - b.startMs);
       const toRemove = new Set(selectedIndices);
@@ -1594,6 +1638,8 @@ export function CaptionEditor({
             canUndo={canUndo}
             canRedo={canRedo}
             segmentCount={sortedSegments.length}
+            onGenerateSegments={generateSegments}
+            isGeneratingSegments={isGeneratingSegments}
             onTogglePlay={() => {
               const player = playerRef.current;
               if (!player) return;
@@ -1702,6 +1748,9 @@ export function CaptionEditor({
                   selectedIndices={selectedIndices}
                   selectedIndex={selectedIndex}
                   selectedSegment={selectedSegment}
+                  isGeneratingSegments={isGeneratingSegments}
+                  onAddSegment={addSegment}
+                  onGenerateSegments={generateSegments}
                   onRemoveSelected={removeSelectedSegments}
                   onRemoveSingle={removeSegment}
                   toSeconds={toSeconds}
@@ -1758,6 +1807,9 @@ export function CaptionEditor({
                   selectedIndices={selectedIndices}
                   selectedIndex={selectedIndex}
                   selectedSegment={selectedSegment}
+                  isGeneratingSegments={isGeneratingSegments}
+                  onAddSegment={addSegment}
+                  onGenerateSegments={generateSegments}
                   onRemoveSelected={removeSelectedSegments}
                   onRemoveSingle={removeSegment}
                   toSeconds={toSeconds}

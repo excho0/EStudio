@@ -1,6 +1,6 @@
 "use client";
 
-import { SquareDashedMousePointer, Trash2 } from "lucide-react";
+import { Plus, Sparkle, Sparkles, SquareDashed, SquareDashedMousePointer, Trash2 } from "lucide-react";
 import type { CaptionSegment } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,9 @@ type Props = {
   selectedIndices: number[];
   selectedIndex: number | null;
   selectedSegment: CaptionSegment | null;
+  isGeneratingSegments?: boolean;
+  onAddSegment: () => void;
+  onGenerateSegments: () => void;
   onRemoveSelected: () => void;
   onRemoveSingle: (index: number) => void;
   toSeconds: (ms: number) => string;
@@ -25,6 +28,9 @@ export function CaptionEditorInspector({
   selectedIndices,
   selectedIndex,
   selectedSegment,
+  isGeneratingSegments = false,
+  onAddSegment,
+  onGenerateSegments,
   onRemoveSelected,
   onRemoveSingle,
   toSeconds,
@@ -34,8 +40,36 @@ export function CaptionEditorInspector({
 }: Props) {
   if (sortedSegmentsLength === 0) {
     return (
-      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        No caption segments yet. Add one to start editing.
+      <div className="flex flex-col gap-2 h-full items-center text-center justify-center rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        <SquareDashed className="flex shrink-0" />
+        <span className="text-base font-semibold">No caption segments yet.</span>
+
+        <div className="flex flex-row gap-2.5 text-center justify-center items-center mt-2">
+          <Button 
+            size="sm" 
+            disabled={isGeneratingSegments}
+            onClick={onAddSegment}
+          >
+            <Plus className="flex shrink-0"  />
+            Add one
+          </Button>
+          
+          <span>or</span>    
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            loading={isGeneratingSegments}
+            disabled={isGeneratingSegments}
+            onClick={onGenerateSegments}
+          >
+            <Sparkles className="flex shrink-0"  />
+            Generate
+          </Button>
+        </div>
+
+        <span>to start editing.</span>
       </div>
     );
   }
@@ -145,4 +179,3 @@ export function CaptionEditorInspector({
     </div>
   );
 }
-

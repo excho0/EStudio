@@ -53,10 +53,19 @@ export const useRenderProgress = (options?: { paused?: boolean }) => {
       }
     };
     void hydrate();
+    const interval = window.setInterval(() => {
+      void hydrate();
+    }, 3000);
+    const onConnect = () => {
+      void hydrate();
+    };
+    socket?.on("connect", onConnect);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      socket?.off("connect", onConnect);
     };
-  }, [paused]);
+  }, [paused, socket]);
 
   useEffect(() => {
     if (!socket || paused) {

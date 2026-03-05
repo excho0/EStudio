@@ -512,32 +512,6 @@ export default function EditContentPage() {
     }));
   };
 
-  const handleGenerateCaptions: FieldActionHandler = async () => {
-    if (!item) {
-      toast.error("Load the content item first.");
-      return;
-    }
-
-    const mode = formValues.mode || item.mode || DEFAULT_CONTENT_MODE;
-    const language = String(getFieldValue("captionsLanguage") || "en");
-    setModeActionLoading("captions.generate", true);
-    try {
-      await sdk.content.triggerCaptions(item.id, {
-        mode,
-        language,
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.contentItem(item.id),
-      });
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to generate captions."
-      );
-    } finally {
-      setModeActionLoading("captions.generate", false);
-    }
-  };
 
   const handleOpenCaptionsEditor: FieldActionHandler = async () => {
     if (!params.id) return;
@@ -551,7 +525,6 @@ export default function EditContentPage() {
 
   const fieldActionHandlers: Record<string, FieldActionHandler> = {
     "captions.edit": handleOpenCaptionsEditor,
-    "captions.generate": handleGenerateCaptions,
   };
 
   const renderModeField = (field: ContentModeField) => {

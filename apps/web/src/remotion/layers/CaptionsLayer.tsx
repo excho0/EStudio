@@ -1,6 +1,6 @@
 import React from "react";
-import { AbsoluteFill, Sequence, useRemotionEnvironment } from "remotion";
-import { hexToRgba, type CaptionPage } from "../utils";
+import { AbsoluteFill, Sequence } from "remotion";
+import { hexToRgba, mixHex, type CaptionPage } from "../utils";
 
 const CAPTION_FONT_STACK =
   "Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -22,6 +22,36 @@ type CaptionsLayerProps = {
   captionBlur: number;
   captionHighlightColor: string;
   layerOpacity: number;
+};
+
+const easeInOutSine01 = (value: number) => 0.5 - 0.5 * Math.cos(Math.PI * value);
+
+const getTokenHighlightStrength = (
+  tokenFromMs: number,
+  tokenToMs: number,
+  timelineMs: number
+) => {
+  const tokenDuration = Math.max(1, tokenToMs - tokenFromMs);
+  // Wider boundary blend for smoother crossfade between adjacent words.
+  const edgeMs = Math.max(26, Math.min(62, tokenDuration * 0.24));
+
+  const enterStart = tokenFromMs - edgeMs;
+  const enterEnd = tokenFromMs + edgeMs;
+  const exitStart = tokenToMs - edgeMs;
+  const exitEnd = tokenToMs + edgeMs;
+
+  const enterT = Math.max(
+    0,
+    Math.min(1, (timelineMs - enterStart) / Math.max(1, enterEnd - enterStart))
+  );
+  const exitT = Math.max(
+    0,
+    Math.min(1, (timelineMs - exitStart) / Math.max(1, exitEnd - exitStart))
+  );
+
+  const enter = easeInOutSine01(enterT);
+  const exit = 1 - easeInOutSine01(exitT);
+  return Math.max(0, Math.min(1, enter * exit));
 };
 
 export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
@@ -123,17 +153,15 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
               >
                 <div
                   style={{
-                    maxWidth: "88%",
                     fontSize: 42 * captionScale,
                     fontWeight: 900,
                     lineHeight: 1.12,
                     letterSpacing: 0.2,
                     fontFamily: CAPTION_FONT_STACK,
+                    fontSynthesis: "none",
                     textAlign: baseLayoutStyle.textAlign,
                     textTransform: "capitalize",
-                    color: "#FFFFFF",
-                    textShadow: "0 2px 8px rgba(0,0,0,0.82), 0 0 20px rgba(0,0,0,0.55), 0 0 24px rgba(255,255,255,0.1)",
-                    WebkitTextStroke: "0.3px rgba(0,0,0,0.5)",
+                    textShadow: "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.9)",
                     opacity: effectiveCaptionOpacity,
                     transform: captionTransform,
                     filter: `blur(${captionBlur.toFixed(2)}px)`,
@@ -142,16 +170,30 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                   }}
                 >
                   {page.tokens.map((token, tokenIndex) => {
-                    const isActive = token.fromMs <= timelineMs && token.toMs > timelineMs;
+                    const highlightStrength = getTokenHighlightStrength(
+                      token.fromMs,
+                      token.toMs,
+                      timelineMs
+                    );
+                    const tokenColor = mixHex(
+                      "#FFFFFF",
+                      captionHighlightColor,
+                      highlightStrength
+                    );
+                    const glowAlpha = 0.15 + highlightStrength * 0.22;
+                    const glowRadius = 1.4 + highlightStrength * 1.8;
                     return (
                       <span
                         key={`${token.fromMs}-${token.toMs}-${token.text}`}
                         style={{
-                          color: isActive ? captionHighlightColor : "#FFFFFF",
-                          textShadow: isActive
-                            ? `0 0 12px ${hexToRgba(captionHighlightColor, 0.85)}, 0 2px 8px rgba(0,0,0,0.82)`
-                            : "0 2px 6px rgba(0,0,0,0.82)",
-                          transition: "color 90ms linear",
+                          color: tokenColor,
+                          textShadow:
+                            highlightStrength > 0.001
+                              ? `0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
+                                  captionHighlightColor,
+                                  glowAlpha
+                                )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
+                              : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
                         }}
                       >
                         {token.text}
@@ -168,7 +210,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
     );
   }
 
-  if (effectiveCaptionsStyle !== "tiktok" && captionPages.length > 0) {
+  if (effectiveCaptionsStyle === "subtitle" && captionPages.length > 0) {
     return (
       <AbsoluteFill style={{ pointerEvents: "none", zIndex: 30 }}>
         {captionPages.map((page, index) => {
@@ -200,9 +242,10 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                   style={{
                     maxWidth: "86%",
                     fontSize: 40 * captionScale,
-                    fontWeight: 700,
+                    fontWeight: 760,
                     lineHeight: 1.2,
                     fontFamily: CAPTION_FONT_STACK,
+                    fontSynthesis: "none",
                     textAlign: baseLayoutStyle.textAlign,
                     color: "#FFFFFF",
                     background:
@@ -210,8 +253,8 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     border: "1px solid rgba(255,255,255,0.2)",
                     borderRadius: 14,
                     padding: "12px 20px",
-                    textShadow: "0 2px 8px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.35)",
-                    backdropFilter: "blur(5px)",
+                    textShadow: "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
+                    backdropFilter: "blur(4px)",
                     boxShadow:
                       "0 14px 38px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 24px rgba(255,255,255,0.08)",
                     opacity: effectiveCaptionOpacity,
@@ -221,16 +264,30 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                   }}
                 >
                   {page.tokens.map((token, tokenIndex) => {
-                    const isActive = token.fromMs <= timelineMs && token.toMs > timelineMs;
+                    const highlightStrength = getTokenHighlightStrength(
+                      token.fromMs,
+                      token.toMs,
+                      timelineMs
+                    );
+                    const tokenColor = mixHex(
+                      "#FFFFFF",
+                      captionHighlightColor,
+                      highlightStrength
+                    );
+                    const glowAlpha = 0.14 + highlightStrength * 0.2;
+                    const glowRadius = 1.2 + highlightStrength * 1.6;
                     return (
                       <span
                         key={`${token.fromMs}-${token.toMs}-${token.text}`}
                         style={{
-                          color: isActive ? captionHighlightColor : "#FFFFFF",
-                          textShadow: isActive
-                            ? `0 0 12px ${hexToRgba(captionHighlightColor, 0.85)}, 0 2px 8px rgba(0,0,0,0.82)`
-                            : "0 2px 8px rgba(0,0,0,0.82)",
-                          transition: "color 90ms linear",
+                          color: tokenColor,
+                          textShadow:
+                            highlightStrength > 0.001
+                              ? `0 0 ${glowRadius.toFixed(1)}px ${hexToRgba(
+                                  captionHighlightColor,
+                                  glowAlpha
+                                )}, 0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)`
+                              : "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.88)",
                         }}
                       >
                         {token.text}
