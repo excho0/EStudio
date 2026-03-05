@@ -614,7 +614,7 @@ export default function PublishesPage() {
           if (!open) setErrorPublish(null);
         }}
       >
-        <ResponsiveDrawerContent className="w-full sm:max-w-xl">
+        <ResponsiveDrawerContent className="w-full">
           <ResponsiveDrawerHeader>
             <ResponsiveDrawerTitle>Publish {errorPublish?.status === "failed" ? "Error" : "Warning"}</ResponsiveDrawerTitle>
             <ResponsiveDrawerDescription>

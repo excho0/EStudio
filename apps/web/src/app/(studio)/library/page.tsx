@@ -641,7 +641,7 @@ export default function LibraryPage() {
   return (
     <div className="flex flex-col gap-6">
       <ResponsiveDrawer open={renderModePickerOpen} onOpenChange={setRenderModePickerOpen}>
-        <ResponsiveDrawerContent className="w-full sm:max-w-xl">
+        <ResponsiveDrawerContent className="w-full">
           <ResponsiveDrawerHeader>
             <ResponsiveDrawerTitle>Choose Render Mode</ResponsiveDrawerTitle>
           </ResponsiveDrawerHeader>

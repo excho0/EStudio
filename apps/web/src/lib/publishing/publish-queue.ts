@@ -79,7 +79,7 @@ class PublishQueue {
           });
           emitPublishUpdate({
             userId,
-            id: next.publishId,
+            id: publish?.contentId ?? next.publishId,
             jobId: next.publishId,
             status: "queued",
             error: `Retrying upload (${nextAttempt}/${this.maxAttempts})`,
@@ -92,7 +92,7 @@ class PublishQueue {
           });
           emitPublishUpdate({
             userId,
-            id: next.publishId,
+            id: publish?.contentId ?? next.publishId,
             jobId: next.publishId,
             status: "failed",
             error: message,

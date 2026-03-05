@@ -13,6 +13,9 @@ import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { eventBus } from "@/lib/event-bus";
 import { emitPublishUpdate } from "@/lib/socket/manager";
+import { getLogger } from "@/lib/logging";
+
+const publishApiLogger = getLogger("publish-api");
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;
@@ -162,6 +165,10 @@ const failStalePublishes = async (
   contentId: string,
   staleBeforeMs: number
 ) => {
+  publishApiLogger.debug(
+    { userId, contentId, staleBeforeMs },
+    "Checking stale publishes."
+  );
   const db = getDrizzleDb();
   const staleBeforeDate = new Date(staleBeforeMs);
   const staleStatuses = ["queued", "publishing"] as const;
@@ -195,8 +202,13 @@ const failStalePublishes = async (
 
   const staleIds = staleRows.map((row) => row.id).filter(Boolean);
   if (staleIds.length === 0) {
+    publishApiLogger.debug({ userId, contentId }, "No stale publishes found.");
     return;
   }
+  publishApiLogger.warn(
+    { userId, contentId, staleIds, staleCount: staleIds.length },
+    "Marking stale publishes as failed."
+  );
 
   if (isPostgres) {
     await (db as PostgresDrizzleDb)
@@ -235,7 +247,7 @@ const failStalePublishes = async (
   for (const publishId of staleIds) {
     emitPublishUpdate({
       userId,
-      id: publishId,
+      id: contentId,
       jobId: publishId,
       status: "failed",
       error: "Marked failed due to stale publish timeout.",
@@ -438,7 +450,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
     enqueuePublishJob(record.id);
     void eventBus.emit("publish.queued", {
       userId: user.id,
-      id: record.id,
+      id: contentId,
       contentId,
       provider: payload.data.provider,
     });
@@ -474,7 +486,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
     enqueuePublishJob(record.id);
     void eventBus.emit("publish.queued", {
       userId: user.id,
-      id: record.id,
+      id: contentId,
       contentId,
       provider: payload.data.provider,
     });

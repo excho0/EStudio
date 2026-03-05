@@ -370,7 +370,15 @@ export function NotificationCenterDrawer() {
           isTerminalStatus(existing.status) &&
           !isTerminalStatus(job.status)
         ) {
-          return current;
+          const archivedKey = `${existing.key}:attempt:${existing.updatedAt}`;
+          return {
+            ...current,
+            [archivedKey]: {
+              ...existing,
+              key: archivedKey,
+            },
+            [job.key]: job,
+          };
         }
         return { ...current, [job.key]: job };
       });
