@@ -5,7 +5,6 @@ import type {
   captionUpdatePayloadSchema,
   providerConnectionPayloadSchema,
   publishProgressPayloadSchema,
-  publishQueuedPayloadSchema,
   publishUpdatePayloadSchema,
   renderCompletePayloadSchema,
   renderProgressPayloadSchema,
@@ -23,7 +22,6 @@ export type RenderProgressPayload = z.infer<typeof renderProgressPayloadSchema>;
 export type RenderCompletePayload = z.infer<typeof renderCompletePayloadSchema>;
 export type PublishUpdatePayload = z.infer<typeof publishUpdatePayloadSchema>;
 export type PublishProgressPayload = z.infer<typeof publishProgressPayloadSchema>;
-export type PublishQueuedPayload = z.infer<typeof publishQueuedPayloadSchema>;
 export type CaptionUpdatePayload = z.infer<typeof captionUpdatePayloadSchema>;
 export type ProviderConnectionPayload = z.infer<typeof providerConnectionPayloadSchema>;
 export type UserProfileUpdatedPayload = z.infer<typeof userProfileUpdatedPayloadSchema>;
@@ -46,7 +44,7 @@ export type AppEventMap = {
     mode?: string;
     jobId?: string;
   };
-  "publish.queued": PublishQueuedPayload | PublishUpdatePayload;
+  "publish.queued": PublishUpdatePayload;
   "publish.started": PublishUpdatePayload;
   "publish.progress": PublishProgressPayload;
   "publish.completed": PublishUpdatePayload;

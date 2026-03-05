@@ -64,6 +64,7 @@ export const handleTriggerCaptions = async (
   const backend = parsed?.backend ?? (await resolveCaptionBackendSetting());
 
   if (isCaptionQueueEnabled()) {
+    const metadata = item.title ? { title: item.title } : undefined;
     await enqueueCaptionJob({
       id,
       userId,
@@ -76,7 +77,15 @@ export const handleTriggerCaptions = async (
           ? modeSettings.captionsLanguage
           : resolveDefaultCaptionLanguage()),
     });
-    emitCaptionUpdate({ userId, id, jobId, mode, status: "queued", progress: 0 });
+    emitCaptionUpdate({
+      userId,
+      id,
+      jobId,
+      mode,
+      status: "queued",
+      progress: 0,
+      metadata,
+    });
     return NextResponse.json({ ok: true, status: "queued", id, mode, jobId }, { status: 202 });
   }
 

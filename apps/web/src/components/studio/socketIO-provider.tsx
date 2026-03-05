@@ -310,7 +310,7 @@ export function SocketIOProvider({
       status?: string;
     }) => {
       const key = publishToastKey(payload.id, payload.jobId);
-      if (payload.status === "queued" || payload.status === "publishing") {
+      if (payload.status === "publishing") {
         void notifyStarted(`publish:${key}`, "Publish", payload.id);
       } else if (payload.status === "published" || payload.status === "published_with_warning") {
         void notifyCompleted(`publish:${key}`, "Publish", payload.id);
@@ -412,19 +412,32 @@ export function SocketIOProvider({
       });
     };
 
-    const handlePublishQueuedToast = (payload: { id: string; jobId?: string }) => {
+    const handlePublishQueuedToast = (payload: {
+      id: string;
+      jobId?: string;
+    }) => {
       handlePublishUpdateToast({ ...payload, status: "queued" });
     };
 
-    const handlePublishStartedToast = (payload: { id: string; jobId?: string }) => {
+    const handlePublishStartedToast = (payload: {
+      id: string;
+      jobId?: string;
+    }) => {
       handlePublishUpdateToast({ ...payload, status: "publishing" });
     };
 
-    const handlePublishCompletedToast = (payload: { id: string; jobId?: string }) => {
+    const handlePublishCompletedToast = (payload: {
+      id: string;
+      jobId?: string;
+    }) => {
       handlePublishUpdateToast({ ...payload, status: "published" });
     };
 
-    const handlePublishFailedToast = (payload: { id: string; jobId?: string; error?: string }) => {
+    const handlePublishFailedToast = (payload: {
+      id: string;
+      jobId?: string;
+      error?: string;
+    }) => {
       const key = publishToastKey(payload.id, payload.jobId);
       const completed = getCompletedKeys();
       const toastKey = `publish-failed:${key}`;

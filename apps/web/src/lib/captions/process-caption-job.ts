@@ -13,6 +13,10 @@ import { transcribeWithBackend } from "./backend";
 
 const logger = getLogger("captions-job");
 const storage = getStorage();
+const metadataForNotification = (title?: string | null) => {
+  const normalized = title?.trim();
+  return normalized ? { title: normalized } : undefined;
+};
 
 export const processCaptionJob = async ({
   id,
@@ -57,6 +61,7 @@ export const processCaptionJob = async ({
       mode: activeMode,
       status: "processing",
       progress: normalized / 100,
+      metadata: metadataForNotification(item.title),
     });
   };
   emitProcessingProgress(1);
@@ -117,6 +122,7 @@ export const processCaptionJob = async ({
       mode: activeMode,
       status: "completed",
       progress: 1,
+      metadata: metadataForNotification(item.title),
     });
 
     logger.info(
@@ -132,6 +138,7 @@ export const processCaptionJob = async ({
       status: "failed",
       progress: 1,
       error: error instanceof Error ? error.message : String(error),
+      metadata: metadataForNotification(item.title),
     });
     throw error;
   }

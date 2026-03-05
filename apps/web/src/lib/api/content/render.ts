@@ -120,6 +120,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
 
   const shouldUseQueue = isRenderQueueEnabled();
   if (shouldUseQueue) {
+    const metadata = item.title ? { title: item.title } : undefined;
     try {
       const queued = await withRenderRequestLock(userId, id, requestedMode, async () => {
         await setRenderStatusCheckpoint(userId, id, item.status);
@@ -138,6 +139,7 @@ export const handleRenderRequest = async (request: Request, userId: string, id: 
           jobId,
           backend,
           mode: requestedMode,
+          metadata,
         });
         return true;
       });

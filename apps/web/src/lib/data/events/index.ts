@@ -28,6 +28,7 @@ export const renderQueuedPayloadSchema = z.object({
   jobId: z.string().optional(),
   backend: renderBackendSchema.optional(),
   mode: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
 }).describe("Render queued payload.");
 
 /** Render progress event payload. */
@@ -37,6 +38,7 @@ export const renderProgressPayloadSchema = z.object({
   jobId: z.string().optional(),
   mode: z.string().optional(),
   key: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   rendered: z.number(),
   total: z.number(),
   progress: z.number(),
@@ -50,6 +52,7 @@ export const renderCompletePayloadSchema = z.object({
   jobId: z.string().optional(),
   mode: z.string().optional(),
   key: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   durationSeconds: z.number().optional(),
   avgFps: z.number().optional(),
 }).describe("Render complete payload.");
@@ -59,6 +62,7 @@ export const publishUpdatePayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
   jobId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   status: z.string(),
   providerAssetId: z.string().optional(),
   error: z.string().optional(),
@@ -69,19 +73,12 @@ export const publishProgressPayloadSchema = z.object({
   userId: z.string().nullable().optional(),
   id: z.string(),
   jobId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   stage: z.string(),
   progress: z.number().optional(),
   bytesUploaded: z.number().optional(),
   bytesTotal: z.number().optional(),
 }).describe("Publish progress payload.");
-
-/** Publish queued event payload. */
-export const publishQueuedPayloadSchema = z.object({
-  userId: z.string(),
-  id: z.string(),
-  contentId: z.string(),
-  provider: z.string(),
-}).describe("Publish queued payload.");
 
 /** Caption update event payload. */
 export const captionUpdatePayloadSchema = z.object({
@@ -89,6 +86,7 @@ export const captionUpdatePayloadSchema = z.object({
   id: z.string(),
   jobId: z.string().optional(),
   mode: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   status: z.enum(["queued", "processing", "completed", "failed"]),
   progress: z.number().optional(),
   error: z.string().optional(),

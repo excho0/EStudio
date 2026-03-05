@@ -12,14 +12,18 @@ export const liveNotificationSnapshotSchema = notificationItemSchema.pick({
   progress: true,
   stage: true,
   error: true,
+  metadata: true,
   updatedAt: true,
 });
 
 export type LiveNotificationSnapshot = z.infer<typeof liveNotificationSnapshotSchema>;
-export type LiveNotificationSnapshotInput = Omit<
-  LiveNotificationSnapshot,
-  "id" | "updatedAt"
-> & { updatedAt?: number };
+const liveNotificationSnapshotInputSchema = liveNotificationSnapshotSchema
+  .omit({ id: true, updatedAt: true })
+  .extend({ updatedAt: z.number().optional() });
+
+export type LiveNotificationSnapshotInput = z.infer<
+  typeof liveNotificationSnapshotInputSchema
+>;
 
 const liveStore = createScopedSnapshotStore<LiveNotificationSnapshot>({
   keyPrefix: "notifications:live",
@@ -41,6 +45,7 @@ export const setLiveNotificationSnapshot = async (
     progress: payload.progress,
     stage: payload.stage,
     error: payload.error,
+    metadata: payload.metadata,
     updatedAt: payload.updatedAt ?? Date.now(),
   });
 };

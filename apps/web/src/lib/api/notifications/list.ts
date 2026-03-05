@@ -48,7 +48,7 @@ export const handleListNotifications = async (
       progress: live.progress,
       stage: live.stage,
       error: live.error,
-      metadata: existing?.metadata ?? null,
+      metadata: live.metadata ?? existing?.metadata ?? null,
       readAt: existing?.readAt ?? null,
       createdAt: existing?.createdAt ?? live.updatedAt,
       updatedAt: Math.max(existing?.updatedAt ?? 0, live.updatedAt),

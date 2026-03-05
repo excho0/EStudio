@@ -14,8 +14,19 @@ import {
   getRenderProgressSnapshot,
   setRenderProgressSnapshot,
 } from "@/lib/rendering/progress-store";
-import { enqueueNotificationPersist } from "@/lib/notifications/persist-queue";
-import type { NotificationStatus } from "@/types";
+import {
+  enqueueNotificationPersist,
+  type NotificationPersistPayload,
+} from "@/lib/notifications/persist-queue";
+
+type RenderQueuedEmitterPayload = AppEventMap["render.queued"];
+type RenderProgressEmitterPayload = RenderProgressPayload;
+type RenderCompleteEmitterPayload = RenderCompletePayload;
+type RenderCancelRequestedEmitterPayload = AppEventMap["render.cancel-requested"];
+type PublishUpdateEmitterPayload = PublishUpdatePayload;
+type PublishProgressEmitterPayload = PublishProgressPayload;
+type CaptionUpdateEmitterPayload = CaptionUpdatePayload;
+type SettingsUpdatedEmitterPayload = SettingsUpdatedPayload;
 const emitDomainEvent = <TTopic extends keyof AppEventMap>(
   topic: TTopic,
   payload: AppEventMap[TTopic]
@@ -30,17 +41,7 @@ const getNotificationKey = (
   jobId?: string
 ) => (jobId ? `${kind}:${jobId}` : `${kind}:${id}:${mode?.trim() || "default"}`);
 
-const persistNotification = (payload: {
-  userId?: string | null;
-  key: string;
-  contentId: string;
-  mode?: string;
-  kind: "render" | "publish" | "caption";
-  status: NotificationStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-}) => {
+const persistNotification = (payload: NotificationPersistPayload) => {
   void enqueueNotificationPersist(payload);
 };
 
@@ -114,13 +115,7 @@ export const emitContentUpdate = (payload: AppEventMap["content.update"]) => {
   }
 };
 
-export const emitRenderQueued = (payload: {
-  userId: string;
-  id: string;
-  jobId?: string;
-  backend?: string;
-  mode?: string;
-}) => {
+export const emitRenderQueued = (payload: RenderQueuedEmitterPayload) => {
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("render", payload.id, payload.mode, payload.jobId),
@@ -130,21 +125,12 @@ export const emitRenderQueued = (payload: {
     status: "queued",
     progress: 0,
     stage: "Queued",
+    metadata: payload.metadata,
   });
-  emitDomainEvent("render.queued", payload as AppEventMap["render.queued"]);
+  emitDomainEvent("render.queued", payload);
 };
 
-export const emitRenderProgress = (payload: {
-  userId?: string | null;
-  id: string;
-  jobId?: string;
-  mode?: string;
-  key?: string;
-  rendered: number;
-  total: number;
-  progress: number;
-  eta?: string;
-}) => {
+export const emitRenderProgress = (payload: RenderProgressEmitterPayload) => {
   void setRenderProgressSnapshot(payload);
   persistNotification({
     userId: payload.userId,
@@ -154,19 +140,12 @@ export const emitRenderProgress = (payload: {
     kind: "render",
     status: "rendering",
     progress: payload.progress,
+    metadata: payload.metadata,
   });
-  emitDomainEvent("render.progress", payload as RenderProgressPayload);
+  emitDomainEvent("render.progress", payload);
 };
 
-export const emitRenderComplete = (payload: {
-  userId?: string | null;
-  id: string;
-  jobId?: string;
-  mode?: string;
-  key?: string;
-  durationSeconds?: number;
-  avgFps?: number;
-}) => {
+export const emitRenderComplete = (payload: RenderCompleteEmitterPayload) => {
   void clearRenderProgressSnapshot({
     userId: payload.userId,
     id: payload.id,
@@ -181,16 +160,14 @@ export const emitRenderComplete = (payload: {
     kind: "render",
     status: "completed",
     progress: 1,
+    metadata: payload.metadata,
   });
-  emitDomainEvent("render.completed", payload as RenderCompletePayload);
+  emitDomainEvent("render.completed", payload);
 };
 
-export const emitRenderCancelRequested = (payload: {
-  userId?: string | null;
-  id: string;
-  mode?: string;
-  jobId?: string;
-}) => {
+export const emitRenderCancelRequested = (
+  payload: RenderCancelRequestedEmitterPayload
+) => {
   emitDomainEvent("render.cancel-requested", payload);
   persistNotification({
     userId: payload.userId,
@@ -204,14 +181,7 @@ export const emitRenderCancelRequested = (payload: {
   });
 };
 
-export const emitPublishUpdate = (payload: {
-  userId?: string | null;
-  id: string;
-  jobId?: string;
-  status: string;
-  providerAssetId?: string;
-  error?: string;
-}) => {
+export const emitPublishUpdate = (payload: PublishUpdateEmitterPayload) => {
   const typedPayload = payload as PublishUpdatePayload;
   emitDomainEvent("publish.update", typedPayload);
   if (payload.status === "publishing") {
@@ -241,18 +211,11 @@ export const emitPublishUpdate = (payload: {
         ? 1
         : undefined,
     error: payload.error,
+    metadata: payload.metadata,
   });
 };
 
-export const emitPublishProgress = (payload: {
-  userId?: string | null;
-  id: string;
-  jobId?: string;
-  stage: string;
-  progress?: number;
-  bytesUploaded?: number;
-  bytesTotal?: number;
-}) => {
+export const emitPublishProgress = (payload: PublishProgressEmitterPayload) => {
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("publish", payload.id, undefined, payload.jobId),
@@ -261,19 +224,12 @@ export const emitPublishProgress = (payload: {
     status: "publishing",
     progress: payload.progress,
     stage: payload.stage,
+    metadata: payload.metadata,
   });
-  emitDomainEvent("publish.progress", payload as PublishProgressPayload);
+  emitDomainEvent("publish.progress", payload);
 };
 
-export const emitCaptionUpdate = (payload: {
-  userId?: string | null;
-  id: string;
-  jobId?: string;
-  mode?: string;
-  status: Extract<NotificationStatus, "queued" | "processing" | "completed" | "failed">;
-  progress?: number;
-  error?: string;
-}) => {
+export const emitCaptionUpdate = (payload: CaptionUpdateEmitterPayload) => {
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("caption", payload.id, payload.mode, payload.jobId),
@@ -287,9 +243,10 @@ export const emitCaptionUpdate = (payload: {
           ? "processing"
           : payload.status === "failed"
             ? "failed"
-            : "completed",
+          : "completed",
     progress: payload.progress,
     error: payload.error,
+    metadata: payload.metadata,
   });
   const typedPayload = payload as CaptionUpdatePayload;
   emitDomainEvent("caption.update", typedPayload);
@@ -304,15 +261,8 @@ export const emitCaptionUpdate = (payload: {
   }
 };
 
-export const emitSettingsUpdated = (payload: {
-  userId: string;
-  settings: {
-    captions: {
-      backend?: "openai" | "local" | "captions-api-app";
-    };
-  };
-}) => {
-  emitDomainEvent("settings.updated", payload as SettingsUpdatedPayload);
+export const emitSettingsUpdated = (payload: SettingsUpdatedEmitterPayload) => {
+  emitDomainEvent("settings.updated", payload);
 };
 
 export {

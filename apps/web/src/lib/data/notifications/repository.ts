@@ -1,27 +1,22 @@
 import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
-import {
-  type NotificationItem,
-  type NotificationKind,
-  type NotificationStatus,
-} from "@/types";
+import { z } from "zod";
+import { type NotificationItem, type NotificationKind, type NotificationStatus } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { withNotificationsDb } from "./db";
+import { notificationItemSchema } from "./schemas";
 import type { NotificationsListQuery } from "./schemas";
 
-type UpsertNotificationInput = {
-  userId: string;
-  key: string;
-  contentId: string;
-  mode?: string;
-  kind: NotificationKind;
-  status: NotificationStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-  metadata?: Record<string, unknown> | null;
-  updatedAt?: number;
-};
+const upsertNotificationInputSchema = notificationItemSchema
+  .omit({
+    id: true,
+    readAt: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({ updatedAt: z.number().optional() });
+
+type UpsertNotificationInput = z.infer<typeof upsertNotificationInputSchema>;
 
 const parseSqliteMetadata = (value: string | null) => {
   if (!value) return null;
@@ -114,19 +109,22 @@ export async function upsertNotificationByKey(input: UpsertNotificationInput) {
 
       const updatedAtDate = new Date(input.updatedAt ?? now.getTime());
       if (existing[0]?.id) {
+        const updateValues: Partial<InferInsertModel<typeof schema.notifications>> = {
+          contentId: input.contentId,
+          mode: input.mode,
+          kind: input.kind,
+          status: input.status,
+          progress: input.progress,
+          stage: input.stage,
+          error: input.error,
+          updatedAt: updatedAtDate,
+        };
+        if (input.metadata !== undefined) {
+          updateValues.metadata = input.metadata ?? null;
+        }
         await db
           .update(table)
-          .set({
-            contentId: input.contentId,
-            mode: input.mode,
-            kind: input.kind,
-            status: input.status,
-            progress: input.progress,
-            stage: input.stage,
-            error: input.error,
-            metadata: input.metadata ?? null,
-            updatedAt: updatedAtDate,
-          })
+          .set(updateValues)
           .where(eq(table.id, existing[0].id));
         return existing[0].id;
       }
@@ -159,19 +157,22 @@ export async function upsertNotificationByKey(input: UpsertNotificationInput) {
       const updatedAt = input.updatedAt ?? nowMs;
       const updatedAtDate = new Date(updatedAt);
       if (existing[0]?.id) {
+        const updateValues: Partial<InferInsertModel<typeof sqliteSchema.notifications>> = {
+          contentId: input.contentId,
+          mode: input.mode,
+          kind: input.kind,
+          status: input.status,
+          progress: input.progress,
+          stage: input.stage,
+          error: input.error,
+          updatedAt: updatedAtDate,
+        };
+        if (input.metadata !== undefined) {
+          updateValues.metadata = input.metadata ? JSON.stringify(input.metadata) : null;
+        }
         await db
           .update(table)
-          .set({
-            contentId: input.contentId,
-            mode: input.mode,
-            kind: input.kind,
-            status: input.status,
-            progress: input.progress,
-            stage: input.stage,
-            error: input.error,
-            metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-            updatedAt: updatedAtDate,
-          })
+          .set(updateValues)
           .where(eq(table.id, existing[0].id));
         return existing[0].id;
       }

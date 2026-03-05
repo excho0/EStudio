@@ -3,31 +3,28 @@ if (process.env.NEXT_RUNTIME === "nodejs" || process.env.NEXT_RUNTIME === "edge"
   require("server-only");
 }
 
-import type { NotificationKind, NotificationStatus } from "@/types";
+import { z } from "zod";
+import type { NotificationStatus } from "@/types";
 import { upsertNotificationByKey } from "@/lib/data/notifications";
+import { getContentItem } from "@/lib/data/content";
+import { notificationStatusSchema } from "@/lib/data/notifications/schemas";
 import {
   clearLiveNotificationSnapshot,
+  type LiveNotificationSnapshotInput,
   setLiveNotificationSnapshot,
 } from "@/lib/notifications/live-store";
 
-type NotificationPersistPayload = {
+export type NotificationPersistPayload = LiveNotificationSnapshotInput & {
   userId?: string | null;
-  key: string;
-  contentId: string;
-  mode?: string;
-  kind: NotificationKind;
-  status: NotificationStatus;
-  progress?: number;
-  stage?: string;
-  error?: string;
-  updatedAt?: number;
 };
 
-type PersistCheckpoint = {
-  at: number;
-  status: NotificationStatus;
-  bucket: number;
-};
+const persistCheckpointSchema = z.object({
+  at: z.number(),
+  status: notificationStatusSchema,
+  bucket: z.number().int().nonnegative(),
+});
+
+type PersistCheckpoint = z.infer<typeof persistCheckpointSchema>;
 
 const pending = new Map<string, NotificationPersistPayload>();
 const checkpoints = new Map<string, PersistCheckpoint>();
@@ -58,6 +55,32 @@ const nextMonotonicTimestamp = () => {
   const now = Date.now();
   lastTimestamp = now > lastTimestamp ? now : lastTimestamp + 1;
   return lastTimestamp;
+};
+
+const hasNonEmptyTitle = (metadata?: Record<string, unknown> | null) =>
+  typeof metadata?.title === "string" && metadata.title.trim().length > 0;
+
+const withResolvedNotificationMetadata = async (
+  payload: NotificationPersistPayload
+): Promise<NotificationPersistPayload> => {
+  if (!payload.userId) return payload;
+  if (hasNonEmptyTitle(payload.metadata)) return payload;
+  if (!payload.contentId) return payload;
+
+  try {
+    const item = await getContentItem(payload.userId, payload.contentId);
+    const title = item?.title?.trim();
+    if (!title) return payload;
+    return {
+      ...payload,
+      metadata: {
+        ...(payload.metadata ?? {}),
+        title,
+      },
+    };
+  } catch {
+    return payload;
+  }
 };
 
 const isTerminal = (status: NotificationStatus) =>
@@ -103,6 +126,7 @@ const flushBatch = async (entries: NotificationPersistPayload[]) => {
           progress: payload.progress,
           stage: payload.stage,
           error: payload.error,
+          metadata: payload.metadata ?? null,
           updatedAt: payload.updatedAt,
         });
         rememberPersist(payload);
@@ -140,26 +164,28 @@ export const enqueueNotificationPersist = async (payload: NotificationPersistPay
     ...payload,
     updatedAt: payload.updatedAt ?? nextMonotonicTimestamp(),
   };
+  const enrichedPayload = await withResolvedNotificationMetadata(normalizedPayload);
 
   await setLiveNotificationSnapshot(payload.userId, {
-    key: normalizedPayload.key,
-    contentId: normalizedPayload.contentId,
-    mode: normalizedPayload.mode,
-    kind: normalizedPayload.kind,
-    status: normalizedPayload.status,
-    progress: normalizedPayload.progress,
-    stage: normalizedPayload.stage,
-    error: normalizedPayload.error,
-    updatedAt: normalizedPayload.updatedAt,
+    key: enrichedPayload.key,
+    contentId: enrichedPayload.contentId,
+    mode: enrichedPayload.mode,
+    kind: enrichedPayload.kind,
+    status: enrichedPayload.status,
+    progress: enrichedPayload.progress,
+    stage: enrichedPayload.stage,
+    error: enrichedPayload.error,
+    metadata: enrichedPayload.metadata ?? undefined,
+    updatedAt: enrichedPayload.updatedAt,
   });
 
-  if (!shouldPersistNow(normalizedPayload)) {
+  if (!shouldPersistNow(enrichedPayload)) {
     return;
   }
 
   pending.set(
-    `${normalizedPayload.userId}:${normalizedPayload.key}`,
-    normalizedPayload
+    `${enrichedPayload.userId}:${enrichedPayload.key}`,
+    enrichedPayload
   );
   scheduleFlush();
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   Clapperboard,
@@ -42,15 +42,23 @@ type JobStatus = NotificationStatus;
 
 type ActivityHydratedItem = Pick<
   NotificationItem,
-  "key" | "contentId" | "mode" | "kind" | "status" | "progress" | "stage" | "error" | "updatedAt"
+  | "key"
+  | "contentId"
+  | "mode"
+  | "kind"
+  | "status"
+  | "progress"
+  | "stage"
+  | "error"
+  | "metadata"
+  | "updatedAt"
 > & {
   jobId?: string;
-  contentTitle?: string;
+  title?: string;
 };
 
-type ActivityJob = Omit<ActivityHydratedItem, "contentId" | "contentTitle"> & {
+type ActivityJob = Omit<ActivityHydratedItem, "contentId"> & {
   id: string;
-  title?: string;
 };
 
 const isActiveStatus = (status: JobStatus) =>
@@ -107,7 +115,7 @@ const compareJobsByRecency = (left: ActivityJob, right: ActivityJob) => {
 const toActivityJob = (item: ActivityHydratedItem): ActivityJob => ({
   key: item.key,
   id: item.contentId,
-  title: item.contentTitle,
+  title: item.title,
   jobId: item.jobId,
   mode: item.mode,
   kind: item.kind,
@@ -149,7 +157,6 @@ const dedupeJobs = (items: ActivityJob[]) => {
   return Array.from(map.values()).sort(compareJobsByRecency);
 };
 
-
 const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
   const map = new Map<string, ActivityJob>();
   for (const item of items) {
@@ -165,6 +172,28 @@ const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
     map.set(subjectKey, pickPreferredJob(existing, item));
   }
   return Array.from(map.values()).sort(compareJobsByRecency);
+};
+
+const parseTitleFromNotificationMetadata = (metadata: Record<string, unknown> | null | undefined) => {
+  const title = metadata?.title;
+  if (typeof title !== "string") return undefined;
+  const normalized = title.trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const parseNotificationKeyContext = (kind: JobKind, key: string) => {
+  const prefix = `${kind}:`;
+  if (!key.startsWith(prefix)) {
+    return { jobId: undefined, mode: undefined } as const;
+  }
+  const parts = key.split(":");
+  if (parts.length === 2) {
+    return { jobId: parts[1], mode: undefined } as const;
+  }
+  if (parts.length >= 3) {
+    return { jobId: undefined, mode: parts.slice(2).join(":") } as const;
+  }
+  return { jobId: undefined, mode: undefined } as const;
 };
 
 const SectionHeader = ({
@@ -202,6 +231,16 @@ const JobCard = ({
     isProgressStatus &&
     (job.kind === "render" || job.kind === "caption" || job.kind === "publish") &&
     typeof progressValue === "number";
+  const modeLabel = job.mode?.trim();
+  const showMode = job.kind !== "publish" && Boolean(modeLabel);
+  const warningCompletedClassName =
+    job.status === "completed" && typeof job.error === "string" && job.error.trim().length > 0
+      ? "border-emerald-300/60 bg-gradient-to-r from-amber-100 via-lime-100 to-emerald-100 text-emerald-900 dark:border-emerald-400/40 dark:from-amber-500/25 dark:via-lime-500/20 dark:to-emerald-500/25 dark:text-emerald-100 [&_svg]:text-amber-700 dark:[&_svg]:text-lime-200"
+      : undefined;
+  const warningCompletedErrorClassName =
+    job.status === "completed" && typeof job.error === "string" && job.error.trim().length > 0
+      ? "text-amber-700 dark:text-amber-300"
+      : "text-destructive";
 
   return (
     <motion.button
@@ -221,12 +260,18 @@ const JobCard = ({
             {kindMeta.label} · {job.title?.trim() || `#${shortId(job.id)}`}
           </p>
         </div>
-        <JobStatusBadge status={job.status} showLabel />
+        <JobStatusBadge
+          status={job.status}
+          showLabel
+          className={warningCompletedClassName}
+        />
       </div>
 
-      <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span className="truncate">{job.mode ?? "default mode"}</span>
-      </div>
+      {showMode ? (
+        <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span className="truncate">{modeLabel}</span>
+        </div>
+      ) : null}
 
       {showProgress ? (
         <div className="space-y-1.5">
@@ -239,7 +284,9 @@ const JobCard = ({
       ) : null}
 
       {job.error ? (
-        <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{job.error}</p>
+        <p className={`mt-2 line-clamp-2 text-[11px] ${warningCompletedErrorClassName}`}>
+          {job.error}
+        </p>
       ) : null}
     </motion.button>
   );
@@ -281,7 +328,6 @@ export function NotificationCenterDrawer() {
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>({});
   const { socket } = useSocketIO();
-  const titleByContentIdRef = useRef<Map<string, string>>(new Map());
 
   const bootstrapQuery = useQuery({
     queryKey: ["notification-center", "bootstrap"],
@@ -293,37 +339,19 @@ export function NotificationCenterDrawer() {
         sdk.notifications.list({ limit: 100 }).catch(() => ({ items: [] })),
         sdk.content.progress().catch(() => ({ items: {} })),
       ]);
-      const contentIds = Array.from(
-        new Set(
-          (notifications.items as ActivityHydratedItem[])
-            .map((item) => item.contentId)
-            .filter(Boolean)
-        )
-      );
-      const titleEntries = await Promise.all(
-        contentIds.map(async (contentId) => {
-          try {
-            const content = await sdk.content.get(contentId);
-            return [contentId, content.title] as const;
-          } catch {
-            return [contentId, undefined] as const;
-          }
-        })
-      );
-      const titleMap = new Map<string, string | undefined>(titleEntries);
-      titleEntries.forEach(([contentId, title]) => {
-        if (title) {
-          titleByContentIdRef.current.set(contentId, title);
-        }
-      });
 
       const results: ActivityJob[] = [];
       const activityItems = notifications.items as ActivityHydratedItem[];
       activityItems.forEach((item) => {
+        const keyContext = parseNotificationKeyContext(item.kind, item.key);
+        const resolvedJobId = item.jobId ?? keyContext.jobId;
+        const resolvedMode = item.mode ?? keyContext.mode;
         results.push(
           toActivityJob({
             ...item,
-            contentTitle: titleMap.get(item.contentId),
+            jobId: resolvedJobId,
+            mode: resolvedMode,
+            title: parseTitleFromNotificationMetadata(item.metadata),
           })
         );
       });
@@ -345,7 +373,7 @@ export function NotificationCenterDrawer() {
         results.push({
           key,
           id: typed.id,
-          title: titleMap.get(typed.id),
+          title: undefined,
           jobId: typed.jobId,
           mode: typed.mode,
           kind: "render",
@@ -365,6 +393,21 @@ export function NotificationCenterDrawer() {
     const upsert = (job: ActivityJob) => {
       setJobs((current) => {
         const existing = current[job.key];
+        // Ignore out-of-order regressions (e.g. late progress after completion).
+        // Allow explicit requeue transitions to reopen the same job key.
+        if (
+          existing &&
+          isTerminalStatus(existing.status) &&
+          !isTerminalStatus(job.status) &&
+          job.status !== "queued"
+        ) {
+          return current;
+        }
+        const resolvedTitle = job.title?.trim() || existing?.title;
+        const nextJob = {
+          ...job,
+          title: resolvedTitle,
+        };
         if (
           existing &&
           isTerminalStatus(existing.status) &&
@@ -377,10 +420,10 @@ export function NotificationCenterDrawer() {
               ...existing,
               key: archivedKey,
             },
-            [job.key]: job,
+            [job.key]: nextJob,
           };
         }
-        return { ...current, [job.key]: job };
+        return { ...current, [job.key]: nextJob };
       });
     };
 
@@ -403,7 +446,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: parseTitleFromNotificationMetadata(payload.metadata),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
@@ -420,7 +463,9 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: "metadata" in payload
+          ? parseTitleFromNotificationMetadata(payload.metadata)
+          : undefined,
         jobId: payload.jobId,
         mode,
         kind: "render",
@@ -436,7 +481,7 @@ export function NotificationCenterDrawer() {
       const now = Date.now();
       setJobs((current) => {
         const next = { ...current };
-        const title = titleByContentIdRef.current.get(payload.id);
+        const title = undefined;
         const hasExactTarget = Boolean(payload.jobId);
         let matched = false;
 
@@ -481,7 +526,7 @@ export function NotificationCenterDrawer() {
         upsert({
           key,
           id: payload.id,
-          title: titleByContentIdRef.current.get(payload.id),
+          title: undefined,
           kind: "render",
           status: "failed",
           progress: 1,
@@ -496,7 +541,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: parseTitleFromNotificationMetadata(payload.metadata),
         jobId: payload.jobId,
         kind: "publish",
         status,
@@ -511,7 +556,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: parseTitleFromNotificationMetadata(payload.metadata),
         jobId: payload.jobId,
         kind: "publish",
         status: "publishing",
@@ -536,7 +581,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: parseTitleFromNotificationMetadata(payload.metadata),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "caption",
@@ -552,7 +597,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: parseTitleFromNotificationMetadata(payload.metadata),
         jobId: payload.jobId,
         mode: payload.mode,
         kind: "render",
@@ -568,7 +613,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: undefined,
         jobId: payload.jobId,
         kind: "render",
         status: "rendering",
@@ -582,7 +627,7 @@ export function NotificationCenterDrawer() {
       upsert({
         key,
         id: payload.id,
-        title: titleByContentIdRef.current.get(payload.id),
+        title: undefined,
         jobId: payload.jobId,
         kind: "render",
         status: "failed",
@@ -592,10 +637,9 @@ export function NotificationCenterDrawer() {
     };
 
     const handlePublishQueued = (payload: AppEventMap["publish.queued"]) => {
-      const jobId = "jobId" in payload ? payload.jobId : undefined;
       handlePublishUpdate({
         id: payload.id,
-        jobId,
+        jobId: payload.jobId,
         status: "queued",
       });
     };

@@ -76,7 +76,6 @@ export type {
   RenderCompletePayload,
   PublishUpdatePayload,
   PublishProgressPayload,
-  PublishQueuedPayload,
   ProviderConnectionPayload,
   SettingsUpdatedPayload,
   UserProfileUpdatedPayload,
