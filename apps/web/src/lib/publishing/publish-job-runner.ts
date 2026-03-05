@@ -6,11 +6,13 @@ import {
   findContentAssetPath,
   resolveContentPath,
 } from "@/lib/content/store";
+import { getLogger } from "@/lib/logging";
 import { emitPublishProgress, emitPublishUpdate } from "@/lib/socket/manager";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getStorage, storageKey } from "@/lib/storage";
 
+const publishLogger = getLogger("publish-job-runner");
 
 export type PublishJob = {
   publishId: string;
@@ -94,8 +96,26 @@ export const updatePublish = async (
 };
 
 export const runPublishJob = async (job: PublishJob) => {
+  publishLogger.info(
+    { publishId: job.publishId, attempt: job.attempt, maxAttempts: job.maxAttempts },
+    "Publish job started."
+  );
   const publish = await readPublishRow(job.publishId);
-  if (!publish) return;
+  if (!publish) {
+    publishLogger.warn({ publishId: job.publishId }, "Publish row not found.");
+    return;
+  }
+  publishLogger.debug(
+    {
+      publishId: job.publishId,
+      userId: publish.userId,
+      contentId: publish.contentId,
+      provider: publish.provider,
+      attempt: job.attempt,
+      maxAttempts: job.maxAttempts,
+    },
+    "Publish job context resolved."
+  );
 
   const storage = getStorage();
 
@@ -107,20 +127,29 @@ export const runPublishJob = async (job: PublishJob) => {
   });
   emitPublishUpdate({
     userId: publish.userId,
-    id: job.publishId,
+    id: publish.contentId,
     jobId: job.publishId,
     status: "publishing",
   });
 
   const adapter = getProviderAdapter(publish.provider);
   if (!adapter) {
+    publishLogger.warn(
+      {
+        publishId: job.publishId,
+        userId: publish.userId,
+        contentId: publish.contentId,
+        provider: publish.provider,
+      },
+      "Publish provider adapter not found."
+    );
     await updatePublish(job.publishId, {
       status: "failed",
       error: "Unknown provider.",
     });
     emitPublishUpdate({
       userId: publish.userId,
-      id: job.publishId,
+      id: publish.contentId,
       jobId: job.publishId,
       status: "failed",
     });
@@ -146,13 +175,22 @@ export const runPublishJob = async (job: PublishJob) => {
   );
   const renderPath = resolveContentPath(renderKey);
   if (!(await storage.exists(renderKey))) {
+    publishLogger.warn(
+      {
+        publishId: job.publishId,
+        userId: publish.userId,
+        contentId: publish.contentId,
+        renderKey,
+      },
+      "Render file missing for publish job."
+    );
     await updatePublish(job.publishId, {
       status: "failed",
       error: "Render file not found.",
     });
     emitPublishUpdate({
       userId: publish.userId,
-      id: job.publishId,
+      id: publish.contentId,
       jobId: job.publishId,
       status: "failed",
     });
@@ -203,7 +241,7 @@ export const runPublishJob = async (job: PublishJob) => {
           lastStage = stage;
           emitPublishProgress({
             userId: publish.userId,
-            id: job.publishId,
+            id: publish.contentId,
             jobId: job.publishId,
             stage,
           });
@@ -216,7 +254,7 @@ export const runPublishJob = async (job: PublishJob) => {
         lastPercent = percent;
         emitPublishProgress({
           userId: publish.userId,
-          id: job.publishId,
+          id: publish.contentId,
           jobId: job.publishId,
           stage: progress.stage,
           progress:
@@ -238,12 +276,22 @@ export const runPublishJob = async (job: PublishJob) => {
     });
     emitPublishUpdate({
       userId: publish.userId,
-      id: job.publishId,
+      id: publish.contentId,
       jobId: job.publishId,
       status: result.status ?? "published",
       providerAssetId: result.providerAssetId,
       error: result.warning ?? undefined,
     });
+    publishLogger.info(
+      {
+        publishId: job.publishId,
+        userId: publish.userId,
+        contentId: publish.contentId,
+        status: result.status ?? "published",
+        providerAssetId: result.providerAssetId ?? null,
+      },
+      "Publish job completed."
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Publish failed unexpectedly.";
@@ -257,11 +305,22 @@ export const runPublishJob = async (job: PublishJob) => {
     });
     emitPublishUpdate({
       userId: publish.userId,
-      id: job.publishId,
+      id: publish.contentId,
       jobId: job.publishId,
       status: "failed",
       error: `${attemptLabel} failed: ${message}`,
     });
+    publishLogger.error(
+      {
+        publishId: job.publishId,
+        userId: publish.userId,
+        contentId: publish.contentId,
+        attempt: job.attempt,
+        maxAttempts: job.maxAttempts,
+        error: message,
+      },
+      "Publish job failed."
+    );
     throw new Error(message);
   }
 };

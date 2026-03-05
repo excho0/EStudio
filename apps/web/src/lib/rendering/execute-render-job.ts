@@ -587,6 +587,8 @@ export const startRenderJob = async ({
         onStart: ({ frameCount, parallelEncoding, resolvedConcurrency }) => {
           renderLogger.info({
             event: "render-start",
+            userId,
+            id,
             frameCount,
             parallelEncoding: Boolean(parallelEncoding),
             resolvedConcurrency: String(resolvedConcurrency),
@@ -617,8 +619,9 @@ export const startRenderJob = async ({
             logChromiumProcessSnapshot(`progress-${percent}%`);
           }
           if (percent % 25 === 0) {
-            renderLogger.info({
+            renderLogger.debug({
               event: "render-progress",
+              userId,
               id,
               rendered,
               totalFrames,
@@ -829,6 +832,7 @@ export const startRenderJob = async ({
     const avgFps = Math.round(totalFrames / elapsedSeconds);
     renderLogger.info({
       event: "render-complete",
+      userId,
       id,
       totalFrames,
       elapsedSeconds: Number(elapsedSeconds.toFixed(3)),
@@ -866,6 +870,7 @@ export const startRenderJob = async ({
     const message = error instanceof Error ? error.message : "Render failed";
     renderLogger.error({
       event: "render-failed",
+      userId,
       id,
       browserLabel,
       chromeMode,

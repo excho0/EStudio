@@ -2,6 +2,7 @@ import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import type { RenderBackend } from "@/lib/rendering/backend";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { getLogger } from "@/lib/logging";
 
 export const RENDER_QUEUE_NAME = "content-render";
 
@@ -12,6 +13,8 @@ export type RenderQueueJobPayload = {
   backend: RenderBackend;
   mode?: string;
 };
+
+const renderQueueLogger = getLogger("render-queue");
 
 const resolveRedisUrl = () => resolveRedisPoolUrl("render-queue");
 
@@ -50,8 +53,22 @@ export const isRenderQueueEnabled = () => {
 export const enqueueRenderJob = async (payload: RenderQueueJobPayload) => {
   const queue = getRenderQueue();
   if (!queue) {
+    renderQueueLogger.warn(
+      { userId: payload.userId, contentId: payload.id, jobId: payload.jobId },
+      "Render queue unavailable."
+    );
     throw new Error("Render queue is not configured");
   }
+  renderQueueLogger.debug(
+    {
+      userId: payload.userId,
+      contentId: payload.id,
+      jobId: payload.jobId,
+      backend: payload.backend,
+      mode: payload.mode,
+    },
+    "Enqueuing render queue job."
+  );
   return queue.add("render", payload, { jobId: payload.jobId });
 };
 

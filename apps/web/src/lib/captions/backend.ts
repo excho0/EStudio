@@ -43,7 +43,15 @@ export const transcribeWithBackend = async (
 ) => {
   const backend = resolveCaptionBackend(input.backend);
   const runner = BACKEND_RUNNERS[backend];
-  logger.info({ backend, contentId: input.contentId, mode: input.mode }, "Caption transcription started.");
+  logger.info(
+    {
+      backend,
+      userId: input.userId,
+      contentId: input.contentId,
+      mode: input.mode,
+    },
+    "Caption transcription started."
+  );
   const result = await runner(input);
   return {
     ...result,

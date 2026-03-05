@@ -418,15 +418,91 @@ captionWorker.on("ready", () => {
 });
 
 renderWorker.on("completed", (job) => {
-  logger.info({ queue: "content-render", jobId: job.id }, "Job completed.");
+  logger.debug(
+    {
+      queue: "content-render",
+      jobId: job.id,
+      userId: job.data?.userId,
+      contentId: job.data?.id,
+    },
+    "Job completed."
+  );
 });
 
 publishWorker.on("completed", (job) => {
-  logger.info({ queue: "content-publish", jobId: job.id }, "Job completed.");
+  const publishId =
+    typeof job.data?.publishId === "string" ? job.data.publishId : undefined;
+  if (!publishId) {
+    logger.debug({ queue: "content-publish", jobId: job.id }, "Job completed.");
+    return;
+  }
+  void (async () => {
+    const publish = await readPublishRow(publishId);
+    logger.debug(
+      {
+        queue: "content-publish",
+        jobId: job.id,
+        publishId,
+        userId: publish?.userId,
+        contentId: publish?.contentId,
+      },
+      "Job completed."
+    );
+  })().catch(() => {
+    logger.debug({ queue: "content-publish", jobId: job.id, publishId }, "Job completed.");
+  });
+});
+
+publishWorker.on("active", (job) => {
+  const publishId =
+    typeof job.data?.publishId === "string" ? job.data.publishId : undefined;
+  if (!publishId) {
+    logger.debug(
+      {
+        queue: "content-publish",
+        jobId: job.id,
+        attemptsMade: job.attemptsMade,
+      },
+      "Job started."
+    );
+    return;
+  }
+  void (async () => {
+    const publish = await readPublishRow(publishId);
+    logger.debug(
+      {
+        queue: "content-publish",
+        jobId: job.id,
+        publishId,
+        userId: publish?.userId,
+        contentId: publish?.contentId,
+        attemptsMade: job.attemptsMade,
+      },
+      "Job started."
+    );
+  })().catch(() => {
+    logger.debug(
+      {
+        queue: "content-publish",
+        jobId: job.id,
+        publishId,
+        attemptsMade: job.attemptsMade,
+      },
+      "Job started."
+    );
+  });
 });
 
 captionWorker.on("completed", (job) => {
-  logger.info({ queue: "content-caption", jobId: job.id }, "Job completed.");
+  logger.debug(
+    {
+      queue: "content-caption",
+      jobId: job.id,
+      userId: job.data?.userId,
+      contentId: job.data?.id,
+    },
+    "Job completed."
+  );
 });
 
 renderWorker.on("failed", (job, error) => {
@@ -434,6 +510,8 @@ renderWorker.on("failed", (job, error) => {
     {
       queue: "content-render",
       jobId: job?.id ?? "unknown",
+      userId: job?.data?.userId,
+      contentId: job?.data?.id,
       error: error.message,
     },
     "Job failed."
@@ -441,14 +519,43 @@ renderWorker.on("failed", (job, error) => {
 });
 
 publishWorker.on("failed", (job, error) => {
-  logger.error(
-    {
-      queue: "content-publish",
-      jobId: job?.id ?? "unknown",
-      error: error.message,
-    },
-    "Job failed."
-  );
+  const publishIdFromPayload =
+    typeof job?.data?.publishId === "string" ? String(job.data.publishId) : undefined;
+  if (publishIdFromPayload) {
+    void (async () => {
+      const publish = await readPublishRow(publishIdFromPayload);
+      logger.error(
+        {
+          queue: "content-publish",
+          jobId: job?.id ?? "unknown",
+          publishId: publishIdFromPayload,
+          userId: publish?.userId,
+          contentId: publish?.contentId,
+          error: error.message,
+        },
+        "Job failed."
+      );
+    })().catch(() => {
+      logger.error(
+        {
+          queue: "content-publish",
+          jobId: job?.id ?? "unknown",
+          publishId: publishIdFromPayload,
+          error: error.message,
+        },
+        "Job failed."
+      );
+    });
+  } else {
+    logger.error(
+      {
+        queue: "content-publish",
+        jobId: job?.id ?? "unknown",
+        error: error.message,
+      },
+      "Job failed."
+    );
+  }
   if (!job?.data?.publishId) {
     return;
   }
@@ -466,7 +573,7 @@ publishWorker.on("failed", (job, error) => {
       await updatePublish(publishId, { status: "queued", error: retryMessage });
       emitPublishUpdate({
         userId: publish.userId,
-        id: publishId,
+        id: publish.contentId,
         jobId: publishId,
         status: "queued",
         error: retryMessage,
@@ -478,7 +585,7 @@ publishWorker.on("failed", (job, error) => {
     await updatePublish(publishId, { status: "failed", error: finalMessage });
     emitPublishUpdate({
       userId: publish.userId,
-      id: publishId,
+      id: publish.contentId,
       jobId: publishId,
       status: "failed",
       error: finalMessage,
@@ -500,6 +607,8 @@ captionWorker.on("failed", (job, error) => {
     {
       queue: "content-caption",
       jobId: job?.id ?? "unknown",
+      userId: job?.data?.userId,
+      contentId: job?.data?.id,
       error: error.message,
     },
     "Job failed."

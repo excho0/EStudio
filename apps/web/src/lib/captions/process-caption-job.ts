@@ -29,6 +29,7 @@ export const processCaptionJob = async ({
   backend?: string;
   language?: string;
 }) => {
+  logger.info({ id, userId, jobId, mode }, "Caption generation started.");
   const item = await getContentItem(userId, id);
   if (!item) {
     throw new Error("Content not found.");

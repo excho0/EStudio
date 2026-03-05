@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { getLogger } from "@/lib/logging";
 
 export const CAPTION_QUEUE_NAME = "content-caption";
 
@@ -12,6 +13,8 @@ export type CaptionQueueJobPayload = {
   language?: string;
   backend?: string;
 };
+
+const captionQueueLogger = getLogger("caption-queue");
 
 const resolveRedisUrl = () =>
   resolveRedisPoolUrl("caption-queue") || resolveRedisPoolUrl("render-queue");
@@ -50,7 +53,27 @@ export const isCaptionQueueEnabled = () => {
 export const enqueueCaptionJob = async (payload: CaptionQueueJobPayload) => {
   const queue = getCaptionQueue();
   if (!queue) {
+    captionQueueLogger.warn(
+      {
+        userId: payload.userId,
+        contentId: payload.id,
+        jobId: payload.jobId,
+        mode: payload.mode,
+      },
+      "Caption queue unavailable."
+    );
     throw new Error("Caption queue is not configured");
   }
+  captionQueueLogger.debug(
+    {
+      userId: payload.userId,
+      contentId: payload.id,
+      jobId: payload.jobId,
+      mode: payload.mode,
+      backend: payload.backend,
+      language: payload.language,
+    },
+    "Enqueuing caption queue job."
+  );
   return queue.add("caption", payload, { jobId: payload.jobId });
 };

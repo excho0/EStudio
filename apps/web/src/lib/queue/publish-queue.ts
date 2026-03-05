@@ -1,12 +1,15 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
+import { getLogger } from "@/lib/logging";
 
 export const PUBLISH_QUEUE_NAME = "content-publish";
 
 export type PublishQueueJobPayload = {
   publishId: string;
 };
+
+const publishQueueLogger = getLogger("publish-queue");
 
 const resolveRedisUrl = () => resolveRedisPoolUrl("publish-queue");
 
@@ -45,12 +48,28 @@ export const isPublishQueueEnabled = () => {
 export const enqueuePublishQueueJob = async (payload: PublishQueueJobPayload) => {
   const queue = getPublishQueue();
   if (!queue) {
+    publishQueueLogger.warn({ publishId: payload.publishId }, "Publish queue unavailable.");
     throw new Error("Publish queue is not configured");
   }
   const jobId = payload.publishId;
   const existing = await queue.getJob(jobId);
   if (existing) {
-    return existing;
+    const state = await existing.getState().catch(() => "unknown");
+    // Failed/completed/stuck jobs with the same ID should not block retries.
+    if (state === "completed" || state === "failed" || state === "unknown") {
+      publishQueueLogger.warn(
+        { publishId: payload.publishId, jobId, state },
+        "Replacing stale publish queue job before re-enqueue."
+      );
+      await existing.remove().catch(() => undefined);
+    } else {
+      publishQueueLogger.debug(
+        { publishId: payload.publishId, jobId, state },
+        "Publish queue job already exists."
+      );
+      return existing;
+    }
   }
+  publishQueueLogger.debug({ publishId: payload.publishId, jobId }, "Enqueuing publish queue job.");
   return queue.add("publish", payload, { jobId });
 };
