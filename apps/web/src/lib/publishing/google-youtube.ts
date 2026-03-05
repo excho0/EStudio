@@ -8,17 +8,10 @@ import { getProviderDefinition } from "@/lib/publishing/providers";
 const youtubeProviderId =
   getProviderDefinition("youtube")?.oauthProviderId ?? "google-youtube";
 
-type GoogleYoutubeAccount = {
-  accessToken: string | null;
-  refreshToken: string | null;
-  expiresAt: number | null;
-  tokenType: string | null;
-  scope: string | null;
-};
-
 const fetchGoogleYoutubeAccount = async (
-  userId: string
-): Promise<GoogleYoutubeAccount | null> => {
+  userId: string,
+  providerAccountId?: string
+) => {
   const db = getDrizzleDb();
   if (isPostgres) {
     const [account] = await (db as PostgresDrizzleDb)
@@ -33,7 +26,10 @@ const fetchGoogleYoutubeAccount = async (
       .where(
         and(
           eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, youtubeProviderId)
+          eq(schema.accounts.provider, youtubeProviderId),
+          ...(providerAccountId
+            ? [eq(schema.accounts.providerAccountId, providerAccountId)]
+            : [])
         )
       )
       .limit(1);
@@ -51,7 +47,10 @@ const fetchGoogleYoutubeAccount = async (
     .where(
       and(
         eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, youtubeProviderId)
+        eq(sqliteSchema.accounts.provider, youtubeProviderId),
+        ...(providerAccountId
+          ? [eq(sqliteSchema.accounts.providerAccountId, providerAccountId)]
+          : [])
       )
     )
     .limit(1);
@@ -95,12 +94,27 @@ const updateAccountTokens = async (
     );
 };
 
-export const getGoogleYoutubeClient = async (userId: string) => {
+const persistAndApplyCredentials = async (
+  userId: string,
+  oauth2Client: Auth.OAuth2Client,
+  credentials: Auth.Credentials
+) => {
+  oauth2Client.setCredentials({
+    ...oauth2Client.credentials,
+    ...credentials,
+  });
+  await updateAccountTokens(userId, credentials);
+};
+
+export const getGoogleYoutubeClient = async (
+  userId: string,
+  providerAccountId?: string
+) => {
   if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
     throw new Error("Google OAuth client is not configured.");
   }
 
-  const account = await fetchGoogleYoutubeAccount(userId);
+  const account = await fetchGoogleYoutubeAccount(userId, providerAccountId);
   if (!account?.accessToken && !account?.refreshToken) {
     throw new Error("YouTube account is not connected.");
   }
@@ -122,24 +136,41 @@ export const getGoogleYoutubeClient = async (userId: string) => {
     void updateAccountTokens(userId, tokens);
   });
 
-  const access = await oauth2Client.getAccessToken();
-  if (!access?.token) {
-    throw new Error("YouTube access token could not be refreshed.");
+  let accessToken = account.accessToken ?? null;
+
+  if (!accessToken) {
+    try {
+      const access = await oauth2Client.getAccessToken();
+      accessToken = access?.token ?? null;
+      if (accessToken) {
+        await persistAndApplyCredentials(userId, oauth2Client, {
+          access_token: accessToken,
+        });
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to fetch access token.";
+      throw new Error(`YouTube token fetch failed: ${message}`);
+    }
   }
 
-  const headers = await oauth2Client.getRequestHeaders();
-  const authHeader = headers.get("authorization") ?? headers.get("Authorization");
-  if (!authHeader) {
+  if (!accessToken && account.refreshToken) {
     try {
       const refreshed = await oauth2Client.refreshAccessToken();
-      if (refreshed?.credentials) {
-        await updateAccountTokens(userId, refreshed.credentials);
-      }
+      const credentials = refreshed?.credentials ?? {};
+      accessToken = credentials.access_token ?? null;
+      await persistAndApplyCredentials(userId, oauth2Client, credentials);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to refresh token.";
       throw new Error(`YouTube token refresh failed: ${message}`);
     }
+  }
+
+  if (!accessToken) {
+    throw new Error(
+      "YouTube authentication is not ready. Please reconnect your YouTube account and try again."
+    );
   }
 
   return {

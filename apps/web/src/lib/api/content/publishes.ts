@@ -11,7 +11,6 @@ import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
-import { eventBus } from "@/lib/event-bus";
 import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
 
@@ -56,14 +55,14 @@ const fetchContentItem = async (userId: string, id: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
     const [item] = await (db as PostgresDrizzleDb)
-      .select({ id: schema.contentItems.id })
+      .select({ id: schema.contentItems.id, title: schema.contentItems.title })
       .from(schema.contentItems)
       .where(and(eq(schema.contentItems.id, id), eq(schema.contentItems.userId, userId)))
       .limit(1);
     return item ?? null;
   }
   const [item] = await (db as SqliteDrizzleDb)
-    .select({ id: sqliteSchema.contentItems.id })
+    .select({ id: sqliteSchema.contentItems.id, title: sqliteSchema.contentItems.title })
     .from(sqliteSchema.contentItems)
     .where(and(eq(sqliteSchema.contentItems.id, id), eq(sqliteSchema.contentItems.userId, userId)))
     .limit(1);
@@ -415,6 +414,14 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   }
   const metadata =
     Object.keys(metadataPayload).length > 0 ? JSON.stringify(metadataPayload) : null;
+  const titleFromPayload =
+    typeof metadataPayload.title === "string" && metadataPayload.title.trim().length > 0
+      ? metadataPayload.title.trim()
+      : null;
+  const notificationTitle = titleFromPayload ?? contentItem.title ?? undefined;
+  const notificationMetadata = notificationTitle
+    ? { title: notificationTitle }
+    : undefined;
   const status = "queued";
 
   if (isPostgres) {
@@ -448,11 +455,12 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
       return NextResponse.json({ error: "Failed to create publish." }, { status: 500 });
     }
     enqueuePublishJob(record.id);
-    void eventBus.emit("publish.queued", {
+    emitPublishUpdate({
       userId: user.id,
       id: contentId,
-      contentId,
-      provider: payload.data.provider,
+      jobId: record.id,
+      status: "queued",
+      metadata: notificationMetadata,
     });
     return NextResponse.json({ publish: record });
   }
@@ -484,11 +492,12 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
 
   if (record?.id) {
     enqueuePublishJob(record.id);
-    void eventBus.emit("publish.queued", {
+    emitPublishUpdate({
       userId: user.id,
       id: contentId,
-      contentId,
-      provider: payload.data.provider,
+      jobId: record.id,
+      status: "queued",
+      metadata: notificationMetadata,
     });
   }
 

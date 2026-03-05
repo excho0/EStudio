@@ -19,7 +19,10 @@ export const youtubeAdapter: ProviderAdapter = {
       throw new Error("Missing render path for YouTube upload.");
     }
 
-    const { youtube } = await getGoogleYoutubeClient(payload.userId);
+    const { youtube } = await getGoogleYoutubeClient(
+      payload.userId,
+      payload.providerAccountId
+    );
     const storage = getStorage();
     const title = payload.metadata.title?.trim() || "Untitled upload";
     const description = payload.metadata.description?.trim() || undefined;

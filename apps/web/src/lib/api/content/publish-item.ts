@@ -8,7 +8,7 @@ import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
-import { eventBus } from "@/lib/event-bus";
+import { emitPublishUpdate } from "@/lib/socket/manager";
 
 const getSessionEmail = (session: Session | null) => session?.user?.email ?? null;
 
@@ -39,6 +39,7 @@ const fetchPublish = async (userId: string, contentId: string, publishId: string
         provider: schema.publishes.provider,
         providerAssetId: schema.publishes.providerAssetId,
         status: schema.publishes.status,
+        metadata: schema.publishes.metadata,
       })
       .from(schema.publishes)
       .where(
@@ -57,6 +58,7 @@ const fetchPublish = async (userId: string, contentId: string, publishId: string
       provider: sqliteSchema.publishes.provider,
       providerAssetId: sqliteSchema.publishes.providerAssetId,
       status: sqliteSchema.publishes.status,
+      metadata: sqliteSchema.publishes.metadata,
     })
     .from(sqliteSchema.publishes)
     .where(
@@ -216,11 +218,28 @@ export const handleRetryPublish = async (contentId: string, publishId: string) =
   }
 
   enqueuePublishJob(publishId);
-  void eventBus.emit("publish.queued", {
+  const parsedMetadata =
+    typeof publish.metadata === "string"
+      ? (() => {
+          try {
+            return JSON.parse(publish.metadata) as { title?: unknown };
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  const metadataTitle =
+    typeof parsedMetadata?.title === "string" && parsedMetadata.title.trim().length > 0
+      ? parsedMetadata.title.trim()
+      : undefined;
+  const metadata = metadataTitle ? { title: metadataTitle } : undefined;
+
+  emitPublishUpdate({
     userId: user.id,
-    id: publishId,
-    contentId,
-    provider: publish.provider,
+    id: contentId,
+    jobId: publishId,
+    status: "queued",
+    metadata,
   });
   return NextResponse.json({ queued: true });
 };

@@ -14,6 +14,19 @@ import { getStorage, storageKey } from "@/lib/storage";
 
 const publishLogger = getLogger("publish-job-runner");
 
+const normalizePublishErrorMessage = (raw: string) => {
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("missing required authentication credential") ||
+    lower.includes("invalid authentication credentials") ||
+    lower.includes("token refresh failed") ||
+    lower.includes("authentication is not ready")
+  ) {
+    return "YouTube authentication failed. Reconnect your YouTube provider and retry publish.";
+  }
+  return raw;
+};
+
 export type PublishJob = {
   publishId: string;
   attempt: number;
@@ -118,6 +131,15 @@ export const runPublishJob = async (job: PublishJob) => {
   );
 
   const storage = getStorage();
+  const parsedPublishMetadata = parseMetadata(publish.metadata);
+  const publishTitle =
+    (typeof parsedPublishMetadata.title === "string"
+      ? parsedPublishMetadata.title
+      : null) ??
+    (await readContentItemTitle(publish.userId, publish.contentId)) ??
+    "Untitled upload";
+  const title = publishTitle;
+  const notificationMetadata = { title };
 
   const nextAttempt = (publish.publishAttempts ?? 0) + 1;
   await updatePublish(job.publishId, {
@@ -130,6 +152,7 @@ export const runPublishJob = async (job: PublishJob) => {
     id: publish.contentId,
     jobId: job.publishId,
     status: "publishing",
+    metadata: notificationMetadata,
   });
 
   const adapter = getProviderAdapter(publish.provider);
@@ -152,20 +175,19 @@ export const runPublishJob = async (job: PublishJob) => {
       id: publish.contentId,
       jobId: job.publishId,
       status: "failed",
+      metadata: notificationMetadata,
     });
     return;
   }
 
-  const metadata = parseMetadata(publish.metadata);
-  const title =
-    (typeof metadata.title === "string" ? metadata.title : null) ??
-    (await readContentItemTitle(publish.userId, publish.contentId)) ??
-    "Untitled upload";
+  const publishMetadata = parsedPublishMetadata;
   const description =
-    typeof metadata.description === "string" ? metadata.description : undefined;
+    typeof publishMetadata.description === "string"
+      ? publishMetadata.description
+      : undefined;
   const options =
-    typeof metadata.options === "object" && metadata.options !== null
-      ? (metadata.options as Record<string, unknown>)
+    typeof publishMetadata.options === "object" && publishMetadata.options !== null
+      ? (publishMetadata.options as Record<string, unknown>)
       : {};
 
   const renderKey = getContentRenderPath(
@@ -193,6 +215,7 @@ export const runPublishJob = async (job: PublishJob) => {
       id: publish.contentId,
       jobId: job.publishId,
       status: "failed",
+      metadata: notificationMetadata,
     });
     return;
   }
@@ -211,6 +234,10 @@ export const runPublishJob = async (job: PublishJob) => {
     const result = await adapter.upload({
       userId: publish.userId,
       contentId: publish.contentId,
+      providerAccountId:
+        typeof publish.providerAccountId === "string"
+          ? publish.providerAccountId
+          : undefined,
       renderId: publish.renderId,
       renderKey,
       renderPath,
@@ -219,9 +246,13 @@ export const runPublishJob = async (job: PublishJob) => {
       metadata: {
         title,
         description,
-        tags: Array.isArray(metadata.tags) ? (metadata.tags as string[]) : undefined,
+        tags: Array.isArray(publishMetadata.tags)
+          ? (publishMetadata.tags as string[])
+          : undefined,
         categoryId:
-          typeof metadata.categoryId === "string" ? metadata.categoryId : undefined,
+          typeof publishMetadata.categoryId === "string"
+            ? publishMetadata.categoryId
+            : undefined,
       },
       options: {
         privacy:
@@ -244,6 +275,7 @@ export const runPublishJob = async (job: PublishJob) => {
             id: publish.contentId,
             jobId: job.publishId,
             stage,
+            metadata: notificationMetadata,
           });
           return;
         }
@@ -259,6 +291,7 @@ export const runPublishJob = async (job: PublishJob) => {
           stage: progress.stage,
           progress:
             percent !== null ? Math.min(1, Math.max(0, percent / 100)) : undefined,
+          metadata: notificationMetadata,
         });
       },
     });
@@ -281,6 +314,7 @@ export const runPublishJob = async (job: PublishJob) => {
       status: result.status ?? "published",
       providerAssetId: result.providerAssetId,
       error: result.warning ?? undefined,
+      metadata: notificationMetadata,
     });
     publishLogger.info(
       {
@@ -293,8 +327,9 @@ export const runPublishJob = async (job: PublishJob) => {
       "Publish job completed."
     );
   } catch (error) {
-    const message =
+    const rawMessage =
       error instanceof Error ? error.message : "Publish failed unexpectedly.";
+    const message = normalizePublishErrorMessage(rawMessage);
     const attemptLabel =
       typeof job.maxAttempts === "number"
         ? `Attempt ${job.attempt}/${job.maxAttempts}`
@@ -309,6 +344,7 @@ export const runPublishJob = async (job: PublishJob) => {
       jobId: job.publishId,
       status: "failed",
       error: `${attemptLabel} failed: ${message}`,
+      metadata: notificationMetadata,
     });
     publishLogger.error(
       {

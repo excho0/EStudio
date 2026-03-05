@@ -17,6 +17,7 @@ export type PublishOptions = z.infer<typeof publishOptionsSchema>;
 export type PublishPayload = {
   userId?: string;
   contentId?: string;
+  providerAccountId?: string;
   renderId: string;
   renderKey?: string;
   renderPath?: string;

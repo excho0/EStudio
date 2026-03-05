@@ -35,11 +35,26 @@ const fetchProviderConnected = async (
 ) => {
   if (!providerId) return null;
   const db = getDrizzleDb();
+  const pickBestAccount = <
+    T extends { provider: string; providerAccountId: string; refreshToken: string | null; accessToken: string | null }
+  >(
+    accounts: T[]
+  ) => {
+    return (
+      accounts.find((account) => Boolean(account.refreshToken)) ??
+      accounts.find((account) => Boolean(account.accessToken)) ??
+      accounts[0] ??
+      null
+    );
+  };
+
   if (isPostgres) {
-    const [account] = await (db as PostgresDrizzleDb)
+    const accounts = await (db as PostgresDrizzleDb)
       .select({
         provider: schema.accounts.provider,
         providerAccountId: schema.accounts.providerAccountId,
+        refreshToken: schema.accounts.refresh_token,
+        accessToken: schema.accounts.access_token,
       })
       .from(schema.accounts)
       .where(
@@ -47,14 +62,15 @@ const fetchProviderConnected = async (
           eq(schema.accounts.userId, userId),
           eq(schema.accounts.provider, providerId)
         )
-      )
-      .limit(1);
-    return account ?? null;
+      );
+    return pickBestAccount(accounts);
   }
-  const [account] = await (db as SqliteDrizzleDb)
+  const accounts = await (db as SqliteDrizzleDb)
     .select({
       provider: sqliteSchema.accounts.provider,
       providerAccountId: sqliteSchema.accounts.providerAccountId,
+      refreshToken: sqliteSchema.accounts.refresh_token,
+      accessToken: sqliteSchema.accounts.access_token,
     })
     .from(sqliteSchema.accounts)
     .where(
@@ -62,9 +78,8 @@ const fetchProviderConnected = async (
         eq(sqliteSchema.accounts.userId, userId),
         eq(sqliteSchema.accounts.provider, providerId)
       )
-    )
-    .limit(1);
-  return account ?? null;
+    );
+  return pickBestAccount(accounts);
 };
 
 export const handleGetPublishProviders = async () => {

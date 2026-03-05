@@ -9,12 +9,20 @@ import Nodemailer from "next-auth/providers/nodemailer";
 import type { Provider } from "next-auth/providers";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 
-import { getDrizzleDb, isPostgres } from "@/lib/drizzle/client";
 import { eventBus } from "@/lib/event-bus";
 import { AuthMagicLinkTemplate } from "@/lib/email";
 import { APP_NAME } from "@/lib/shared/constants";
 import { getBaseUrl } from "@/lib/shared/url";
 import { getProviderDefinition } from "@/lib/publishing/providers";
+import {
+  getDrizzleDb,
+  isPostgres,
+} from "@/lib/drizzle/client";
+import type {
+  PostgresDrizzleDb,
+  SqliteDrizzleDb,
+} from "@/types";
+import { and, eq, sql } from "drizzle-orm";
 import {
   accounts,
   accountsPg,
@@ -27,9 +35,85 @@ import {
   verificationTokens,
   verificationTokensPg,
 } from "@/lib/drizzle/schema";
+import { YOUTUBE_OAUTH_PROVIDER_ID } from "@/lib/publishing/providers/youtube/constants";
 
 
 const providers: Provider[] = [];
+
+const persistOauthAccountTokens = async (params: {
+  provider: string;
+  providerAccountId: string;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  expiresAt?: number | null;
+  tokenType?: string | null;
+  scope?: string | null;
+  idToken?: string | null;
+  sessionState?: string | null;
+}) => {
+  const db = getDrizzleDb();
+  const values = {
+    access_token: params.accessToken ?? undefined,
+    refresh_token: params.refreshToken ?? undefined,
+    expires_at: params.expiresAt ?? undefined,
+    token_type: params.tokenType ?? undefined,
+    scope: params.scope ?? undefined,
+    id_token: params.idToken ?? undefined,
+    session_state: params.sessionState ?? undefined,
+  };
+
+  if (isPostgres) {
+    await (db as PostgresDrizzleDb)
+      .update(accountsPg)
+      .set(values)
+      .where(
+        and(
+          eq(accountsPg.provider, params.provider),
+          eq(accountsPg.providerAccountId, params.providerAccountId)
+        )
+      );
+    return;
+  }
+
+  await (db as SqliteDrizzleDb)
+    .update(accounts)
+    .set(values)
+    .where(
+      and(
+        eq(accounts.provider, params.provider),
+        eq(accounts.providerAccountId, params.providerAccountId)
+      )
+    );
+};
+
+const pruneDuplicateProviderAccounts = async (params: {
+  userId: string;
+  provider: string;
+  keepProviderAccountId: string;
+}) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    await (db as PostgresDrizzleDb)
+      .delete(accountsPg)
+      .where(
+        and(
+          eq(accountsPg.userId, params.userId),
+          eq(accountsPg.provider, params.provider),
+          sql`${accountsPg.providerAccountId} <> ${params.keepProviderAccountId}`
+        )
+      );
+    return;
+  }
+  await (db as SqliteDrizzleDb)
+    .delete(accounts)
+    .where(
+      and(
+        eq(accounts.userId, params.userId),
+        eq(accounts.provider, params.provider),
+        sql`${accounts.providerAccountId} <> ${params.keepProviderAccountId}`
+      )
+    );
+};
 
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
   const youtubeProvider = getProviderDefinition("youtube");
@@ -154,6 +238,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   events: {
+    signIn: async ({ user, account }) => {
+      if (
+        !user?.id ||
+        !account?.provider ||
+        !account.providerAccountId ||
+        account.provider !== YOUTUBE_OAUTH_PROVIDER_ID
+      ) {
+        return;
+      }
+
+      await persistOauthAccountTokens({
+        provider: account.provider,
+        providerAccountId: account.providerAccountId,
+        accessToken: account.access_token,
+        refreshToken: account.refresh_token,
+        expiresAt: account.expires_at,
+        tokenType: account.token_type,
+        scope: account.scope,
+        idToken: account.id_token,
+        sessionState:
+          typeof account.session_state === "string" ? account.session_state : undefined,
+      });
+
+      await pruneDuplicateProviderAccounts({
+        userId: user.id,
+        provider: account.provider,
+        keepProviderAccountId: account.providerAccountId,
+      });
+    },
     linkAccount: async ({ user, account }) => {
       if (!user?.id || !account?.provider) return;
       void eventBus.emit("provider.connection.created", {
