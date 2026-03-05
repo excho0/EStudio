@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { captionDocumentSchema, type CaptionDocument, type ContentItem } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
+import { SocketEvents } from "@/lib/socket/events";
+import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
 import {
   DEFAULT_CONTENT_MODE,
   getOutputDefaultsForMode,
@@ -52,35 +55,21 @@ const parseSharedCaptionsData = (settings: unknown): CaptionDocument | null => {
   return parsed.success ? parsed.data : null;
 };
 
-const getCaptionsSignature = (captions: CaptionDocument | null): string => {
-  if (!captions) return "none";
-  return JSON.stringify({
-    backend: captions.backend,
-    language: captions.language,
-    generatedAt: captions.generatedAt,
-    globalOffsetMs: captions.globalOffsetMs ?? 0,
-    segments: captions.segments.map((segment) => [
-      segment.startMs,
-      segment.endMs,
-      segment.text,
-    ]),
-  });
-};
-
 export default function EditCaptionsPage() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { socket, connected } = useSocketIO();
+  const hasRedirectedRef = useRef(false);
   const [generationWatch, setGenerationWatch] = useState<{
     contentId: string;
-    baselineSignature: string;
-    startedAt: number;
   } | null>(null);
 
   const contentQuery = useQuery<ContentItem>({
     queryKey: queryKeys.contentItem(params.id),
     enabled: Boolean(params.id),
+    refetchOnMount: "always",
     queryFn: async () => sdk.content.get(params.id),
   });
 
@@ -99,6 +88,15 @@ export default function EditCaptionsPage() {
       return modeDefinition.defaults;
     }
   }, [mode, modeDefinition.defaults, settingsMap]);
+
+  const captionsLanguage = useMemo(() => {
+    return typeof resolvedSettings.captionsLanguage === "string"
+      ? resolvedSettings.captionsLanguage.trim()
+      : "";
+  }, [resolvedSettings.captionsLanguage]);
+
+  const canEditCaptions =
+    resolvedSettings.captionsEnabled === true && captionsLanguage.length > 0;
 
   const sharedCaptionsData = useMemo(() => {
     return parseSharedCaptionsData(settingsMap);
@@ -178,20 +176,28 @@ export default function EditCaptionsPage() {
   const generateCaptionsMutation = useMutation({
     mutationFn: async () => {
       if (!item) throw new Error("Content item not found.");
-      await sdk.content.triggerCaptions(item.id, {
+      return sdk.content.triggerCaptions(item.id, {
         mode,
-        language: String(resolvedSettings.captionsLanguage ?? "en"),
+        language: captionsLanguage,
       });
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
       if (!item) return;
+      if (response.status === "done") {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.contentItem(item.id),
+          exact: true,
+        });
+        await contentQuery.refetch();
+        setGenerationWatch(null);
+        return;
+      }
       setGenerationWatch({
         contentId: item.id,
-        baselineSignature: getCaptionsSignature(sharedCaptionsData),
-        startedAt: Date.now(),
       });
     },
     onError: (error) => {
+      setGenerationWatch(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to generate captions."
       );
@@ -199,47 +205,44 @@ export default function EditCaptionsPage() {
   });
 
   useEffect(() => {
-    if (!generationWatch) return;
-    let cancelled = false;
-    const maxWaitMs = 180_000;
-    const pollIntervalMs = 2_000;
+    if (!generationWatch || !socket || !connected) return;
 
-    const poll = async () => {
-      if (cancelled) return;
-      if (Date.now() - generationWatch.startedAt > maxWaitMs) {
-        setGenerationWatch(null);
-        toast.error("Caption generation timed out.");
+    const handleCaptionUpdate = (payload: {
+      id: string;
+      status: "queued" | "processing" | "completed" | "failed";
+      error?: string;
+    }) => {
+      if (payload.id !== generationWatch.contentId) return;
+      if (payload.status === "completed") {
+        void (async () => {
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.contentItem(generationWatch.contentId),
+            exact: true,
+          });
+          await contentQuery.refetch();
+          setGenerationWatch(null);
+        })();
         return;
       }
-
-      try {
-        const refreshed = await queryClient.fetchQuery<ContentItem>({
-          queryKey: queryKeys.contentItem(generationWatch.contentId),
-          queryFn: async () => sdk.content.get(generationWatch.contentId),
-        });
-        const nextCaptions = parseSharedCaptionsData(refreshed.settings ?? {});
-        const nextSignature = getCaptionsSignature(nextCaptions);
-        if (nextSignature !== generationWatch.baselineSignature) {
-          setGenerationWatch(null);
-          return;
-        }
-      } catch {
-        // Ignore transient polling failures and retry on next tick.
+      if (payload.status === "failed") {
+        setGenerationWatch(null);
+        toast.error(payload.error?.trim() || "Caption generation failed.");
       }
     };
 
-    void poll();
-    const intervalId = window.setInterval(() => {
-      void poll();
-    }, pollIntervalMs);
+    return attachSocketSubscriptions(socket, [
+      { event: SocketEvents.caption.update, handler: handleCaptionUpdate },
+    ] as const);
+  }, [connected, generationWatch, queryClient, socket]);
 
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [generationWatch, queryClient]);
+  useEffect(() => {
+    if (!item || canEditCaptions || hasRedirectedRef.current) return;
+    hasRedirectedRef.current = true;
+    toast.error("Enable captions and set a captions language first.");
+    router.replace(`/edit/${params.id}`);
+  }, [canEditCaptions, item, params.id, router]);
 
-  if (contentQuery.isLoading) {
+  if (contentQuery.isLoading || !contentQuery.isFetchedAfterMount) {
     return null;
   }
 
@@ -249,15 +252,20 @@ export default function EditCaptionsPage() {
     return null;
   }
 
+  if (!canEditCaptions) {
+    return null;
+  }
+
   return (
       <CaptionEditor
         value={sharedCaptionsData}
         mode={mode}
-        language={String(resolvedSettings.captionsLanguage ?? "en")}
+        language={captionsLanguage}
         isGeneratingSegments={
           generateCaptionsMutation.isPending || generationWatch?.contentId === item.id
         }
         onGenerateSegments={async () => {
+          setGenerationWatch({ contentId: item.id });
           await generateCaptionsMutation.mutateAsync();
         }}
         onSave={async (next, options) => {
