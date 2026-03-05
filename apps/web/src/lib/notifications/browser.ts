@@ -1,4 +1,5 @@
 import { getNotificationEnabled } from "./preferences";
+import { APP_NAME } from "@/lib/shared/constants";
 
 export const requestNotificationPermission = async () => {
   if (typeof window === "undefined" || !("Notification" in window)) {
@@ -11,15 +12,29 @@ export const requestNotificationPermission = async () => {
   return permission;
 };
 
-export const notifyRenderComplete = (title: string, body?: string) => {
+export const notifyOSAppEvent = (title: string, body?: string) => {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return;
   }
+
   if (!getNotificationEnabled() || Notification.permission !== "granted") {
     return;
   }
+
   if (document.visibilityState !== "hidden") {
     return;
   }
-  new Notification(title, body ? { body } : undefined);
+
+  const iconUrl = `${window.location.origin}/favicon.png`;
+  const normalizedTitle = title.trim();
+  const brandedTitle = normalizedTitle.startsWith(APP_NAME)
+    ? normalizedTitle
+    : `${APP_NAME} · ${normalizedTitle}`;
+
+  new Notification(brandedTitle, {
+    body,
+    icon: iconUrl,
+    badge: iconUrl,
+  });
+  
 };

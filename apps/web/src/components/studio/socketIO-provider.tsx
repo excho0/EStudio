@@ -14,7 +14,7 @@ import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { MetricsPayload } from "@/types";
 import { toast } from "sonner";
-import { notifyRenderComplete } from "@/lib/notifications";
+import { notifyOSAppEvent } from "@/lib/notifications";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 
@@ -194,9 +194,9 @@ export function SocketIOProvider({
       completed?.add(key);
       const modeSuffix = mode ? ` · ${mode}` : "";
       const contentLabel = await resolveContentLabel(id);
-      const message = `${label} completed · ${contentLabel}${modeSuffix}`;
+      const message = `${contentLabel}${modeSuffix}`;
       toast.success(message);
-      notifyRenderComplete(`${label} complete`, message);
+      notifyOSAppEvent(`${label} complete`, message);
       const audio = new Audio(COMPLETION_SOUND_SRC);
       void audio.play().catch(() => undefined);
     };
