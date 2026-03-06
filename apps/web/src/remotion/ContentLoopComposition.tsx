@@ -21,6 +21,7 @@ import { getLogBands } from "../lib/audio/bands";
 import { processAudioBars } from "../lib/audio/processing";
 import type { ContentLoopProps } from "../types";
 import { CaptionsLayer } from "./layers/CaptionsLayer";
+import { DebugOverlayLayer } from "./layers/DebugOverlayLayer";
 import {
   buildVideoSlices,
   clamp,
@@ -193,6 +194,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
   const { durationInFrames, fps } = useVideoConfig();
+  const effectivePreviewMode = isRendering ? "full" : previewMode;
+  const debugOverlayEnabled =
+    process.env.NEXT_PUBLIC_REMOTION_DEBUG_OVERLAY === "true" ||
+    process.env.REMOTION_DEBUG_OVERLAY === "true";
   const [loadedThumbnailSrc, setLoadedThumbnailSrc] = useState<string | null>(null);
   const [fadeStartState, setFadeStartState] = useState<{
     src: string | null;
@@ -648,6 +653,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const timelineMs = (frame / fps) * 1000;
   const {
     effectiveCaptionsStyle,
+    captionSegments,
     captionPages,
     hasActiveCaption,
     captionOpacity,
@@ -766,6 +772,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     captionsOffsetY,
     captionsScalePercent,
     effectiveCaptionsStyle,
+    captionSegments,
     captionPages,
     hasActiveCaption,
     fps,
@@ -796,11 +803,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: previewMode === "performance" ? "#000000" : "#050505",
+        backgroundColor: effectivePreviewMode === "performance" ? "#000000" : "#050505",
         color: "white",
       }}
     >
-      {previewMode !== "performance" && videoSrc ? (
+      {effectivePreviewMode !== "performance" && videoSrc ? (
         <>
           <AbsoluteFill
             style={{
@@ -838,7 +845,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
             </AbsoluteFill>
           ) : null}
         </>
-      ) : previewMode !== "performance" ? (
+      ) : effectivePreviewMode !== "performance" ? (
         <AbsoluteFill
           style={{
             justifyContent: "center",
@@ -852,7 +859,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       ) : null}
-      {previewMode !== "performance" && edgeRaysEnabled && glowIntensity > 0 && (
+      {effectivePreviewMode !== "performance" && edgeRaysEnabled && glowIntensity > 0 && (
         <AbsoluteFill
           style={{
             pointerEvents: "none",
@@ -937,12 +944,31 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         <Html5Audio
           src={audioSrc}
           volume={audioVolume}
-          startFrom={rangeStartFrames}
-          endAt={rangeEndFrames}
+          trimBefore={rangeStartFrames}
+          trimAfter={rangeEndFrames}
         />
       ) : null}
       <CaptionsLayer {...captionsLayerProps} />
-      {previewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
+      {debugOverlayEnabled ? (
+        <DebugOverlayLayer
+          title="ContentLoop Debug"
+          metrics={[
+            { label: "isRendering", value: isRendering },
+            { label: "previewMode", value: effectivePreviewMode },
+            { label: "motionEnabled", value: motionEnabled },
+            { label: "motionX", value: motionX },
+            { label: "motionY", value: motionY },
+            { label: "motionAmp", value: motionAmp },
+            { label: "motionBase", value: motionBase },
+            { label: "edgeRaysEnabled", value: edgeRaysEnabled },
+            { label: "edgeEnergy", value: edgeEnergy },
+            { label: "glowIntensity", value: glowIntensity },
+            { label: "visualizationEnabled", value: visualizationEnabled },
+            { label: "audioDataLoaded", value: Boolean(audioData) },
+          ]}
+        />
+      ) : null}
+      {effectivePreviewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",

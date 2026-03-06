@@ -15,6 +15,8 @@ export type CaptionPage = {
   tokens: CaptionToken[];
 };
 
+const PAGE_SPLIT_GAP_MS = 5000;
+
 export type CaptionAnimationPreset = "smooth" | "cinematic" | "punch" | "minimal";
 export type CaptionStyle = "subtitle" | "tiktok";
 
@@ -32,9 +34,10 @@ export const buildCaptionPages = (
   segments: CaptionSegment[],
   wordsPerPage: number
 ) => {
-  const tokens: CaptionToken[] = [];
+  const tokens: Array<CaptionToken & { segmentIndex: number }> = [];
 
-  for (const segment of segments) {
+  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+    const segment = segments[segmentIndex];
     const rawWords = segment.text
       .trim()
       .split(/\s+/)
@@ -52,6 +55,7 @@ export const buildCaptionPages = (
         text: rawWords[i],
         fromMs,
         toMs: Math.max(fromMs + 1, toMs),
+        segmentIndex,
       });
     }
   }
@@ -59,8 +63,25 @@ export const buildCaptionPages = (
   const pages: CaptionPage[] = [];
   let cursor = 0;
   while (cursor < tokens.length) {
-    const slice = tokens.slice(cursor, cursor + wordsPerPage);
-    if (slice.length === 0) break;
+    const current = tokens[cursor];
+    if (!current) break;
+    const slice: CaptionToken[] = [current];
+    cursor += 1;
+
+    while (cursor < tokens.length && slice.length < wordsPerPage) {
+      const next = tokens[cursor];
+      const prev = tokens[cursor - 1];
+      if (!next || !prev) break;
+      const crossedSegment = next.segmentIndex !== prev.segmentIndex;
+      const crossedLongGap =
+        crossedSegment && next.fromMs - prev.toMs >= PAGE_SPLIT_GAP_MS;
+      if (crossedLongGap) {
+        break;
+      }
+      slice.push(next);
+      cursor += 1;
+    }
+
     const startMs = slice[0].fromMs;
     const durationMs = Math.max(1, slice[slice.length - 1].toMs - startMs);
     pages.push({
@@ -69,7 +90,6 @@ export const buildCaptionPages = (
       durationMs,
       tokens: slice,
     });
-    cursor += wordsPerPage;
   }
 
   return pages;
@@ -249,6 +269,7 @@ export const resolveCaptionRuntime = ({
   if (!captionsEnabled || runtimeSegments.length === 0) {
     return {
       effectiveCaptionsStyle,
+      captionSegments: [] as CaptionSegment[],
       captionPages: [] as CaptionPage[],
       activeCaptionSegment: null as CaptionSegment | null,
       activeCaptionPage: null as CaptionPage | null,
@@ -340,6 +361,7 @@ export const resolveCaptionRuntime = ({
 
   return {
     effectiveCaptionsStyle,
+    captionSegments: runtimeSegments,
     captionPages,
     activeCaptionSegment,
     activeCaptionPage,

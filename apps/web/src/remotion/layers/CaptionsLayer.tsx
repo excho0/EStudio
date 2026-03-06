@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Sequence } from "remotion";
 import { hexToRgba, mixHex, type CaptionPage } from "../utils";
+import type { CaptionSegment } from "../../types/captions";
 
 const CAPTION_FONT_STACK =
   "Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -13,6 +14,7 @@ type CaptionsLayerProps = {
   captionsOffsetY: number;
   captionsScalePercent: number;
   effectiveCaptionsStyle: "subtitle" | "tiktok";
+  captionSegments: CaptionSegment[];
   captionPages: CaptionPage[];
   hasActiveCaption: boolean;
   fps: number;
@@ -25,6 +27,9 @@ type CaptionsLayerProps = {
 };
 
 const easeInOutSine01 = (value: number) => 0.5 - 0.5 * Math.cos(Math.PI * value);
+const CAPTION_GAP_HIDE_THRESHOLD_MS = 5000;
+const CAPTION_END_GRACE_MS = 220;
+const CAPTION_PAGE_OUT_MS = 220;
 
 const getTokenHighlightStrength = (
   tokenFromMs: number,
@@ -59,17 +64,33 @@ type CaptionTokenStyleVariant = "subtitle" | "tiktok";
 const getCaptionPageWindow = (
   page: CaptionPage,
   nextPage: CaptionPage | null,
-  fps: number
+  fps: number,
+  captionSegments: CaptionSegment[]
 ) => {
+  const naturalEndMs =
+    page.tokens.length > 0
+      ? page.tokens[page.tokens.length - 1].toMs
+      : page.startMs + page.durationMs;
+  const prevSegment = [...captionSegments]
+    .reverse()
+    .find((segment) => segment.endMs <= naturalEndMs + 1);
+  const nextSegment = prevSegment
+    ? captionSegments.find((segment) => segment.startMs >= prevSegment.endMs)
+    : null;
+  const segmentGapMs =
+    prevSegment && nextSegment ? nextSegment.startMs - prevSegment.endMs : null;
+  const nextStartMs = nextPage?.startMs ?? null;
+  const hasLongGap = (segmentGapMs ?? -1) >= CAPTION_GAP_HIDE_THRESHOLD_MS;
+  const cappedEndMs = hasLongGap
+    ? naturalEndMs + CAPTION_END_GRACE_MS
+    : nextStartMs ?? naturalEndMs;
   const startFrame = Math.floor((page.startMs / 1000) * fps);
   const endFrame = Math.max(
     startFrame + 1,
-    nextPage
-      ? Math.floor((nextPage.startMs / 1000) * fps)
-      : Math.ceil(((page.startMs + page.durationMs) / 1000) * fps)
+    Math.ceil((cappedEndMs / 1000) * fps)
   );
   const durationInFrames = Math.max(1, endFrame - startFrame);
-  return { startFrame, durationInFrames };
+  return { startFrame, durationInFrames, endMs: cappedEndMs };
 };
 
 const getCaptionTokenStyle = ({
@@ -123,6 +144,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsOffsetY,
   captionsScalePercent,
   effectiveCaptionsStyle,
+  captionSegments,
   captionPages,
   hasActiveCaption,
   fps,
@@ -211,12 +233,22 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
       <AbsoluteFill style={{ pointerEvents: "none", zIndex: 30 }}>
         {captionPages.map((page, index) => {
           const nextPage = captionPages[index + 1] ?? null;
-          const { startFrame, durationInFrames } = getCaptionPageWindow(
+          const { startFrame, durationInFrames, endMs } = getCaptionPageWindow(
             page,
             nextPage,
-            fps
+            fps,
+            captionSegments
           );
           if (durationInFrames <= 0) return null;
+          const pageOutT = Math.max(
+            0,
+            Math.min(1, (endMs - timelineMs) / CAPTION_PAGE_OUT_MS)
+          );
+          const pageOut = easeInOutSine01(pageOutT);
+          const pageOpacity = effectiveCaptionOpacity * pageOut;
+          const pageOutBlur = (1 - pageOut) * 1.4;
+          const pageOutY = (1 - pageOut) * 8;
+          const pageTransform = `${captionTransform} translateY(${pageOutY.toFixed(2)}px)`;
           return (
             <Sequence
               key={`${page.startMs}-${page.text}-${index}`}
@@ -242,9 +274,9 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     textAlign: baseLayoutStyle.textAlign,
                     textTransform: "capitalize",
                     textShadow: "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.9)",
-                    opacity: effectiveCaptionOpacity,
-                    transform: captionTransform,
-                    filter: `blur(${captionBlur.toFixed(2)}px)`,
+                    opacity: pageOpacity,
+                    transform: pageTransform,
+                    filter: `blur(${(captionBlur + pageOutBlur).toFixed(2)}px)`,
                     willChange: "transform, opacity, filter",
                     whiteSpace: "pre-wrap",
                   }}
@@ -264,12 +296,22 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
       <AbsoluteFill style={{ pointerEvents: "none", zIndex: 30 }}>
         {captionPages.map((page, index) => {
           const nextPage = captionPages[index + 1] ?? null;
-          const { startFrame, durationInFrames } = getCaptionPageWindow(
+          const { startFrame, durationInFrames, endMs } = getCaptionPageWindow(
             page,
             nextPage,
-            fps
+            fps,
+            captionSegments
           );
           if (durationInFrames <= 0) return null;
+          const pageOutT = Math.max(
+            0,
+            Math.min(1, (endMs - timelineMs) / CAPTION_PAGE_OUT_MS)
+          );
+          const pageOut = easeInOutSine01(pageOutT);
+          const pageOpacity = effectiveCaptionOpacity * pageOut;
+          const pageOutBlur = (1 - pageOut) * 1.1;
+          const pageOutY = (1 - pageOut) * 6;
+          const pageTransform = `${captionTransform} translateY(${pageOutY.toFixed(2)}px)`;
           return (
             <Sequence
               key={`${page.startMs}-${page.text}-${index}`}
@@ -303,9 +345,9 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     backdropFilter: "blur(4px)",
                     boxShadow:
                       "0 14px 38px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.08), 0 0 24px rgba(255,255,255,0.08)",
-                    opacity: effectiveCaptionOpacity,
-                    transform: captionTransform,
-                    filter: `blur(${captionBlur.toFixed(2)}px)`,
+                    opacity: pageOpacity,
+                    transform: pageTransform,
+                    filter: `blur(${(captionBlur + pageOutBlur).toFixed(2)}px)`,
                     willChange: "transform, opacity, filter",
                   }}
                 >
