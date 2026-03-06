@@ -190,12 +190,14 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   captionsAnimationPreset = "smooth",
   captionsWordsPerPage = 4,
   captionsData = null,
+  debugOverlayEnabled = false,
 }) => {
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
   const { durationInFrames, fps } = useVideoConfig();
   const effectivePreviewMode = isRendering ? "full" : previewMode;
-  const debugOverlayEnabled =
+  const effectiveDebugOverlayEnabled =
+    debugOverlayEnabled ||
     process.env.NEXT_PUBLIC_REMOTION_DEBUG_OVERLAY === "true" ||
     process.env.REMOTION_DEBUG_OVERLAY === "true";
   const [loadedThumbnailSrc, setLoadedThumbnailSrc] = useState<string | null>(null);
@@ -375,9 +377,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     if (!audioData) return null;
 
     // CONFIGURATION
-    const LOOKBACK_FRAMES = 12;  // How far back we look for temporal smoothing
-    const DECAY_FACTOR = 0.4;    // Controls the "Release" (Gravity)
-    const INPUT_SMOOTHING = 4;   // Controls the "Attack" (removes jitter). 
+    const LOOKBACK_FRAMES = 5;   // Keep some smoothing, but reduce the long trailing feel in renders.
+    const DECAY_FACTOR = 0.62;   // Preserve smoothness while cutting the heavy inertia.
+    const INPUT_SMOOTHING = 2;   // Light smoothing removes jitter without killing motion.
     const SPATIAL_SMOOTHING = 1; // Smooth across neighboring bars
     const BANDS = resolvedVisualizationBars; // Fewer bands = less noise / more stability
                                  // Higher = less jitter, but punchiness is softer.
@@ -388,7 +390,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const range = Array.from({ length: totalFramesNeeded }, (_, i) => i);
 
     const rawHistory = range.map((offset) => {
-      const targetFrame = frame - offset;
+      const targetFrame = clamp(
+        rangeStartFrames + frame - offset,
+        rangeStartFrames,
+        Math.max(rangeStartFrames, rangeEndFrames - 1)
+      );
       
       const spectrum = getAudioSpectrum({
         audioData,
@@ -409,9 +415,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       // Use our stateless processor
       const { next } = processAudioBars(bands, {
         maxOutput: 100,
-        gain: 2.0,
-        curve: 0.8, 
-        noiseFloor: 0.04,
+        gain: 2.45,
+        curve: 0.92,
+        noiseFloor: 0.024,
       });
       return next;
     });
@@ -487,6 +493,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     edgeRaysEnabled,
     frame,
     fps,
+    rangeEndFrames,
+    rangeStartFrames,
     resolvedVisualizationBars,
     visualizationEnabled,
   ]);
@@ -566,23 +574,23 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     const transient = lerp(transientRef.current, rise, 0.26);
     transientRef.current = transient;
 
-    const gateTarget = rise > 0.022 || target > 0.07 ? 1 : 0;
+    const gateTarget = rise > 0.008 || target > 0.05 ? 1 : 0;
     const gate = gateTarget > gateRef.current
-      ? lerp(gateRef.current, gateTarget, 0.38)
-      : lerp(gateRef.current, gateTarget, 0.08);
+      ? lerp(gateRef.current, gateTarget, 0.72)
+      : lerp(gateRef.current, gateTarget, 0.26);
     gateRef.current = gate;
 
     const current = glowRef.current;
-    const attack = 0.62;
-    const release = 0.14;
+    const attack = 0.88;
+    const release = 0.32;
     const smoothed = target > current
       ? lerp(current, target, attack)
       : lerp(current, target, release);
     glowRef.current = smoothed;
 
-    const kick = transient * 1.25 * gate;
+    const kick = transient * 2.4 * gate;
     const combined = Math.min(1, smoothed + kick);
-    const output = lerp(glowOutputRef.current, combined, 0.42);
+    const output = lerp(glowOutputRef.current, combined, 0.78);
     glowOutputRef.current = output;
     return output;
   }, [edgeEnergy, edgeRaysIntensity, frame]);
@@ -647,6 +655,18 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const motionTransform = motionEnabled
     ? `translate(${motionX.toFixed(2)}px, ${motionY.toFixed(2)}px)`
     : undefined;
+  const edgeRayVisibility = Math.min(
+    1,
+    Math.max(0, glowIntensity * 1.2 + edgeEnergy * 0.35)
+  );
+  const edgeRayLayerOpacity = Math.max(
+    0,
+    Math.min(1, contentLayerOpacity * (0.92 + edgeRayVisibility * 0.16))
+  );
+  const edgeRayCoreBlur = 38;
+  const edgeRayBloomBlur = 112;
+  const edgeRayCoreOpacity = Math.min(1, 0.84 + edgeRayVisibility * 0.3);
+  const edgeRayBloomOpacity = Math.min(1, 0.42 + edgeRayVisibility * 0.34);
 
 
   const maxSegmentStartFrame = Math.max(0, playableVideoFrames - segmentFrames);
@@ -863,17 +883,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         <AbsoluteFill
           style={{
             pointerEvents: "none",
-            opacity: contentLayerOpacity,
+            opacity: edgeRayLayerOpacity,
             zIndex: 2,
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              mixBlendMode: "screen", // TODO: check normal  as well!!
-            }}
-          />
           {[
             {
               key: "top",
@@ -884,8 +897,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 height: 140,
                 background: `linear-gradient(180deg, ${hexToRgba(
                   glowColor,
-                  glowIntensity * 0.9
-                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+                  glowIntensity * 1.2
+                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
               },
             },
             {
@@ -897,8 +910,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 height: 140,
                 background: `linear-gradient(0deg, ${hexToRgba(
                   glowColor,
-                  glowIntensity * 0.9
-                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+                  glowIntensity * 1.2
+                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
               },
             },
             {
@@ -910,8 +923,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 width: 140,
                 background: `linear-gradient(90deg, ${hexToRgba(
                   glowColor,
-                  glowIntensity * 0.9
-                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+                  glowIntensity * 1.2
+                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
               },
             },
             {
@@ -923,20 +936,31 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 width: 140,
                 background: `linear-gradient(270deg, ${hexToRgba(
                   glowColor,
-                  glowIntensity * 0.9
-                )} 0%, ${hexToRgba(glowColor, 0)} 85%)`,
+                  glowIntensity * 1.2
+                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
               },
             },
           ].map((edge) => (
-            <div
-              key={edge.key}
-              style={{
-                position: "absolute",
-                filter: `blur(${110 + glowIntensity * 140}px)`,
-                opacity: 1,
-                ...edge.style,
-              }}
-            />
+            <React.Fragment key={edge.key}>
+              <div
+                style={{
+                  position: "absolute",
+                  mixBlendMode: "screen",
+                  filter: `blur(${edgeRayCoreBlur + glowIntensity * 42}px)`,
+                  opacity: edgeRayCoreOpacity,
+                  ...edge.style,
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  mixBlendMode: "screen",
+                  filter: `blur(${edgeRayBloomBlur + glowIntensity * 84}px)`,
+                  opacity: edgeRayBloomOpacity,
+                  ...edge.style,
+                }}
+              />
+            </React.Fragment>
           ))}
         </AbsoluteFill>
       )}
@@ -949,7 +973,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         />
       ) : null}
       <CaptionsLayer {...captionsLayerProps} />
-      {debugOverlayEnabled ? (
+      {effectiveDebugOverlayEnabled ? (
         <DebugOverlayLayer
           title="ContentLoop Debug"
           metrics={[

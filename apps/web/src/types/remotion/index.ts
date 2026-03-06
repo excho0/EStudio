@@ -9,6 +9,7 @@ type ContentLoopRuntimeProps = {
   colorPalette?: string[];
   previewMode?: "full" | "performance";
   captionsData?: CaptionDocument | null;
+  debugOverlayEnabled?: boolean;
   renderShaderEnabled?: boolean;
   renderShaderDebugMode?: "none" | "passthrough" | "uv" | "solid";
   songDurationSeconds?: number;

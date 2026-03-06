@@ -84,6 +84,9 @@ export const executeRenderForContent = async ({
   }
 
   const renderShaderEnabled = process.env.REMOTION_RENDER_ENABLE_SHADER === "true";
+  const debugOverlayEnabled =
+    process.env.REMOTION_DEBUG_OVERLAY === "true" ||
+    process.env.NEXT_PUBLIC_REMOTION_DEBUG_OVERLAY === "true";
   if (renderShaderEnabled) {
     const { getExecutablePath } = loadRenderer();
     const probeExecutable =
@@ -177,6 +180,7 @@ export const executeRenderForContent = async ({
   }) as unknown as InputProps;
   props.renderShaderEnabled = renderShaderEnabled;
   props.renderShaderDebugMode = shaderDebugMode;
+  props.debugOverlayEnabled = debugOverlayEnabled;
 
   const browserLabel = resolvedBrowser ?? "auto";
   if (renderShaderEnabled) {

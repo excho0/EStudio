@@ -100,6 +100,9 @@ const executeLambdaRenderForContent = async ({
   }) as unknown as InputProps;
   props.renderShaderEnabled = process.env.REMOTION_RENDER_ENABLE_SHADER === "true";
   props.renderShaderDebugMode = "none";
+  props.debugOverlayEnabled =
+    process.env.REMOTION_DEBUG_OVERLAY === "true" ||
+    process.env.NEXT_PUBLIC_REMOTION_DEBUG_OVERLAY === "true";
 
   const functionName = process.env.REMOTION_LAMBDA_FUNCTION_NAME?.trim() || "";
   const rawRegion = process.env.REMOTION_LAMBDA_REGION?.trim() || "";
