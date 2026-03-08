@@ -46,6 +46,7 @@ export const rendersResponseSchema = z.object({
       size: z.number(),
       mtimeMs: z.number(),
       assetUrl: z.string(),
+      thumbnailUrl: z.string().nullable().optional(),
     })
   ),
 }).describe("Renders response.");

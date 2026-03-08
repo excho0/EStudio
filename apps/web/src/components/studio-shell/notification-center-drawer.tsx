@@ -55,6 +55,7 @@ type ActivityHydratedItem = Pick<
 > & {
   jobId?: string;
   title?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ActivityJob = Omit<ActivityHydratedItem, "contentId"> & {
@@ -123,6 +124,7 @@ const toActivityJob = (item: ActivityHydratedItem): ActivityJob => ({
   progress: item.progress,
   stage: item.stage,
   error: item.error,
+  metadata: item.metadata,
   updatedAt: item.updatedAt,
 });
 
@@ -181,6 +183,15 @@ const parseTitleFromNotificationMetadata = (metadata: Record<string, unknown> | 
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const parseRenderNameFromMetadata = (
+  metadata: Record<string, unknown> | null | undefined
+) => {
+  const renderName = metadata?.renderName;
+  if (typeof renderName !== "string") return undefined;
+  const normalized = renderName.trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
 const parseNotificationKeyContext = (kind: JobKind, key: string) => {
   const prefix = `${kind}:`;
   if (!key.startsWith(prefix)) {
@@ -218,7 +229,7 @@ const JobCard = ({
   onOpen,
 }: {
   job: ActivityJob;
-  onOpen: (href: string) => void;
+  onOpen: (job: ActivityJob) => void;
 }) => {
   const kindMeta = resolveKindMeta(job.kind);
   const KindIcon = kindMeta.icon;
@@ -251,7 +262,7 @@ const JobCard = ({
       transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.7 }}
       type="button"
       className="w-full rounded-xl bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() => onOpen(kindMeta.href(job.id))}
+      onClick={() => onOpen(job)}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -471,6 +482,7 @@ export function NotificationCenterDrawer() {
         kind: "render",
         status: "completed",
         progress: 1,
+        metadata: "metadata" in payload ? payload.metadata : undefined,
         updatedAt: Date.now(),
       });
     };
@@ -713,9 +725,20 @@ export function NotificationCenterDrawer() {
     bootstrapQuery.isLoading &&
     activeJobs.length === 0 &&
     recentJobs.length === 0;
-  const openJob = (href: string) => {
+  const openJob = (job: ActivityJob) => {
     setOpen(false);
-    router.push(href);
+    const href = resolveKindMeta(job.kind).href(job.id);
+    if (job.kind !== "render" || job.status !== "completed") {
+      router.push(href);
+      return;
+    }
+    const renderName = parseRenderNameFromMetadata(job.metadata);
+    if (!renderName) {
+      router.push(href);
+      return;
+    }
+    const searchParams = new URLSearchParams({ preview: renderName });
+    router.push(`${href}?${searchParams.toString()}`);
   };
 
   return (

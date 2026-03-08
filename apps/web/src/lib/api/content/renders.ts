@@ -1,6 +1,7 @@
 import path from "path";
 import { NextResponse } from "next/server";
 import { getContentRenderDir } from "@/lib/content/store";
+import { getRenderThumbnailPath } from "@/lib/rendering/render-thumbnail";
 import { getContentItem } from "@/lib/data/content";
 import { getStorage, storageKey } from "@/lib/storage";
 
@@ -50,14 +51,23 @@ export const handleListRenders = async (
   const total = stats.length;
   const start = (page - 1) * limit;
   const end = start + limit;
-  const items = stats.slice(start, end).map((entry) => ({
-    name: entry.name,
-    size: entry.size,
-    mtimeMs: entry.mtimeMs,
-    assetUrl: `/api/content/${contentId}/asset?type=render&name=${encodeURIComponent(
-      entry.name
-    )}`,
-  }));
+  const items = await Promise.all(
+    stats.slice(start, end).map(async (entry) => {
+      const thumbnailKey = getRenderThumbnailPath(userId, contentId, entry.name);
+      const thumbnailExists = await storage.exists(thumbnailKey);
+      return {
+        name: entry.name,
+        size: entry.size,
+        mtimeMs: entry.mtimeMs,
+        assetUrl: `/api/content/${contentId}/asset?type=render&name=${encodeURIComponent(
+          entry.name
+        )}`,
+        thumbnailUrl: thumbnailExists
+          ? `/api/content/${contentId}/asset?type=render-thumbnail&name=${encodeURIComponent(entry.name)}`
+          : null,
+      };
+    })
+  );
 
   return NextResponse.json({ page, limit, total, items });
 };
@@ -79,7 +89,9 @@ export const handleDeleteRender = async (
 
   const renderDir = getContentRenderDir(userId, contentId);
   const targetPath = storageKey(renderDir, safeName);
+  const thumbnailPath = getRenderThumbnailPath(userId, contentId, safeName);
   await storage.deleteFile(targetPath);
+  await storage.deleteFile(thumbnailPath);
 
   return NextResponse.json({ ok: true });
 };

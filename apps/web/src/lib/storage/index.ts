@@ -5,6 +5,8 @@ if (process.env.NEXT_RUNTIME === "nodejs" || process.env.NEXT_RUNTIME === "edge"
 
 import { mkdirSync, promises as fs } from "fs";
 import path from "path";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
 import type { StorageAdapter } from "@/types";
 import { createLocalAdapter } from "@/lib/storage/adapters/local";
 import { createS3Adapter } from "@/lib/storage/adapters/s3";
@@ -54,3 +56,13 @@ export const createTempDir = async (prefix: string) => {
   return fs.mkdtemp(path.join(base, safePrefix));
 };
 
+
+export const readFilePath = async (absolutePath: string) => fs.readFile(absolutePath);
+
+export const writeStreamToPath = async (
+  source: NodeJS.ReadableStream,
+  absolutePath: string
+) => {
+  await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+  await pipeline(source as NodeJS.ReadableStream, createWriteStream(absolutePath));
+};

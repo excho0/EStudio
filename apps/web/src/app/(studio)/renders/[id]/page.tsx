@@ -2,13 +2,22 @@
 
 import { JSX, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/components/navigation/route-transition";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Download, Eye, Film, List, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table } from "@/components/ui/table";
 import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
+import {
+  ResponsiveDrawer,
+  ResponsiveDrawerContent,
+  ResponsiveDrawerDescription,
+  ResponsiveDrawerFooter,
+  ResponsiveDrawerHeader,
+  ResponsiveDrawerTitle,
+} from "@/components/ui/responsive-drawer";
 import {
   Pagination,
   PaginationContent,
@@ -26,6 +35,42 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { RenderListResponse } from "@/types";
+
+type RenderPreviewItem = {
+  name: string;
+  assetUrl: string;
+  size: number;
+  mtimeMs: number;
+  thumbnailUrl?: string | null;
+};
+
+const RenderThumbnail = ({
+  item,
+  className,
+  iconClassName,
+}: {
+  item: RenderPreviewItem;
+  className: string;
+  iconClassName: string;
+}) => {
+  if (item.thumbnailUrl) {
+    return (
+      <ImageWithSkeleton
+        src={item.thumbnailUrl}
+        alt={`Preview thumbnail for ${item.name}`}
+        className={className}
+        wrapperClassName="rounded-md shrink-0"
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className={cn(className, "flex items-center justify-center")}>
+      <Film className={iconClassName} />
+    </div>
+  );
+};
 
 const DesktopSkeletonRows = () => (
   <Table className="-mb-12">
@@ -113,9 +158,11 @@ const formatDateTime = (value: number) =>
 export default function RendersPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const id = params?.id;
 
   const [page, setPage] = useState(1);
+  const [previewItem, setPreviewItem] = useState<RenderPreviewItem | null>(null);
   const limit = 20;
   const isHydrated = true;
   const isMobile = useIsMobile();
@@ -215,6 +262,38 @@ export default function RendersPage() {
     await deleteRenderMutation.mutateAsync(name);
   };
 
+  useEffect(() => {
+    if (!id) return;
+    const previewName = searchParams?.get("preview")?.trim();
+    if (!previewName) {
+      if (previewItem) {
+        setPreviewItem(null);
+      }
+      return;
+    }
+    const matchedItem = items.find((item) => item.name === previewName);
+    if (!matchedItem) return;
+    if (previewItem?.name === matchedItem.name) return;
+    setPreviewItem(matchedItem);
+  }, [id, items, previewItem, searchParams]);
+
+  const clearPreviewQueryParam = () => {
+    if (!id) return;
+    const nextSearchParams = new URLSearchParams(searchParams?.toString() ?? "");
+    nextSearchParams.delete("preview");
+    const nextQuery = nextSearchParams.toString();
+    router.replace(nextQuery ? `/renders/${id}?${nextQuery}` : `/renders/${id}`, {
+      scroll: false,
+    });
+  };
+
+  const openPreview = (item: RenderPreviewItem) => {
+    setPreviewItem(item);
+    const nextSearchParams = new URLSearchParams(searchParams?.toString() ?? "");
+    nextSearchParams.set("preview", item.name);
+    router.replace(`/renders/${id}?${nextSearchParams.toString()}`, { scroll: false });
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -270,9 +349,11 @@ export default function RendersPage() {
                       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-16 w-20 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                              <Film className="h-5 w-5" />
-                            </div>
+                            <RenderThumbnail
+                              item={item}
+                              className="h-16 w-20 rounded-md border border-slate-200 bg-slate-50 object-cover text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
+                              iconClassName="h-5 w-5"
+                            />
                             <div className="flex-1">
                               <div className="font-medium text-foreground">{item.name}</div>
                               <div className="text-xs text-slate-500 dark:text-zinc-500">
@@ -286,7 +367,7 @@ export default function RendersPage() {
                               {
                                 label: "Preview",
                                 icon: Eye,
-                                onSelect: () => window.open(item.assetUrl, "_blank"),
+                                onSelect: () => openPreview(item),
                               },
                               {
                                 label: "Download",
@@ -364,9 +445,11 @@ export default function RendersPage() {
                         >
                           <td className="py-4">
                             <div className="flex items-center gap-3">
-                            <div className="flex h-12 w-16 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                              <Film className="h-4 w-4" />
-                            </div>
+                            <RenderThumbnail
+                              item={item}
+                              className="mx-1 h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                              iconClassName="h-4 w-4"
+                            />
                             <div>
                               <div className="font-medium">{item.name}</div>
                               <div className="text-xs text-slate-500 dark:text-zinc-500">
@@ -388,7 +471,7 @@ export default function RendersPage() {
                               {
                                 label: "Preview",
                                 icon: Eye,
-                                onSelect: () => window.open(item.assetUrl, "_blank"),
+                                onSelect: () => openPreview(item),
                               },
                               {
                                 label: "Download",
@@ -486,6 +569,62 @@ export default function RendersPage() {
           No renders yet. Run a render from the library page.
         </div>
       )}
+
+      <ResponsiveDrawer
+        open={Boolean(previewItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewItem(null);
+            clearPreviewQueryParam();
+          }
+        }}
+      >
+        <ResponsiveDrawerContent className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:h-auto sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1440px)] lg:max-w-[min(86vw,1440px)]">
+          {previewItem ? (
+            <>
+              <ResponsiveDrawerHeader className="shrink-0 border-b border-slate-200 px-4 py-4 text-left dark:border-white/10 sm:px-5">
+                <ResponsiveDrawerTitle className="text-lg font-semibold break-all sm:break-normal">
+                  {previewItem.name}
+                </ResponsiveDrawerTitle>
+                <ResponsiveDrawerDescription>
+                  {formatBytes(previewItem.size)} · {formatDateTime(previewItem.mtimeMs)}
+                </ResponsiveDrawerDescription>
+              </ResponsiveDrawerHeader>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-0 pb-0 pt-0 sm:px-5 sm:pb-5 sm:pt-3">
+                <div className="mx-auto flex min-h-full w-full items-center justify-center sm:max-w-[min(100%,calc(92dvh*1.777))]">
+                  <div className="w-full overflow-hidden bg-black shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:rounded-2xl sm:border sm:border-slate-200 dark:sm:border-white/10">
+                    <video
+                      key={previewItem.assetUrl}
+                      src={previewItem.assetUrl}
+                      controls
+                      playsInline
+                      disablePictureInPicture
+                      preload="metadata"
+                      className="aspect-video h-auto max-h-[calc(100dvh-13.5rem)] w-full bg-black object-contain sm:max-h-[calc(92dvh-15rem)]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <ResponsiveDrawerFooter className="w-full shrink-0 border-t border-slate-200 px-4 py-4 dark:border-white/10 sm:flex-row sm:px-5">
+                  <Button asChild variant="outline" className="flex-1">
+                    <a href={previewItem.assetUrl} download>
+                      <Download className="h-4 w-4" />
+                      <span>Download</span>
+                    </a>
+                  </Button>
+                  <Button asChild variant="secondary" className="flex-1">
+                    <a href={previewItem.assetUrl} target="_blank" rel="noreferrer">
+                      <Eye className="h-4 w-4" />
+                      <span>Open raw file</span>
+                    </a>
+                  </Button>
+              </ResponsiveDrawerFooter>
+            </>
+          ) : null}
+        </ResponsiveDrawerContent>
+      </ResponsiveDrawer>
     </div>
   );
 }

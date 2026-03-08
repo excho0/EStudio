@@ -11,6 +11,7 @@ import {
 import { updateContentItem } from "@/lib/data/content";
 import { getLogger } from "@/lib/logging";
 import { isRenderCancellationRequested } from "@/lib/rendering/cancel-store";
+import { generateRenderThumbnailFromFile } from "@/lib/rendering/render-thumbnail";
 import {
   clearRenderStatusCheckpoint,
   resolveRollbackContentStatus,
@@ -839,6 +840,18 @@ export const startRenderJob = async ({
       avgFps,
     });
 
+    const renderFileName = path.basename(outputPath);
+    try {
+      await generateRenderThumbnailFromFile({
+        userId,
+        contentId: id,
+        renderFileName,
+        inputPath: outputPath,
+      });
+    } catch (error) {
+      renderLogger.warn({ event: "render-thumbnail-failed", userId, id, renderFileName, error });
+    }
+
     const updated = await updateContentItem(userId, id, {
       status: "rendered",
     });
@@ -852,6 +865,9 @@ export const startRenderJob = async ({
       jobId,
       mode,
       key: progressKey,
+      metadata: {
+        renderName: path.basename(outputPath),
+      },
       durationSeconds: elapsedSeconds,
       avgFps,
     });

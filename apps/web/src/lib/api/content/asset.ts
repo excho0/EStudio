@@ -5,6 +5,7 @@ import {
   findLatestRenderPath,
   getContentRenderDir,
 } from "@/lib/content/store";
+import { getRenderThumbnailPath } from "@/lib/rendering/render-thumbnail";
 import { getContentItem, getContentItemById } from "@/lib/data/content";
 import { getStorage } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth/session";
@@ -274,11 +275,24 @@ export const handleGetContentAsset = async (
               return path.join(getContentRenderDir(userId, item.id), safeName);
             })()
           : await findLatestRenderPath(userId, item.id)
-        : await findContentAssetPath(
-            userId,
-            item.id,
-            type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
-          );
+        : type === "render-thumbnail"
+          ? renderName
+            ? (() => {
+                const safeName = path.basename(renderName);
+                if (
+                  safeName !== renderName ||
+                  !safeName.toLowerCase().endsWith(".mp4")
+                ) {
+                  return null;
+                }
+                return getRenderThumbnailPath(userId, item.id, safeName);
+              })()
+            : null
+          : await findContentAssetPath(
+              userId,
+              item.id,
+              type === "thumbnail" ? "thumbnail" : type === "song" ? "song" : "video"
+            );
 
     if (relativePath) {
       stat = await storage.stat(relativePath);

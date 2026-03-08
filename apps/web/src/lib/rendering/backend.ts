@@ -30,10 +30,14 @@ import {
   setRenderStatusCheckpoint,
 } from "@/lib/rendering/status-checkpoint";
 import { randomBytes } from "crypto";
+import { getLogger } from "@/lib/logging";
+import { generateRenderThumbnail } from "@/lib/rendering/render-thumbnail";
 
 export const renderBackendSchema = z.enum(["local", "lambda"]);
 
 export type RenderBackend = z.infer<typeof renderBackendSchema>;
+
+const backendLogger = getLogger("render-backend");
 
 export const resolveRenderBackend = (requested?: string | null): RenderBackend => {
   const fallback = process.env.RENDER_BACKEND?.trim().toLowerCase() ?? "local";
@@ -271,9 +275,25 @@ const executeLambdaRenderForContent = async ({
 
       const outputBuffer = Buffer.from(await outputResponse.arrayBuffer());
       await storage.writeFile(outputKey, outputBuffer);
+      try {
+        await generateRenderThumbnail({
+          userId,
+          contentId: id,
+          renderFileName: fileName,
+          renderKey: outputKey,
+        });
+      } catch (error) {
+        backendLogger.warn({ id, userId, renderFileName: fileName, error }, "Failed to generate lambda render thumbnail.");
+      }
       await updateContentItem(userId, id, { status: "rendered" });
       emitContentUpdate({ userId, type: "content.status", id, jobId, status: "rendered" });
-      emitRenderComplete({ userId, id, jobId, mode: resolved.mode });
+      emitRenderComplete({
+        userId,
+        id,
+        jobId,
+        mode: resolved.mode,
+        metadata: { renderName: fileName },
+      });
       await clearRenderCancellation(userId, id);
       await clearRenderStatusCheckpoint(userId, id);
 
