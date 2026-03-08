@@ -16,9 +16,16 @@ export type CaptionEditorPreviewProps = {
 type Props = {
   preview: CaptionEditorPreviewProps | null;
   playerRef: RefObject<PlayerRef | null>;
+  playerKey?: string | number;
+  initialFrame?: number;
 };
 
-function CaptionEditorPreviewComponent({ preview, playerRef }: Props) {
+function CaptionEditorPreviewComponent({
+  preview,
+  playerRef,
+  playerKey,
+  initialFrame = 0,
+}: Props) {
   if (!preview) return null;
   const aspectRatio = `${preview.compositionWidth} / ${preview.compositionHeight}`;
   return (
@@ -31,6 +38,7 @@ function CaptionEditorPreviewComponent({ preview, playerRef }: Props) {
       }}
     >
       <Player
+        key={playerKey}
         ref={playerRef}
         acknowledgeRemotionLicense
         component={preview.component}
@@ -39,6 +47,7 @@ function CaptionEditorPreviewComponent({ preview, playerRef }: Props) {
         fps={preview.fps}
         compositionWidth={preview.compositionWidth}
         compositionHeight={preview.compositionHeight}
+        initialFrame={initialFrame}
         controls={false}
         style={{ width: "100%", height: "100%" }}
       />
@@ -48,7 +57,11 @@ function CaptionEditorPreviewComponent({ preview, playerRef }: Props) {
 
 export const CaptionEditorPreview = memo(
   CaptionEditorPreviewComponent,
-  (prev, next) => prev.preview === next.preview && prev.playerRef === next.playerRef
+  (prev, next) =>
+    prev.preview === next.preview &&
+    prev.playerRef === next.playerRef &&
+    prev.playerKey === next.playerKey &&
+    prev.initialFrame === next.initialFrame
 );
 
 CaptionEditorPreview.displayName = "CaptionEditorPreview";

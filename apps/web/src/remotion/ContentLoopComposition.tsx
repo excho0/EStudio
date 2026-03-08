@@ -210,11 +210,14 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const thumbnailLoaded = Boolean(thumbnailSrc && loadedThumbnailSrc === thumbnailSrc);
   const fadeStartFrame =
     thumbnailSrc && fadeStartState.src === thumbnailSrc ? fadeStartState.frame : null;
-  const fadeFrom = fadeStartFrame ?? 0;
-  const fadeOutEnd = fadeFrom + thumbnailFadeFrames;
+  const fadeFrom = 0;
+  const fadeOutEnd = thumbnailFadeFrames;
+  const shouldShowThumbnailLayer = Boolean(thumbnailSrc) && frame <= fadeOutEnd;
   const shouldFade = thumbnailSrc && thumbnailLoaded && fadeStartFrame !== null;
   const thumbnailOpacity =
-    shouldFade && thumbnailSrc
+    !shouldShowThumbnailLayer
+      ? 0
+      : shouldFade && thumbnailSrc
       ? interpolate(frame, [fadeFrom, fadeOutEnd], [1, 0], {
           extrapolateRight: "clamp",
         })
@@ -222,7 +225,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         ? 1
         : 0;
   const thumbnailRevealOpacity =
-    thumbnailSrc && !isRendering
+    thumbnailSrc && !isRendering && shouldShowThumbnailLayer
       ? Math.max(0, Math.min(1, 1 - thumbnailOpacity))
       : 1;
   const introFadeFrames = Math.max(0, Math.round(introFadeSeconds * fps));
@@ -244,7 +247,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       : 1;
   const introOutroOpacity = videoFadeInOpacity * videoFadeOutOpacity;
   const videoOpacity =
-    (thumbnailSrc && !thumbnailLoaded && !isRendering ? 0 : 1) *
+    (shouldShowThumbnailLayer && thumbnailSrc && !thumbnailLoaded && !isRendering ? 0 : 1) *
     introOutroOpacity;
   const contentLayerOpacity = thumbnailRevealOpacity * introOutroOpacity;
   const outroOverlayOpacity =
@@ -837,7 +840,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           >
             <TransitionSeries>{segmentTransitionSeries}</TransitionSeries>
           </AbsoluteFill>
-          {thumbnailSrc && !isRendering ? (
+          {thumbnailSrc && !isRendering && shouldShowThumbnailLayer ? (
             <AbsoluteFill
               style={{
                 opacity: thumbnailOpacity,
@@ -849,7 +852,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 onLoad={() => {
                   setLoadedThumbnailSrc(thumbnailSrc);
-                  setFadeStartState({ src: thumbnailSrc, frame });
+                  setFadeStartState({ src: thumbnailSrc, frame: 0 });
                   if (thumbnailRenderHandle.current !== null) {
                     continueRender(thumbnailRenderHandle.current);
                     thumbnailRenderHandle.current = null;

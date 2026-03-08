@@ -110,11 +110,6 @@ const COMPACT_PLAYBACK_TUNING = {
   cursorMinDeltaMs: 20,
 } as const;
 
-const COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS = clamp(
-  COMPACT_PLAYBACK_TUNING.sampleEveryTicks,
-  1,
-  12
-);
 const COMPACT_PLAYBACK_SYNC_INTERVAL_MS = clamp(
   COMPACT_PLAYBACK_TUNING.syncIntervalMs,
   16,
@@ -252,6 +247,8 @@ export function CaptionEditor({
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [globalOffsetDialogOpen, setGlobalOffsetDialogOpen] = useState(false);
   const [activePreviewMode, setActivePreviewMode] = useState<"full" | "performance">("full");
+  const [playerInstanceKey, setPlayerInstanceKey] = useState(0);
+  const [playerInitialFrame, setPlayerInitialFrame] = useState(0);
   const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState(() =>
     String(normalizeCaptionDocument(value, mode, language).globalOffsetMs ?? 0)
   );
@@ -269,7 +266,6 @@ export function CaptionEditor({
   const cursorLastCommittedMsRef = useRef(0);
   const playerRef = useRef<PlayerRef>(null);
   const lastPlayerFrameRef = useRef(0);
-  const playbackRafRef = useRef<number | null>(null);
   const compactCursorSyncAtRef = useRef(0);
   const clipboardRef = useRef<CaptionsClipboard | null>(null);
   const draftRef = useRef<CaptionDocument>(draft);
@@ -277,7 +273,6 @@ export function CaptionEditor({
   const followScrollTargetRef = useRef<number | null>(null);
   const followScrollRafRef = useRef<number | null>(null);
   const followSuspendUntilRef = useRef(0);
-  const mobilePlaybackTickRef = useRef(0);
   const wasOpenRef = useRef(false);
   const hydratedValueSnapshotRef = useRef("");
   const baselineDraftRef = useRef<string>("");
@@ -416,31 +411,55 @@ export function CaptionEditor({
       inputProps: livePreviewInputProps,
     };
   }, [activePreviewMode, livePreviewInputProps, preview]);
+  const activeResolvedPreview = resolvedPreview ?? preview;
 
   useEffect(() => {
     const snapshot = previewSwitchSnapshotRef.current;
-    if (!snapshot || !preview || !active) return;
+    if (!snapshot || !activeResolvedPreview || !active) return;
 
+    const nextFrame = clamp(
+      snapshot.frame,
+      0,
+      Math.max(0, activeResolvedPreview.durationInFrames - 1)
+    );
     let rafId: number | null = null;
-    rafId = window.requestAnimationFrame(() => {
+    let attempts = 0;
+
+    const restorePlaybackState = () => {
       const player = playerRef.current;
-      if (!player) return;
-      const nextFrame = clamp(snapshot.frame, 0, Math.max(0, preview.durationInFrames - 1));
+      if (!player) {
+        attempts += 1;
+        if (attempts < 8) {
+          rafId = window.requestAnimationFrame(restorePlaybackState);
+        }
+        return;
+      }
+
       lastPlayerFrameRef.current = nextFrame;
       player.seekTo(nextFrame);
       player.setVolume(volume);
+
+      const settledFrame = player.getCurrentFrame();
+      if (Math.abs(settledFrame - nextFrame) > 1 && attempts < 8) {
+        attempts += 1;
+        rafId = window.requestAnimationFrame(restorePlaybackState);
+        return;
+      }
+
       if (snapshot.wasPlaying) {
         player.play();
       }
       previewSwitchSnapshotRef.current = null;
-    });
+    };
+
+    rafId = window.requestAnimationFrame(restorePlaybackState);
 
     return () => {
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
       }
     };
-  }, [active, preview, resolvedPreview, volume]);
+  }, [active, activeResolvedPreview, volume]);
 
   useEffect(() => {
     const isOpening = active && !wasOpenRef.current;
@@ -464,6 +483,8 @@ export function CaptionEditor({
     setMobileSelectionMode(false);
     setActivePreviewMode("full");
     setCursorMs(0);
+    setPlayerInitialFrame(0);
+    setPlayerInstanceKey(0);
     const initialOffset = next.globalOffsetMs ?? 0;
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(initialOffset));
@@ -1118,87 +1139,57 @@ export function CaptionEditor({
   });
 
   useEffect(() => {
-    if (!preview || !active) return;
-    const tick = () => {
-      const currentPlayer = playerRef.current;
-      if (!currentPlayer) {
-        playbackRafRef.current = window.requestAnimationFrame(tick);
-        return;
-      }
-      const playing = currentPlayer.isPlaying();
-      if (playing) {
-        if (isCompactLayout && COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS > 1) {
-          mobilePlaybackTickRef.current =
-            (mobilePlaybackTickRef.current + 1) % COMPACT_PLAYBACK_SAMPLE_EVERY_TICKS;
-          if (mobilePlaybackTickRef.current !== 0) {
-            playbackRafRef.current = window.requestAnimationFrame(tick);
-            return;
-          }
-        }
-        const frame = currentPlayer.getCurrentFrame();
-        if (frame !== lastPlayerFrameRef.current) {
-          lastPlayerFrameRef.current = frame;
-          const nextMs = (frame / preview.fps) * 1000;
-          const rounded = Math.round(nextMs);
-          if (isCompactLayout) {
-            const now = performance.now();
-            const elapsed = now - compactCursorSyncAtRef.current;
-            const moved = Math.abs(rounded - cursorLastCommittedMsRef.current);
-            if (
-              elapsed < COMPACT_PLAYBACK_SYNC_INTERVAL_MS &&
-              moved < COMPACT_PLAYBACK_SYNC_MIN_MOVE_MS
-            ) {
-              playbackRafRef.current = window.requestAnimationFrame(tick);
-              return;
-            }
-            compactCursorSyncAtRef.current = now;
-          }
-          const minDeltaMs = isCompactLayout
-            ? COMPACT_PLAYBACK_CURSOR_MIN_DELTA_MS
-            : 1;
-          if (Math.abs(rounded - cursorLastCommittedMsRef.current) >= minDeltaMs) {
-            cursorLastCommittedMsRef.current = rounded;
-            setCursorMs(nextMs);
-            followPlaybackCursor(nextMs);
-          }
-        }
-      }
-      playbackRafRef.current = window.requestAnimationFrame(tick);
-    };
-    playbackRafRef.current = window.requestAnimationFrame(tick);
-    return () => {
-      if (playbackRafRef.current !== null) {
-        window.cancelAnimationFrame(playbackRafRef.current);
-        playbackRafRef.current = null;
-      }
-      compactCursorSyncAtRef.current = 0;
-    };
-  }, [active, isCompactLayout, preview]);
-
-  useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
+    const onFrameUpdate = ({ detail }: { detail: { frame: number } }) => {
+      if (!activeResolvedPreview) return;
+      const frame = detail.frame;
+      lastPlayerFrameRef.current = frame;
+      const nextMs = (frame / activeResolvedPreview.fps) * 1000;
+      const rounded = Math.round(nextMs);
+      if (isCompactLayout) {
+        const now = performance.now();
+        const elapsed = now - compactCursorSyncAtRef.current;
+        const moved = Math.abs(rounded - cursorLastCommittedMsRef.current);
+        if (
+          elapsed < COMPACT_PLAYBACK_SYNC_INTERVAL_MS &&
+          moved < COMPACT_PLAYBACK_SYNC_MIN_MOVE_MS
+        ) {
+          return;
+        }
+        compactCursorSyncAtRef.current = now;
+      }
+      const minDeltaMs = isCompactLayout ? COMPACT_PLAYBACK_CURSOR_MIN_DELTA_MS : 1;
+      if (Math.abs(rounded - cursorLastCommittedMsRef.current) < minDeltaMs) {
+        return;
+      }
+      cursorLastCommittedMsRef.current = rounded;
+      setCursorMs(nextMs);
+      followPlaybackCursor(nextMs);
+    };
     const onVolumeChange = ({ detail }: { detail: { volume: number } }) => {
       setVolume(clamp(detail.volume, 0, 1));
     };
     player.addEventListener("play", onPlay);
     player.addEventListener("pause", onPause);
     player.addEventListener("ended", onEnded);
+    player.addEventListener("frameupdate", onFrameUpdate);
     player.addEventListener("volumechange", onVolumeChange);
     return () => {
       player.removeEventListener("play", onPlay);
       player.removeEventListener("pause", onPause);
       player.removeEventListener("ended", onEnded);
+      player.removeEventListener("frameupdate", onFrameUpdate);
       player.removeEventListener("volumechange", onVolumeChange);
     };
-  }, [preview]);
+  }, [activeResolvedPreview, isCompactLayout]);
 
   useEffect(() => {
     const player = playerRef.current;
-    if (!player || !preview) return;
+    if (!player || !activeResolvedPreview) return;
     // While playback is running, let player events drive cursor state.
     // Only seek from cursor during direct timeline interactions.
     const isInteracting = scrubRef.current.active || dragRef.current !== null;
@@ -1206,16 +1197,16 @@ export function CaptionEditor({
       return;
     }
     const nextFrame = clamp(
-      Math.round((cursorMs / 1000) * preview.fps),
+      Math.round((cursorMs / 1000) * activeResolvedPreview.fps),
       0,
-      Math.max(0, preview.durationInFrames - 1)
+      Math.max(0, activeResolvedPreview.durationInFrames - 1)
     );
     const currentFrame = player.getCurrentFrame();
     if (Math.abs(currentFrame - nextFrame) <= 0) return;
     if (nextFrame === lastPlayerFrameRef.current) return;
     lastPlayerFrameRef.current = nextFrame;
     player.seekTo(nextFrame);
-  }, [cursorMs, preview]);
+  }, [activeResolvedPreview, cursorMs]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -1392,9 +1383,6 @@ export function CaptionEditor({
     return () => {
       if (cursorRafRef.current !== null) {
         window.cancelAnimationFrame(cursorRafRef.current);
-      }
-      if (playbackRafRef.current !== null) {
-        window.cancelAnimationFrame(playbackRafRef.current);
       }
       if (followScrollRafRef.current !== null) {
         window.cancelAnimationFrame(followScrollRafRef.current);
@@ -1625,6 +1613,8 @@ export function CaptionEditor({
           <CaptionEditorPreview
             preview={resolvedPreview}
             playerRef={playerRef}
+            playerKey={`${activePreviewMode}-${playerInstanceKey}`}
+            initialFrame={playerInitialFrame}
           />
           <CaptionEditorToolbar
             isMobileSelectionMode={mobileSelectionMode}
@@ -1671,12 +1661,21 @@ export function CaptionEditor({
             activePreviewMode={activePreviewMode}
             onSelectPreviewMode={(mode) => {
               const player = playerRef.current;
-              previewSwitchSnapshotRef.current = player
-                ? {
-                    frame: player.getCurrentFrame(),
-                    wasPlaying: player.isPlaying(),
-                  }
-                : null;
+              if (player) {
+                const frame = player.getCurrentFrame();
+                previewSwitchSnapshotRef.current = {
+                  frame,
+                  wasPlaying: player.isPlaying(),
+                };
+                lastPlayerFrameRef.current = frame;
+                const nextMs = (frame / (activeResolvedPreview?.fps ?? preview?.fps ?? 30)) * 1000;
+                cursorLastCommittedMsRef.current = Math.round(nextMs);
+                setCursorMs(nextMs);
+                setPlayerInitialFrame(frame);
+                setPlayerInstanceKey((current) => current + 1);
+              } else {
+                previewSwitchSnapshotRef.current = null;
+              }
               setActivePreviewMode(mode);
             }}
           />
