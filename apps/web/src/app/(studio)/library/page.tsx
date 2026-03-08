@@ -417,7 +417,7 @@ export default function LibraryPage() {
       cell: ({ row }) => {
         const item = row.original;
         return (
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <ImageWithSkeleton
               src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
                 item.updatedAt
@@ -426,9 +426,9 @@ export default function LibraryPage() {
               className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
               wrapperClassName="h-12 w-16 rounded-md"
             />
-            <div>
-              <div className="font-medium">{item.title}</div>
-              <div className="text-xs text-slate-500 dark:text-zinc-500">
+            <div className="min-w-0">
+              <div className="truncate font-medium">{item.title}</div>
+              <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                 {formatDateTime(item.createdAt)}
               </div>
             </div>
@@ -1004,7 +1004,7 @@ export default function LibraryPage() {
                       >
                         <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                           <div className="flex items-start justify-between gap-4">
-                            <div className="flex flex-1 gap-3">
+                            <div className="flex min-w-0 flex-1 gap-3">
                               <ImageWithSkeleton
                                 src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
                                   item.updatedAt
@@ -1013,11 +1013,11 @@ export default function LibraryPage() {
                                 className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
                                 wrapperClassName="h-16 w-20 rounded-md"
                               />
-                              <div className="flex-1">
-                                <div className="text-sm font-semibold">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold">
                                   {item.title}
                                 </div>
-                                <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                                   {formatDate(item.createdAt)}
                                 </div>
                                 <div className="mt-2">
@@ -1048,7 +1048,7 @@ export default function LibraryPage() {
                         <div key={item.id} className="w-full px-1 py-1">
                           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                             <div className="flex items-start justify-between gap-4">
-                              <div className="flex flex-1 gap-3">
+                              <div className="flex min-w-0 flex-1 gap-3">
                                 <ImageWithSkeleton
                                   src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
                                     item.updatedAt
@@ -1057,9 +1057,9 @@ export default function LibraryPage() {
                                   className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
                                   wrapperClassName="h-16 w-20 rounded-md"
                                 />
-                                <div className="flex-1">
-                                  <div className="text-sm font-semibold">{item.title}</div>
-                                  <div className="text-xs text-slate-500 dark:text-zinc-500">
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm font-semibold">{item.title}</div>
+                                  <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                                     {formatDate(item.createdAt)}
                                   </div>
                                   <div className="mt-2">

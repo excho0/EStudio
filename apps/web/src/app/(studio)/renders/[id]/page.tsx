@@ -303,7 +303,7 @@ export default function RendersPage() {
           </Button>
           <div>
             <h2 className="text-lg font-semibold">Renders</h2>
-            <p className="text-sm text-slate-500 dark:text-zinc-400">
+            <p className="text-sm text-slate-500 dark:text-zinc-400 hidden lg:block">
               Review and download rendered outputs for this video.
             </p>
           </div>
@@ -348,15 +348,15 @@ export default function RendersPage() {
                     >
                       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <RenderThumbnail
                               item={item}
                               className="h-16 w-20 rounded-md border border-slate-200 bg-slate-50 object-cover text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
                               iconClassName="h-5 w-5"
                             />
-                            <div className="flex-1">
-                              <div className="font-medium text-foreground">{item.name}</div>
-                              <div className="text-xs text-slate-500 dark:text-zinc-500">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-foreground truncate">{item.name}</div>
+                              <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                                 {formatBytes(item.size)} · {formatDateTime(item.mtimeMs)}
                               </div>
                             </div>
