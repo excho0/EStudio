@@ -11,6 +11,17 @@
         config.allowUnfree = true;
       };
       enableCuda = true;
+      chromiumHeadlessAngle = pkgs.writeShellScriptBin "chromium-headless-angle" ''
+        exec ${pkgs.chromium}/bin/chromium \
+          --headless \
+          --use-gl=angle \
+          --use-angle=vulkan \
+          --ignore-gpu-blocklist \
+          --enable-webgl \
+          --disable-gpu-sandbox \
+          "$@"
+      '';
+
       chromiumXvfb = pkgs.writeShellScriptBin "chromium-xvfb" ''
         exec ${pkgs.xvfb-run}/bin/xvfb-run -a -s "-screen 0 1920x1080x24" \
           ${pkgs.chromium}/bin/chromium \
@@ -115,6 +126,7 @@
 
           # Browser / rendering
           chromium
+          chromiumHeadlessAngle
           chromiumXvfb
           mesa-demos
           vulkan-tools
@@ -128,8 +140,8 @@
         buildInputs = runtimeLibs;
 
         # Remotion runtime defaults
-        REMOTION_BROWSER_EXECUTABLE = "${chromiumXvfb}/bin/chromium-xvfb";
-        REMOTION_RENDER_BROWSER_EXECUTABLE = "${chromiumXvfb}/bin/chromium-xvfb";
+        REMOTION_BROWSER_EXECUTABLE = "${chromiumHeadlessAngle}/bin/chromium-headless-angle";
+        REMOTION_RENDER_BROWSER_EXECUTABLE = "${chromiumHeadlessAngle}/bin/chromium-headless-angle";
         REMOTION_RENDER_GL = "angle";
         LIBGL_DRIVERS_PATH = "${pkgs.mesa}/lib/dri";
         __EGL_VENDOR_LIBRARY_DIRS = "${pkgs.mesa}/share/glvnd/egl_vendor.d";

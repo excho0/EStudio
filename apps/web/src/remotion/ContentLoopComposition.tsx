@@ -22,6 +22,7 @@ import { processAudioBars } from "../lib/audio/processing";
 import type { ContentLoopProps } from "../types";
 import { CaptionsLayer } from "./layers/CaptionsLayer";
 import { DebugOverlayLayer } from "./layers/DebugOverlayLayer";
+import { EdgeRaysShaderLayer } from "./layers/EdgeRaysShaderLayer";
 import {
   buildVideoSlices,
   clamp,
@@ -194,7 +195,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 }) => {
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
-  const { durationInFrames, fps } = useVideoConfig();
+  const { durationInFrames, fps, width, height } = useVideoConfig();
   const effectivePreviewMode = isRendering ? "full" : previewMode;
   const effectiveDebugOverlayEnabled =
     debugOverlayEnabled ||
@@ -362,10 +363,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
 
   const glowColor = useMemo(() => {
-    const primary = paletteColors[0] ?? DEFAULT_PALETTE[0];
-    const secondary = paletteColors[1] ?? primary;
-    const blended = mixHex(primary, secondary, 0.5);
-    return mixHex(blended, "#FFFFFF", 0.4);
+    const base =
+      paletteColors[1] ?? paletteColors[0] ?? DEFAULT_PALETTE[1] ?? DEFAULT_PALETTE[0];
+    return mixHex(base, "#FFFFFF", 0.34);
   }, [paletteColors]);
   const captionHighlightColor = useMemo(() => {
     const accent = paletteColors[2] ?? DEFAULT_PALETTE[2] ?? "#FFFFFF";
@@ -664,13 +664,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   );
   const edgeRayLayerOpacity = Math.max(
     0,
-    Math.min(1, contentLayerOpacity * (0.92 + edgeRayVisibility * 0.16))
+    Math.min(1, contentLayerOpacity * (0.88 + edgeRayVisibility * 0.2))
   );
-  const edgeRayCoreBlur = 38;
-  const edgeRayBloomBlur = 112;
-  const edgeRayCoreOpacity = Math.min(1, 0.84 + edgeRayVisibility * 0.3);
-  const edgeRayBloomOpacity = Math.min(1, 0.42 + edgeRayVisibility * 0.34);
-
 
   const maxSegmentStartFrame = Math.max(0, playableVideoFrames - segmentFrames);
   const timelineMs = (frame / fps) * 1000;
@@ -882,91 +877,26 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           Upload a video to preview the looped sequence.
         </AbsoluteFill>
       ) : null}
-      {effectivePreviewMode !== "performance" && edgeRaysEnabled && glowIntensity > 0 && (
+      {effectivePreviewMode !== "performance" && edgeRaysEnabled && glowIntensity > 0 ? (
         <AbsoluteFill
           style={{
             pointerEvents: "none",
-            opacity: edgeRayLayerOpacity,
             zIndex: 2,
           }}
         >
-          {[
-            {
-              key: "top",
-              style: {
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 140,
-                background: `linear-gradient(180deg, ${hexToRgba(
-                  glowColor,
-                  glowIntensity * 1.2
-                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
-              },
-            },
-            {
-              key: "bottom",
-              style: {
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 140,
-                background: `linear-gradient(0deg, ${hexToRgba(
-                  glowColor,
-                  glowIntensity * 1.2
-                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
-              },
-            },
-            {
-              key: "left",
-              style: {
-                top: 0,
-                bottom: 0,
-                left: 0,
-                width: 140,
-                background: `linear-gradient(90deg, ${hexToRgba(
-                  glowColor,
-                  glowIntensity * 1.2
-                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
-              },
-            },
-            {
-              key: "right",
-              style: {
-                top: 0,
-                bottom: 0,
-                right: 0,
-                width: 140,
-                background: `linear-gradient(270deg, ${hexToRgba(
-                  glowColor,
-                  glowIntensity * 1.2
-                )} 0%, ${hexToRgba(glowColor, glowIntensity * 0.12)} 52%, ${hexToRgba(glowColor, 0)} 84%)`,
-              },
-            },
-          ].map((edge) => (
-            <React.Fragment key={edge.key}>
-              <div
-                style={{
-                  position: "absolute",
-                  mixBlendMode: "screen",
-                  filter: `blur(${edgeRayCoreBlur + glowIntensity * 42}px)`,
-                  opacity: edgeRayCoreOpacity,
-                  ...edge.style,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  mixBlendMode: "screen",
-                  filter: `blur(${edgeRayBloomBlur + glowIntensity * 84}px)`,
-                  opacity: edgeRayBloomOpacity,
-                  ...edge.style,
-                }}
-              />
-            </React.Fragment>
-          ))}
+          <EdgeRaysShaderLayer
+            width={width}
+            height={height}
+            frame={frame}
+            fps={fps}
+            glowIntensity={glowIntensity}
+            edgeEnergy={edgeEnergy}
+            motionEnergy={motionEnergy}
+            opacity={edgeRayLayerOpacity}
+            color={glowColor}
+          />
         </AbsoluteFill>
-      )}
+      ) : null}
       {audioSrc ? (
         <Html5Audio
           src={audioSrc}

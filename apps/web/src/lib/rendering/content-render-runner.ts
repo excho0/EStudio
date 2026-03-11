@@ -103,6 +103,14 @@ export const executeRenderForContent = async ({
       requested: requestedGl,
       executablePath: probeExecutable,
     });
+    logger.debug({
+      event: "shader-gl-probe",
+      requestedGl: requestedGl ?? "unset",
+      resolvedGl: resolvedGl ?? "null",
+      resolvedBrowser: resolvedBrowser ?? "unset",
+      probeExecutable: probeExecutable ?? "null",
+      chromeMode,
+    });
     if (resolvedGl !== "angle") {
       throw new ContentRenderError(
         "Shader rendering requires Chromium GL backend 'angle'. Current environment resolved to a non-angle backend.",

@@ -18,6 +18,10 @@ services:
     build:
       context: .
       dockerfile: ./apps/web/Dockerfile.nvidia
+    environment:
+      REMOTION_RENDER_GL: angle
+      REMOTION_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
+      REMOTION_RENDER_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
     devices:
       - "nvidia.com/gpu=all"
 
@@ -26,5 +30,9 @@ services:
     build:
       context: .
       dockerfile: ./apps/web/Dockerfile.nvidia
+    environment:
+      REMOTION_RENDER_GL: angle
+      REMOTION_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
+      REMOTION_RENDER_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
     devices:
       - "nvidia.com/gpu=all"
