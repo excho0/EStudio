@@ -1,14 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AbsoluteFill,
-  continueRender,
-  delayRender,
   Html5Audio,
   Html5Video,
-  Img,
   OffthreadVideo,
   Sequence,
-  interpolate,
   useCurrentFrame,
   useRemotionEnvironment,
   useVideoConfig,
@@ -16,23 +12,17 @@ import {
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { useAudioData } from "@remotion/media-utils";
-import { getAudioSpectrum } from "../lib/audio/fft";
-import { getLogBands } from "../lib/audio/bands";
-import { processAudioBars } from "../lib/audio/processing";
 import type { ContentLoopProps } from "../types";
 import { CaptionsLayer } from "./layers/CaptionsLayer";
 import { DebugOverlayLayer } from "./layers/DebugOverlayLayer";
 import { EdgeRaysShaderLayer } from "./layers/EdgeRaysShaderLayer";
-import {
-  buildVideoSlices,
-  clamp,
-  DEFAULT_PALETTE,
-  hexToRgba,
-  lerp,
-  mixHex,
-  normalizeHex,
-  resolveCaptionRuntime,
-} from "./utils";
+import { ThumbnailRevealLayer } from "./layers/ThumbnailRevealLayer";
+import { VisualizationBarsLayer } from "./layers/VisualizationBarsLayer";
+import { buildVideoSlices, clamp, resolveCaptionRuntime } from "./utils";
+import { useAudioReactiveMetrics } from "./hooks/useAudioReactiveMetrics";
+import { useCompositionPalette } from "./hooks/useCompositionPalette";
+import { useCompositionTiming } from "./hooks/useCompositionTiming";
+import { useMotionTransform } from "./hooks/useMotionTransform";
 
 type LoopVideoProps = {
   src: string;
@@ -201,463 +191,94 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     debugOverlayEnabled ||
     process.env.NEXT_PUBLIC_REMOTION_DEBUG_OVERLAY === "true" ||
     process.env.REMOTION_DEBUG_OVERLAY === "true";
-  const [loadedThumbnailSrc, setLoadedThumbnailSrc] = useState<string | null>(null);
-  const [fadeStartState, setFadeStartState] = useState<{
-    src: string | null;
-    frame: number | null;
-  }>({ src: null, frame: null });
-  const thumbnailRenderHandle = useRef<number | null>(null);
-  const thumbnailFadeFrames = Math.min(12, Math.max(2, Math.round(fps * 0.2)));
-  const thumbnailLoaded = Boolean(thumbnailSrc && loadedThumbnailSrc === thumbnailSrc);
-  const fadeStartFrame =
-    thumbnailSrc && fadeStartState.src === thumbnailSrc ? fadeStartState.frame : null;
-  const fadeFrom = 0;
-  const fadeOutEnd = thumbnailFadeFrames;
-  const shouldShowThumbnailLayer = Boolean(thumbnailSrc) && frame <= fadeOutEnd;
-  const shouldFade = thumbnailSrc && thumbnailLoaded && fadeStartFrame !== null;
-  const thumbnailOpacity =
-    !shouldShowThumbnailLayer
-      ? 0
-      : shouldFade && thumbnailSrc
-      ? interpolate(frame, [fadeFrom, fadeOutEnd], [1, 0], {
-          extrapolateRight: "clamp",
-        })
-      : thumbnailSrc
-        ? 1
-        : 0;
-  const thumbnailRevealOpacity =
-    thumbnailSrc && !isRendering && shouldShowThumbnailLayer
-      ? Math.max(0, Math.min(1, 1 - thumbnailOpacity))
-      : 1;
-  const introFadeFrames = Math.max(0, Math.round(introFadeSeconds * fps));
-  const outroFadeFrames = Math.max(0, Math.round(outroFadeSeconds * fps));
-  const videoFadeInOpacity =
-    introFadeFrames > 0
-      ? interpolate(frame, [0, introFadeFrames], [0, 1], {
-          extrapolateRight: "clamp",
-        })
-      : 1;
-  const videoFadeOutOpacity =
-    outroFadeFrames > 0
-      ? interpolate(
-          frame,
-          [Math.max(0, durationInFrames - outroFadeFrames), durationInFrames],
-          [1, 0],
-          { extrapolateLeft: "clamp" }
-        )
-      : 1;
-  const introOutroOpacity = videoFadeInOpacity * videoFadeOutOpacity;
-  const videoOpacity =
-    (shouldShowThumbnailLayer && thumbnailSrc && !thumbnailLoaded && !isRendering ? 0 : 1) *
-    introOutroOpacity;
-  const contentLayerOpacity = thumbnailRevealOpacity * introOutroOpacity;
-  const outroOverlayOpacity =
-    outroFadeFrames > 0
-      ? interpolate(
-          frame,
-          [Math.max(0, durationInFrames - outroFadeFrames), durationInFrames],
-          [0, 1],
-          { extrapolateLeft: "clamp" }
-        )
-      : 0;
-  const resolvedPlaybackRate =
-    Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
-  const scaleFactor = Math.min(2, Math.max(0, scalePercent / 100));
-  const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
-  const fadeFrames = Math.max(0, Math.round(fadeDurationSeconds * fps));
-  const audioFadeInFrames = Math.max(0, Math.round(audioFadeInSeconds * fps));
-  const audioFadeOutFrames = Math.max(0, Math.round(audioFadeOutSeconds * fps));
-  const audioFadeInOffsetFrames = Math.max(
-    0,
-    Math.round(audioFadeInOffsetSeconds * fps)
-  );
-  const audioFadeOutOffsetFrames = Math.max(
-    0,
-    Math.round(audioFadeOutOffsetSeconds * fps)
-  );
-  const clampedOverlapRatio =
-    Number.isFinite(overlapRatio) && overlapRatio !== null
-      ? Math.min(0.9, Math.max(0, overlapRatio))
-      : null;
-  const sourceVideoFrames = Math.max(
-    1,
-    Math.round((videoDurationSeconds ?? segmentDurationSeconds) * fps)
-  );
-  const songTotalFrames = Math.max(
-    1,
-    Math.round(Math.max(0, songDurationSeconds ?? durationInFrames / fps) * fps)
-  );
-  const rangeStartFrames = clamp(
-    Math.round(Math.max(0, songRangeStartSeconds) * fps),
-    0,
-    songTotalFrames - 1
-  );
-  const rawRangeEndFrames =
-    songRangeEndSeconds === null
-      ? songTotalFrames
-      : Math.round(Math.max(0, songRangeEndSeconds) * fps);
-  const rangeEndFrames = clamp(
-    rawRangeEndFrames,
-    rangeStartFrames + 1,
-    songTotalFrames
-  );
-  const playableVideoFrames = sourceVideoFrames;
-  const defaultOverlapFrames =
-    fadeFrames > 0 && segmentFrames > 1
-      ? Math.min(fadeFrames, segmentFrames - 1)
-      : 0;
-  const segmentStepFrames =
-    clampedOverlapRatio === null
-      ? Math.max(1, segmentFrames - defaultOverlapFrames)
-      : Math.max(1, Math.round(segmentFrames * (1 - clampedOverlapRatio)));
-  const overlapFrames = Math.max(0, segmentFrames - segmentStepFrames);
-  const transitionFrames =
-    fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
-      ? Math.min(fadeFrames, overlapFrames)
-      : 0;
-  const audioFadeInStart = audioFadeInOffsetFrames;
-  const audioFadeInEnd = audioFadeInStart + audioFadeInFrames;
-  const audioFadeOutEnd = Math.max(0, durationInFrames - audioFadeOutOffsetFrames);
-  const audioFadeOutStart = Math.max(0, audioFadeOutEnd - audioFadeOutFrames);
-  const audioFadeInOpacity =
-    audioFadeInFrames > 0
-      ? interpolate(frame, [audioFadeInStart, audioFadeInEnd], [0, 1], {
-          extrapolateRight: "clamp",
-          extrapolateLeft: "clamp",
-        })
-      : 1;
-  const audioFadeOutOpacity =
-    audioFadeOutFrames > 0
-      ? interpolate(frame, [audioFadeOutStart, audioFadeOutEnd], [1, 0], {
-          extrapolateRight: "clamp",
-          extrapolateLeft: "clamp",
-        })
-      : 1;
-  const audioVolume = Math.max(
-    0,
-    Math.min(1, audioFadeInOpacity * audioFadeOutOpacity)
-  );
+  const [thumbnailRevealOpacity, setThumbnailRevealOpacity] = useState(1);
+  const [videoVisibilityMultiplier, setVideoVisibilityMultiplier] = useState(1);
+  const {
+    videoOpacity,
+    contentLayerOpacity,
+    outroOverlayOpacity,
+    resolvedPlaybackRate,
+    scaleFactor,
+    segmentFrames,
+    transitionFrames,
+    audioVolume,
+    rangeStartFrames,
+    rangeEndFrames,
+    playableVideoFrames,
+    segmentStepFrames,
+    maxSegmentStartFrame,
+    timelineMs,
+  } = useCompositionTiming({
+    frame,
+    fps,
+    durationInFrames,
+    introFadeSeconds,
+    outroFadeSeconds,
+    audioFadeInSeconds,
+    audioFadeOutSeconds,
+    audioFadeInOffsetSeconds,
+    audioFadeOutOffsetSeconds,
+    playbackRate,
+    scalePercent,
+    segmentDurationSeconds,
+    fadeDurationSeconds,
+    overlapRatio,
+    videoDurationSeconds,
+    songDurationSeconds,
+    songRangeStartSeconds,
+    songRangeEndSeconds,
+    thumbnailRevealOpacity,
+    videoVisibilityMultiplier,
+  });
+
   const audioData = useAudioData(audioSrc ?? "");
-  const fftSize = 2048;
   const resolvedVisualizationBars = Math.min(
     256,
     Math.max(16, Math.round(Number(visualizationBars) || 128))
   );
 
-  const paletteColors = useMemo(() => {
-    if (!colorPalette?.length) return DEFAULT_PALETTE;
-    const cleaned = colorPalette
-      .map((value) => normalizeHex(value))
-      .filter((value): value is string => Boolean(value));
-    const base = cleaned.length ? cleaned : DEFAULT_PALETTE;
-    return base.slice(0, 5);
-  }, [colorPalette]);
-
-
-  const accentColor =
-    paletteColors.length > 0 ? paletteColors[0] : DEFAULT_PALETTE[0];
-
-  const barPaletteColors = useMemo(() => {
-    return paletteColors.slice(0, 2);
-  }, [paletteColors]);
-
-
-  const glowColor = useMemo(() => {
-    const base =
-      paletteColors[1] ?? paletteColors[0] ?? DEFAULT_PALETTE[1] ?? DEFAULT_PALETTE[0];
-    return mixHex(base, "#FFFFFF", 0.34);
-  }, [paletteColors]);
-  const captionHighlightColor = useMemo(() => {
-    const accent = paletteColors[2] ?? DEFAULT_PALETTE[2] ?? "#FFFFFF";
-    return mixHex(accent, "#FFFFFF", 0.12);
-  }, [paletteColors]);
+  const {
+    paletteColors,
+    accentColor,
+    barPaletteColors,
+    glowColor,
+    captionHighlightColor,
+  } = useCompositionPalette(colorPalette);
 
 
   // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
   // for a sharper AE look.
-  const smoothBars = useMemo(() => {
-    if (!visualizationEnabled && !edgeRaysEnabled) return null;
-    if (!audioData) return null;
-
-    // CONFIGURATION
-    const LOOKBACK_FRAMES = 5;   // Keep some smoothing, but reduce the long trailing feel in renders.
-    const DECAY_FACTOR = 0.62;   // Preserve smoothness while cutting the heavy inertia.
-    const INPUT_SMOOTHING = 2;   // Light smoothing removes jitter without killing motion.
-    const SPATIAL_SMOOTHING = 1; // Smooth across neighboring bars
-    const BANDS = resolvedVisualizationBars; // Fewer bands = less noise / more stability
-                                 // Higher = less jitter, but punchiness is softer.
-
-    // 1. Fetch a batch of raw history
-    // We need extra frames to calculate the rolling average for the oldest lookback frame
-    const totalFramesNeeded = LOOKBACK_FRAMES + INPUT_SMOOTHING;
-    const range = Array.from({ length: totalFramesNeeded }, (_, i) => i);
-
-    const rawHistory = range.map((offset) => {
-      const targetFrame = clamp(
-        rangeStartFrames + frame - offset,
-        rangeStartFrames,
-        Math.max(rangeStartFrames, rangeEndFrames - 1)
-      );
-      
-      const spectrum = getAudioSpectrum({
-        audioData,
-        frame: targetFrame,
-        fps,
-        fftSize,
-      });
-
-      const bands = getLogBands({
-        magnitudes: spectrum,
-        sampleRate: audioData.sampleRate,
-        fftSize,
-        bands: BANDS,
-        minFreq: 60,
-        maxFreq: 20000,
-      });
-
-      // Use our stateless processor
-      const { next } = processAudioBars(bands, {
-        maxOutput: 100,
-        gain: 2.45,
-        curve: 0.92,
-        noiseFloor: 0.024,
-      });
-      return next;
-    });
-
-    // 2. Average the history (Input Smoothing / "Attack")
-    // This kills the jitter by saying "The value at T is actually the average of T, T-1, T-2"
-    const smoothedHistory: number[][] = [];
-    
-    // We only need to compute smoothed values for the 'LOOKBACK' window
-    for (let i = 0; i < LOOKBACK_FRAMES; i++) {
-      const currentRaw = rawHistory[i];
-      if (!currentRaw) {
-        smoothedHistory.push([]);
-        continue;
-      }
-
-      // Average this frame with its neighbors to remove FFT noise
-      const smoothedFrame = currentRaw.map((val, barIdx) => {
-        let sum = val;
-        let count = 1;
-        
-        // Add previous frames to the average
-        for (let j = 1; j < INPUT_SMOOTHING; j++) {
-          const pastFrame = rawHistory[i + j];
-          if (pastFrame) {
-            sum += pastFrame[barIdx];
-            count++;
-          }
-        }
-        return sum / count;
-      });
-      
-      smoothedHistory.push(smoothedFrame);
-    }
-
-    const currentSmoothedBars = smoothedHistory[0];
-    if (!currentSmoothedBars) return null;
-
-    // 3. Apply Decay Physics (Release) with weighted averaging (less jitter).
-    const temporalBars = currentSmoothedBars.map((_, barIdx) => {
-      let weightedSum = 0;
-      let weightTotal = 0;
-      for (let timeOffset = 0; timeOffset < smoothedHistory.length; timeOffset += 1) {
-        const pastBars = smoothedHistory[timeOffset];
-        if (!pastBars) continue;
-        const weight = Math.pow(DECAY_FACTOR, timeOffset);
-        weightedSum += pastBars[barIdx] * weight;
-        weightTotal += weight;
-      }
-      return weightTotal > 0 ? weightedSum / weightTotal : 0;
-    });
-
-    // 4. Spatial smoothing (across adjacent bars) to reduce "noisy" movement.
-    const spatialBars = temporalBars.map((_, barIdx) => {
-      let sum = 0;
-      let count = 0;
-      for (let offset = -SPATIAL_SMOOTHING; offset <= SPATIAL_SMOOTHING; offset += 1) {
-        const idx = barIdx + offset;
-        if (idx < 0 || idx >= temporalBars.length) continue;
-        sum += temporalBars[idx];
-        count += 1;
-      }
-      return count > 0 ? sum / count : 0;
-    });
-
-    return {
-      bars: spatialBars,
-      currentBars: currentSmoothedBars,
-    };
-
-  }, [
+  const { smoothBars, edgeEnergy, bassMotionEnergy, glowIntensity } = useAudioReactiveMetrics({
     audioData,
-    edgeRaysEnabled,
     frame,
     fps,
-    rangeEndFrames,
     rangeStartFrames,
+    rangeEndFrames,
     resolvedVisualizationBars,
     visualizationEnabled,
-  ]);
+    edgeRaysEnabled,
+    edgeRaysVocalBalance,
+    edgeRaysIntensity,
+  });
 
-  const edgeEnergy = useMemo(() => {
-    if (!audioData) return 0;
-    const currentBars = smoothBars?.currentBars;
-    if (!currentBars || currentBars.length === 0) return 0;
-    const total = currentBars.length;
+  const {
+    motionEnergy,
+    motionBase,
+    motionAmp,
+    motionX,
+    motionY,
+    motionTransform,
+  } = useMotionTransform({
+    frame,
+    fps,
+    motionEnabled,
+    motionAmountPx,
+    motionSpeed,
+    motionAttack,
+    motionRelease,
+    bassMotionEnergy,
+  });
 
-    let sum = 0;
-    for (let i = 0; i < total; i += 1) {
-      sum += currentBars[i] ?? 0;
-    }
-    const avg = sum / total;
-
-    const lowEnd = Math.max(1, Math.floor(total * 0.2));
-    const vocalStart = Math.max(0, Math.floor(total * 0.25));
-    const vocalEnd = Math.max(vocalStart + 1, Math.floor(total * 0.6));
-
-    let lowSum = 0;
-    for (let i = 0; i < lowEnd; i += 1) lowSum += currentBars[i] ?? 0;
-    const lowAvg = lowSum / lowEnd;
-
-    let vocalSum = 0;
-    let vocalCount = 0;
-    for (let i = vocalStart; i < vocalEnd && i < total; i += 1) {
-      vocalSum += currentBars[i] ?? 0;
-      vocalCount += 1;
-    }
-    const vocalAvg = vocalCount > 0 ? vocalSum / vocalCount : 0;
-
-    const vocalWeight = Math.min(1, Math.max(0, edgeRaysVocalBalance));
-    const lowWeight = 1 - vocalWeight;
-    const base = lowAvg * lowWeight + vocalAvg * vocalWeight;
-    const crest = Math.max(lowAvg, vocalAvg);
-
-    const mixed = avg * 0.45 + base * 0.35 + crest * 0.2;
-    const floor = 0.003;
-    const normalized = Math.max(0, Math.min(1, (mixed - floor) / (1 - floor)));
-    return Math.pow(normalized, 0.6);
-  }, [audioData, edgeRaysVocalBalance, smoothBars]);
-
-  const bassMotionEnergy = useMemo(() => {
-    const currentBars = smoothBars?.currentBars;
-    if (!currentBars || currentBars.length === 0) return 0;
-    const total = currentBars.length;
-    const bassEnd = Math.max(1, Math.floor(total * 0.14));
-    let bassSum = 0;
-    for (let i = 0; i < bassEnd; i += 1) {
-      bassSum += currentBars[i] ?? 0;
-    }
-    const bassAvg = bassSum / bassEnd;
-    const normalized = Math.max(0, Math.min(1, (bassAvg - 0.006) / 0.35));
-    return Math.pow(normalized, 0.7);
-  }, [smoothBars]);
-
-  const glowRef = useRef(0);
-  const glowOutputRef = useRef(0);
-  const lastEnergyRef = useRef(0);
-  const transientRef = useRef(0);
-  const gateRef = useRef(0);
-  const glowIntensity = useMemo(() => {
-    const intensityScale = 0.35 + edgeRaysIntensity * 1.35;
-    const target = Math.min(1, edgeEnergy * intensityScale);
-    if (frame === 0) {
-      glowRef.current = target;
-      glowOutputRef.current = target;
-      lastEnergyRef.current = target;
-      return target;
-    }
-
-    const lastEnergy = lastEnergyRef.current;
-    const rise = Math.max(0, target - lastEnergy);
-    lastEnergyRef.current = target;
-
-    const transient = lerp(transientRef.current, rise, 0.26);
-    transientRef.current = transient;
-
-    const gateTarget = rise > 0.008 || target > 0.05 ? 1 : 0;
-    const gate = gateTarget > gateRef.current
-      ? lerp(gateRef.current, gateTarget, 0.72)
-      : lerp(gateRef.current, gateTarget, 0.26);
-    gateRef.current = gate;
-
-    const current = glowRef.current;
-    const attack = 0.88;
-    const release = 0.32;
-    const smoothed = target > current
-      ? lerp(current, target, attack)
-      : lerp(current, target, release);
-    glowRef.current = smoothed;
-
-    const kick = transient * 2.4 * gate;
-    const combined = Math.min(1, smoothed + kick);
-    const output = lerp(glowOutputRef.current, combined, 0.78);
-    glowOutputRef.current = output;
-    return output;
-  }, [edgeEnergy, edgeRaysIntensity, frame]);
-
-  const motionEnvelopeRef = useRef(0);
-  const motionLastEnergyRef = useRef(0);
-  const motionTransientRef = useRef(0);
-  const motionKickRef = useRef(0);
-  const motionEnergy = useMemo(() => {
-    const target = Math.max(0, Math.min(1, bassMotionEnergy));
-    if (frame === 0) {
-      motionEnvelopeRef.current = target;
-      motionLastEnergyRef.current = target;
-      motionTransientRef.current = 0;
-      motionKickRef.current = 0;
-      return target;
-    }
-    const attack = Math.max(0.22, Math.min(0.995, motionAttack));
-    const release = Math.max(0.06, Math.min(0.95, motionRelease));
-    const current = motionEnvelopeRef.current;
-    const smoothed =
-      target > current
-        ? lerp(current, target, attack)
-        : lerp(current, target, release);
-    motionEnvelopeRef.current = smoothed;
-
-    const rise = Math.max(0, target - motionLastEnergyRef.current);
-    motionLastEnergyRef.current = target;
-    const transient = lerp(motionTransientRef.current, rise, 0.75);
-    motionTransientRef.current = transient;
-    const kickTarget = rise > 0.016 ? 1 : 0;
-    const kick = lerp(motionKickRef.current, kickTarget, 0.78);
-    motionKickRef.current = kick;
-    return Math.min(1, smoothed * 0.78 + transient * 3.8 * kick);
-  }, [bassMotionEnergy, frame, motionAttack, motionRelease]);
-
-  const motionTime = (frame / fps) * Math.PI * 2 * Math.max(0, motionSpeed);
-  const motionBase = Math.max(0, Math.min(1, motionEnergy * 1.55 + 0.08));
-  const motionAmp = Math.max(0, motionAmountPx) * motionBase;
-  const motionXRaw = motionEnabled ? Math.sin(motionTime) * motionAmp : 0;
-  const motionYRaw = motionEnabled
-    ? (Math.cos(motionTime * 0.9) * motionAmp * 0.45 + motionAmp * 0.25)
-    : 0;
-  const motionXRef = useRef(0);
-  const motionYRef = useRef(0);
-  const motionLerpAlpha = 0.22;
-  const motionMaxStep = Math.max(0.5, motionAmountPx * 0.35);
-  if (frame === 0) {
-    motionXRef.current = motionXRaw;
-    motionYRef.current = motionYRaw;
-  } else {
-    const nextX = lerp(motionXRef.current, motionXRaw, motionLerpAlpha);
-    const nextY = lerp(motionYRef.current, motionYRaw, motionLerpAlpha);
-    const dx = nextX - motionXRef.current;
-    const dy = nextY - motionYRef.current;
-    // Limit per-frame jump to avoid tiny jerk spikes in noisy music regions.
-    motionXRef.current += clamp(dx, -motionMaxStep, motionMaxStep);
-    motionYRef.current += clamp(dy, -motionMaxStep, motionMaxStep);
-  }
-  const motionX = motionXRef.current;
-  const motionY = motionYRef.current;
-  const motionTransform = motionEnabled
-    ? `translate(${motionX.toFixed(2)}px, ${motionY.toFixed(2)}px)`
-    : undefined;
   const edgeRayVisibility = Math.min(
     1,
     Math.max(0, glowIntensity * 1.2 + edgeEnergy * 0.35)
@@ -667,8 +288,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     Math.min(1, contentLayerOpacity * (0.88 + edgeRayVisibility * 0.2))
   );
 
-  const maxSegmentStartFrame = Math.max(0, playableVideoFrames - segmentFrames);
-  const timelineMs = (frame / fps) * 1000;
   const {
     effectiveCaptionsStyle,
     captionSegments,
@@ -802,22 +421,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     layerOpacity: contentLayerOpacity,
   };
 
-  useEffect(() => {
-    if (!thumbnailSrc || isRendering) {
-      return;
-    }
-    if (thumbnailRenderHandle.current !== null) {
-      continueRender(thumbnailRenderHandle.current);
-    }
-    thumbnailRenderHandle.current = delayRender("Loading thumbnail");
-    return () => {
-      if (thumbnailRenderHandle.current !== null) {
-        continueRender(thumbnailRenderHandle.current);
-        thumbnailRenderHandle.current = null;
-      }
-    };
-  }, [thumbnailSrc, isRendering]);
-
   return (
     <AbsoluteFill
       style={{
@@ -835,33 +438,15 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           >
             <TransitionSeries>{segmentTransitionSeries}</TransitionSeries>
           </AbsoluteFill>
-          {thumbnailSrc && !isRendering && shouldShowThumbnailLayer ? (
-            <AbsoluteFill
-              style={{
-                opacity: thumbnailOpacity,
-                transform: motionTransform,
-              }}
-            >
-              <Img
-                src={thumbnailSrc}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                onLoad={() => {
-                  setLoadedThumbnailSrc(thumbnailSrc);
-                  setFadeStartState({ src: thumbnailSrc, frame: 0 });
-                  if (thumbnailRenderHandle.current !== null) {
-                    continueRender(thumbnailRenderHandle.current);
-                    thumbnailRenderHandle.current = null;
-                  }
-                }}
-                onError={() => {
-                  if (thumbnailRenderHandle.current !== null) {
-                    continueRender(thumbnailRenderHandle.current);
-                    thumbnailRenderHandle.current = null;
-                  }
-                }}
-              />
-            </AbsoluteFill>
-          ) : null}
+          <ThumbnailRevealLayer
+            thumbnailSrc={thumbnailSrc}
+            frame={frame}
+            fps={fps}
+            isRendering={isRendering}
+            motionTransform={motionTransform}
+            onRevealOpacityChange={setThumbnailRevealOpacity}
+            onVideoOpacityChange={setVideoVisibilityMultiplier}
+          />
         </>
       ) : effectivePreviewMode !== "performance" ? (
         <AbsoluteFill
@@ -926,55 +511,13 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         />
       ) : null}
       {effectivePreviewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
-        <AbsoluteFill
-          style={{
-            justifyContent: "flex-end",
-            padding: "0",
-            opacity: contentLayerOpacity,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${smoothBars.bars.length}, minmax(0, 1fr))`,
-              gap: 4,
-              alignItems: "end",
-              height: 80, // Target height in pixels
-              width: "100%",
-              padding: "0 6px 0",
-              background: "transparent",
-            }}
-          >
-            {smoothBars.bars.map((value, index) => {
-              
-              // FIX 3: Removed all manual boosting/shimmer/minVisible hacks.
-              // We use the 'value' directly from processAudioBars().
-              const clamped = value; 
-
-              const shade = barPaletteColors[index % barPaletteColors.length] ?? paletteColors[0] ?? DEFAULT_PALETTE[0];
-              return (
-                <div
-                  key={`bar-${index}`}
-                  style={{
-                    // Height is simply clamped value * max height (80%)
-                    height: `${clamped * 80}%`, 
-                    borderRadius: 5,
-                    background: `linear-gradient(180deg, ${hexToRgba(
-                      shade,
-                      0.95
-                    )} 0%, ${hexToRgba(shade, 0.35)} 100%)`,
-                    boxShadow: `inset 0 1px 0 ${hexToRgba(
-                      accentColor,
-                      0.6
-                    )}, 0 0 6px ${hexToRgba(accentColor, 0.3)}`,
-                    opacity: 0.95,
-                    transformOrigin: "center bottom",
-                  }}
-                />
-              );
-            })}
-          </div>
-        </AbsoluteFill>
+        <VisualizationBarsLayer
+          bars={smoothBars.bars}
+          paletteColors={paletteColors}
+          barPaletteColors={barPaletteColors}
+          accentColor={accentColor}
+          opacity={contentLayerOpacity}
+        />
       ) : null}
       {outroOverlayOpacity > 0 ? (
         <AbsoluteFill
