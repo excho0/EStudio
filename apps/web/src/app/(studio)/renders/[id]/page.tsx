@@ -579,9 +579,8 @@ export default function RendersPage() {
           }
         }}
       >
-        <ResponsiveDrawerContent className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:h-auto sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1440px)] lg:max-w-[min(86vw,1440px)]">
           {previewItem ? (
-            <>
+            <ResponsiveDrawerContent className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:h-auto sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1440px)] lg:max-w-[min(86vw,1440px)]">
               <ResponsiveDrawerHeader className="shrink-0 border-b border-slate-200 px-4 py-4 text-left dark:border-white/10 sm:px-5">
                 <ResponsiveDrawerTitle className="text-lg font-semibold break-all sm:break-normal">
                   {previewItem.name}
@@ -621,9 +620,8 @@ export default function RendersPage() {
                     </a>
                   </Button>
               </ResponsiveDrawerFooter>
-            </>
+            </ResponsiveDrawerContent>
           ) : null}
-        </ResponsiveDrawerContent>
       </ResponsiveDrawer>
     </div>
   );
