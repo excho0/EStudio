@@ -67,12 +67,43 @@ export const useEdgeRaysMetrics = ({
     const balancedBlend = lowBlend * (0.68 - vocalPreference * 0.22) + presenceBlend * (0.22 + vocalPreference * 0.2);
     const crest = Math.max(lowBlend, vocalAvg, highAvg * 0.84);
 
+    const currentLowBlend = current
+      ? averageRange(current, 0, lowMidEnd, 1.14, 0.9)
+      : lowBlend;
+    const currentPresenceBlend = current
+      ? averageRange(current, vocalStart, total, 0.96, 0.74)
+      : presenceBlend;
     const currentBlend = current
-      ? averageRange(current, 0, lowMidEnd, 1.02, 0.82) * 0.56 +
-        averageRange(current, vocalStart, total, 0.92, 0.7) * 0.44
+      ? currentLowBlend * (0.62 - vocalPreference * 0.14) +
+        currentPresenceBlend * (0.38 + vocalPreference * 0.14)
       : balancedBlend;
 
-    const mixed = balancedBlend * 0.52 + currentBlend * 0.28 + crest * 0.12 + overallAvg * 0.08;
+    const smoothedLowBlend = smoothed
+      ? averageRange(smoothed, 0, lowMidEnd, 1.06, 0.88)
+      : lowBlend;
+    const smoothedPresenceBlend = smoothed
+      ? averageRange(smoothed, vocalStart, total, 0.92, 0.72)
+      : presenceBlend;
+    const lowMotionLift = Math.max(0, currentLowBlend - smoothedLowBlend);
+    const presenceMotionLift = Math.max(0, currentPresenceBlend - smoothedPresenceBlend);
+    const globalMotionLift = current
+      ? Math.max(
+          0,
+          averageRange(current, 0, total, 1.0, 0.82) - overallAvg
+        )
+      : 0;
+
+    const motionLift =
+      lowMotionLift * (0.62 - vocalPreference * 0.18) +
+      presenceMotionLift * (0.22 + vocalPreference * 0.12) +
+      globalMotionLift * 0.16;
+
+    const mixed =
+      balancedBlend * 0.42 +
+      currentBlend * 0.24 +
+      crest * 0.12 +
+      overallAvg * 0.06 +
+      motionLift * 0.16;
     const normalized = Math.max(0, Math.min(1, (mixed - 0.0035) / 0.46));
     return Math.pow(normalized, 0.7);
   }, [smoothedBands, currentBands, edgeRaysVocalBalance]);
@@ -82,8 +113,8 @@ export const useEdgeRaysMetrics = ({
   const lastEnergyRef = useRef(0);
   const transientRef = useRef(0);
   const glowIntensity = useMemo(() => {
-    const intensityScale = 0.35 + edgeRaysIntensity * 1.35;
-    const target = Math.min(1, edgeEnergy * intensityScale);
+    const intensityScale = 0.4 + edgeRaysIntensity * 1.05;
+    const target = 1 - Math.exp(-edgeEnergy * intensityScale * 1.85);
     if (frame === 0) {
       glowRef.current = target;
       glowOutputRef.current = target;

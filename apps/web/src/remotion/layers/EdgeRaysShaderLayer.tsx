@@ -62,25 +62,38 @@ const fragmentShaderSource = `
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  float lightningBand(float along, float inward, float time, float seed, float motion) {
-    float stableMotion = smoothstep(0.12, 0.4, motion);
-    float travel = along * 5.2 - time * (0.24 + stableMotion * 0.32) + seed;
-    float n1 = noise(vec2(travel, inward * 0.028 + seed * 0.18));
-    float n2 = noise(vec2(travel * 0.96 + 2.6, inward * 0.013 + seed * 0.1));
-    float n3 = noise(vec2(travel * 0.58 - 1.0, inward * 0.007 + seed * 0.06));
-    float combined = n1 * 0.68 + n2 * 0.2 + n3 * 0.12;
-    float streak = smoothstep(0.8, 0.955, combined);
-    float falloff = exp(-inward / (34.0 + stableMotion * 8.0));
+  float lightningBand(
+    float along,
+    float inward,
+    float time,
+    float seed,
+    float motion,
+    float intensity
+  ) {
+    float stableMotion = smoothstep(0.08, 0.9, motion);
+    float intensityDetail = smoothstep(0.45, 1.0, intensity);
+    float travel =
+      along * (5.0 + intensityDetail * 1.9) -
+      time * (0.22 + stableMotion * 0.38 + intensityDetail * 0.26) +
+      seed;
+    float n1 = noise(vec2(travel, inward * (0.028 + intensityDetail * 0.01) + seed * 0.18));
+    float n2 = noise(vec2(travel * 1.02 + 2.6, inward * 0.013 + seed * 0.1 + time * 0.03));
+    float n3 = noise(vec2(travel * 0.66 - 1.0, inward * 0.007 + seed * 0.06 - time * 0.018));
+    float n4 = noise(vec2(travel * 1.34 + seed * 1.7, inward * 0.02 + time * 0.052));
+    float combined = n1 * 0.52 + n2 * 0.18 + n3 * 0.12 + n4 * (0.18 + intensityDetail * 0.1);
+    float streak = smoothstep(0.82 - intensityDetail * 0.1, 0.952 - intensityDetail * 0.05, combined);
+    float falloff = exp(-inward / (34.0 + stableMotion * 8.0 + intensityDetail * 9.0));
     return streak * falloff;
   }
 
   void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
 
-    float stableEdge = smoothstep(0.08, 0.3, u_edgeEnergy);
-    float stableMotion = smoothstep(0.1, 0.3, u_motionEnergy);
+    float stableEdge = smoothstep(0.08, 0.92, u_edgeEnergy);
+    float stableMotion = smoothstep(0.08, 0.88, u_motionEnergy);
+    float intensityMotion = smoothstep(0.38, 1.0, u_glowIntensity);
 
-    float pulseAmount = 0.005 + stableMotion * 0.008;
+    float pulseAmount = 0.005 + stableMotion * 0.007 + intensityMotion * 0.008;
     float pTop = 1.0 + sin(u_time * 0.72) * pulseAmount;
     float pBot = 1.0 + sin(u_time * 0.67 + 1.1) * pulseAmount;
     float pLeft = 1.0 + sin(u_time * 0.61 + 0.6) * pulseAmount;
@@ -91,19 +104,19 @@ const fragmentShaderSource = `
     float dLeft = gl_FragCoord.x;
     float dRight = u_resolution.x - gl_FragCoord.x;
 
-    float spread = 88.0 + (u_glowIntensity * 96.0);
-    float raySpread = 42.0 + u_glowIntensity * 18.0;
+    float spread = 84.0 + (u_glowIntensity * 72.0) + intensityMotion * 16.0;
+    float raySpread = 40.0 + u_glowIntensity * 14.0 + intensityMotion * 10.0;
 
     float baseTop = exp(-dTop / spread) * pTop;
     float baseBot = exp(-dBot / spread) * pBot;
     float baseLeft = exp(-dLeft / spread) * pLeft;
     float baseRight = exp(-dRight / spread) * pRight;
 
-    float rayStrength = 0.14 + stableEdge * 0.22;
-    float topRay = lightningBand(uv.x, dTop, u_time, 0.7, stableMotion) * rayStrength;
-    float botRay = lightningBand(uv.x, dBot, u_time, 2.1, stableMotion) * rayStrength;
-    float leftRay = lightningBand(uv.y, dLeft, u_time, 3.4, stableMotion) * rayStrength;
-    float rightRay = lightningBand(uv.y, dRight, u_time, 5.0, stableMotion) * rayStrength;
+    float rayStrength = 0.12 + stableEdge * 0.18 + intensityMotion * 0.12;
+    float topRay = lightningBand(uv.x, dTop, u_time, 0.7, stableMotion, u_glowIntensity) * rayStrength;
+    float botRay = lightningBand(uv.x, dBot, u_time, 2.1, stableMotion, u_glowIntensity) * rayStrength;
+    float leftRay = lightningBand(uv.y, dLeft, u_time, 3.4, stableMotion, u_glowIntensity) * rayStrength;
+    float rightRay = lightningBand(uv.y, dRight, u_time, 5.0, stableMotion, u_glowIntensity) * rayStrength;
 
     topRay *= exp(-dTop / raySpread);
     botRay *= exp(-dBot / raySpread);
@@ -113,8 +126,8 @@ const fragmentShaderSource = `
     float rayField = max(max(topRay, botRay), max(leftRay, rightRay));
     float baseField = max(max(baseTop, baseBot), max(baseLeft, baseRight));
 
-    float totalGlow = (baseField * 0.82 + rayField * (0.92 + u_glowIntensity * 0.22)) * 0.7;
-    totalGlow *= u_glowIntensity * (0.94 + stableEdge * 0.06);
+    float totalGlow = (baseField * 0.78 + rayField * (0.92 + u_glowIntensity * 0.2 + intensityMotion * 0.14)) * 0.68;
+    totalGlow *= u_glowIntensity * (0.9 + stableEdge * 0.05 + intensityMotion * 0.08);
     totalGlow = clamp(totalGlow, 0.0, 1.0);
 
     vec3 baseColor = u_color;
