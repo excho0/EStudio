@@ -31,7 +31,7 @@ export function Sidebar() {
         className="relative h-full flex flex-col px-3 py-4 overflow-y-auto shadow-md dark:shadow-zinc-800 bg-sidebar"
       >
         <Button
-          variant="ghost"
+          variant={null}
           asChild
         >
           <Link href="/dashboard" className="flex items-center gap-2">

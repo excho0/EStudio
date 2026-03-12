@@ -31,10 +31,10 @@ export function SheetMenu() {
         <SheetHeader>
           <Button
             className="flex justify-center items-center pb-2 pt-1"
-            variant="link"
+            variant={null}
             asChild
           >
-            <Link href="/dashboard" className="flex items-center gap-2">
+            <Link href="/dashboard" onClick={() => setOpen(false)} className="flex items-center gap-2">
               <Logo
                 showText
                 width={42}
