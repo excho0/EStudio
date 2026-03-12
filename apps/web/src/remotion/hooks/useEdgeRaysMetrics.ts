@@ -1,0 +1,122 @@
+import { useMemo, useRef } from "react";
+import { lerp } from "../utils";
+
+type UseEdgeRaysMetricsArgs = {
+  smoothedBands: number[] | null;
+  currentBands: number[] | null;
+  edgeRaysVocalBalance: number;
+  edgeRaysIntensity: number;
+  frame: number;
+};
+
+export const useEdgeRaysMetrics = ({
+  smoothedBands,
+  currentBands,
+  edgeRaysVocalBalance,
+  edgeRaysIntensity,
+  frame,
+}: UseEdgeRaysMetricsArgs) => {
+  const edgeEnergy = useMemo(() => {
+    const smoothed = smoothedBands;
+    const current = currentBands;
+    const sourceBands = smoothed ?? current;
+    if (!sourceBands || sourceBands.length === 0) return 0;
+
+    const total = sourceBands.length;
+    const averageRange = (
+      values: number[],
+      start: number,
+      end: number,
+      startWeight: number,
+      endWeight: number
+    ) => {
+      const safeStart = Math.max(0, Math.min(total - 1, start));
+      const safeEnd = Math.max(safeStart + 1, Math.min(total, end));
+      let sum = 0;
+      let weightSum = 0;
+      const span = Math.max(1, safeEnd - safeStart - 1);
+      for (let i = safeStart; i < safeEnd; i += 1) {
+        const t = (i - safeStart) / span;
+        const weight = startWeight + (endWeight - startWeight) * t;
+        sum += (values[i] ?? 0) * weight;
+        weightSum += weight;
+      }
+      return weightSum > 0 ? sum / weightSum : 0;
+    };
+
+    const lowEnd = Math.max(1, Math.floor(total * 0.14));
+    const lowMidEnd = Math.max(lowEnd + 1, Math.floor(total * 0.3));
+    const vocalStart = Math.max(lowEnd, Math.floor(total * 0.24));
+    const vocalEnd = Math.max(vocalStart + 1, Math.floor(total * 0.56));
+    const highStart = Math.max(vocalEnd, Math.floor(total * 0.56));
+
+    const lowAvg = averageRange(sourceBands, 0, lowEnd, 1.2, 0.86);
+    const lowMidAvg = averageRange(sourceBands, lowEnd, lowMidEnd, 1.0, 0.88);
+    const vocalAvg = averageRange(sourceBands, vocalStart, vocalEnd, 1.0, 0.9);
+    const highAvg = averageRange(sourceBands, highStart, total, 0.82, 0.62);
+
+    let overallSum = 0;
+    for (let i = 0; i < total; i += 1) {
+      overallSum += sourceBands[i] ?? 0;
+    }
+    const overallAvg = overallSum / total;
+
+    const vocalPreference = Math.min(1, Math.max(0, edgeRaysVocalBalance));
+    const lowBlend = lowAvg * 0.58 + lowMidAvg * 0.42;
+    const presenceBlend = vocalAvg * 0.72 + highAvg * 0.28;
+    const balancedBlend = lowBlend * (0.68 - vocalPreference * 0.22) + presenceBlend * (0.22 + vocalPreference * 0.2);
+    const crest = Math.max(lowBlend, vocalAvg, highAvg * 0.84);
+
+    const currentBlend = current
+      ? averageRange(current, 0, lowMidEnd, 1.02, 0.82) * 0.56 +
+        averageRange(current, vocalStart, total, 0.92, 0.7) * 0.44
+      : balancedBlend;
+
+    const mixed = balancedBlend * 0.52 + currentBlend * 0.28 + crest * 0.12 + overallAvg * 0.08;
+    const normalized = Math.max(0, Math.min(1, (mixed - 0.0035) / 0.46));
+    return Math.pow(normalized, 0.7);
+  }, [smoothedBands, currentBands, edgeRaysVocalBalance]);
+
+  const glowRef = useRef(0);
+  const glowOutputRef = useRef(0);
+  const lastEnergyRef = useRef(0);
+  const transientRef = useRef(0);
+  const glowIntensity = useMemo(() => {
+    const intensityScale = 0.35 + edgeRaysIntensity * 1.35;
+    const target = Math.min(1, edgeEnergy * intensityScale);
+    if (frame === 0) {
+      glowRef.current = target;
+      glowOutputRef.current = target;
+      lastEnergyRef.current = target;
+      return target;
+    }
+
+    const lastEnergy = lastEnergyRef.current;
+    const delta = target - lastEnergy;
+    const rise = Math.max(0, delta);
+    lastEnergyRef.current = target;
+
+    const transient = lerp(transientRef.current, rise, 0.14);
+    transientRef.current = transient;
+
+    const current = glowRef.current;
+    const attack = 0.6;
+    const release = 0.16;
+    const smoothed =
+      target > current
+        ? lerp(current, target, attack)
+        : lerp(current, target, release);
+    glowRef.current = smoothed;
+
+    const accent = transient * 0.9;
+    const combined = Math.min(1, smoothed + accent);
+    const output = lerp(glowOutputRef.current, combined, 0.5);
+    glowOutputRef.current = output;
+    return output;
+  }, [edgeEnergy, edgeRaysIntensity, frame]);
+
+  return {
+    edgeEnergy,
+    glowIntensity,
+  };
+};

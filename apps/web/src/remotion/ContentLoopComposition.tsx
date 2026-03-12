@@ -19,7 +19,9 @@ import { EdgeRaysShaderLayer } from "./layers/EdgeRaysShaderLayer";
 import { ThumbnailRevealLayer } from "./layers/ThumbnailRevealLayer";
 import { VisualizationBarsLayer } from "./layers/VisualizationBarsLayer";
 import { buildVideoSlices, clamp, resolveCaptionRuntime } from "./utils";
+import { useAudioBandMetrics } from "./hooks/useAudioBandMetrics";
 import { useAudioReactiveMetrics } from "./hooks/useAudioReactiveMetrics";
+import { useEdgeRaysMetrics } from "./hooks/useEdgeRaysMetrics";
 import { useCompositionPalette } from "./hooks/useCompositionPalette";
 import { useCompositionTiming } from "./hooks/useCompositionTiming";
 import { useMotionTransform } from "./hooks/useMotionTransform";
@@ -248,17 +250,26 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
   // FIX 2: Added `noiseFloor` parameter and made the `curve` slightly higher 
   // for a sharper AE look.
-  const { smoothBars, edgeEnergy, bassMotionEnergy, glowIntensity } = useAudioReactiveMetrics({
+  const audioBandMetrics = useAudioBandMetrics({
     audioData,
     frame,
     fps,
     rangeStartFrames,
     rangeEndFrames,
-    resolvedVisualizationBars,
-    visualizationEnabled,
-    edgeRaysEnabled,
+    resolvedBandCount: resolvedVisualizationBars,
+    enabled: visualizationEnabled || edgeRaysEnabled,
+  });
+
+  const { bassMotionEnergy } = useAudioReactiveMetrics({
+    currentBands: audioBandMetrics?.currentBands ?? null,
+  });
+
+  const { edgeEnergy, glowIntensity } = useEdgeRaysMetrics({
+    smoothedBands: audioBandMetrics?.smoothedBands ?? null,
+    currentBands: audioBandMetrics?.currentBands ?? null,
     edgeRaysVocalBalance,
     edgeRaysIntensity,
+    frame,
   });
 
   const {
@@ -510,9 +521,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
           ]}
         />
       ) : null}
-      {effectivePreviewMode !== "performance" && visualizationEnabled && smoothBars?.bars ? (
+      {effectivePreviewMode !== "performance" && visualizationEnabled && audioBandMetrics?.smoothedBands ? (
         <VisualizationBarsLayer
-          bars={smoothBars.bars}
+          bars={audioBandMetrics?.smoothedBands ?? []}
           paletteColors={paletteColors}
           barPaletteColors={barPaletteColors}
           accentColor={accentColor}

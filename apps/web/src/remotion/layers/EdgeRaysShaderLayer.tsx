@@ -63,20 +63,24 @@ const fragmentShaderSource = `
   }
 
   float lightningBand(float along, float inward, float time, float seed, float motion) {
-    float travel = along * 9.5 - time * (1.1 + motion * 1.35) + seed;
-    float n1 = noise(vec2(travel, inward * 0.055 + seed * 0.31));
-    float n2 = noise(vec2(travel * 1.7 + 4.3, inward * 0.022 + seed * 0.17));
-    float n3 = noise(vec2(travel * 0.8 - 2.1, inward * 0.012 + seed * 0.11));
-    float combined = n1 * 0.55 + n2 * 0.3 + n3 * 0.15;
-    float streak = smoothstep(0.7, 0.96, combined);
-    float falloff = exp(-inward / (26.0 + motion * 14.0));
+    float stableMotion = smoothstep(0.12, 0.4, motion);
+    float travel = along * 5.2 - time * (0.24 + stableMotion * 0.32) + seed;
+    float n1 = noise(vec2(travel, inward * 0.028 + seed * 0.18));
+    float n2 = noise(vec2(travel * 0.96 + 2.6, inward * 0.013 + seed * 0.1));
+    float n3 = noise(vec2(travel * 0.58 - 1.0, inward * 0.007 + seed * 0.06));
+    float combined = n1 * 0.68 + n2 * 0.2 + n3 * 0.12;
+    float streak = smoothstep(0.8, 0.955, combined);
+    float falloff = exp(-inward / (34.0 + stableMotion * 8.0));
     return streak * falloff;
   }
 
   void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
 
-    float pulseAmount = 0.02 + u_motionEnergy * 0.028;
+    float stableEdge = smoothstep(0.08, 0.3, u_edgeEnergy);
+    float stableMotion = smoothstep(0.1, 0.3, u_motionEnergy);
+
+    float pulseAmount = 0.005 + stableMotion * 0.008;
     float pTop = 1.0 + sin(u_time * 0.72) * pulseAmount;
     float pBot = 1.0 + sin(u_time * 0.67 + 1.1) * pulseAmount;
     float pLeft = 1.0 + sin(u_time * 0.61 + 0.6) * pulseAmount;
@@ -87,18 +91,19 @@ const fragmentShaderSource = `
     float dLeft = gl_FragCoord.x;
     float dRight = u_resolution.x - gl_FragCoord.x;
 
-    float spread = 82.0 + (u_glowIntensity * 118.0);
-    float raySpread = 34.0 + u_glowIntensity * 28.0;
+    float spread = 88.0 + (u_glowIntensity * 96.0);
+    float raySpread = 42.0 + u_glowIntensity * 18.0;
 
     float baseTop = exp(-dTop / spread) * pTop;
     float baseBot = exp(-dBot / spread) * pBot;
     float baseLeft = exp(-dLeft / spread) * pLeft;
     float baseRight = exp(-dRight / spread) * pRight;
 
-    float topRay = lightningBand(uv.x, dTop, u_time, 0.7, u_motionEnergy) * (0.22 + u_edgeEnergy * 0.34);
-    float botRay = lightningBand(uv.x, dBot, u_time, 2.1, u_motionEnergy) * (0.22 + u_edgeEnergy * 0.34);
-    float leftRay = lightningBand(uv.y, dLeft, u_time, 3.4, u_motionEnergy) * (0.22 + u_edgeEnergy * 0.34);
-    float rightRay = lightningBand(uv.y, dRight, u_time, 5.0, u_motionEnergy) * (0.22 + u_edgeEnergy * 0.34);
+    float rayStrength = 0.14 + stableEdge * 0.22;
+    float topRay = lightningBand(uv.x, dTop, u_time, 0.7, stableMotion) * rayStrength;
+    float botRay = lightningBand(uv.x, dBot, u_time, 2.1, stableMotion) * rayStrength;
+    float leftRay = lightningBand(uv.y, dLeft, u_time, 3.4, stableMotion) * rayStrength;
+    float rightRay = lightningBand(uv.y, dRight, u_time, 5.0, stableMotion) * rayStrength;
 
     topRay *= exp(-dTop / raySpread);
     botRay *= exp(-dBot / raySpread);
@@ -108,13 +113,13 @@ const fragmentShaderSource = `
     float rayField = max(max(topRay, botRay), max(leftRay, rightRay));
     float baseField = max(max(baseTop, baseBot), max(baseLeft, baseRight));
 
-    float totalGlow = (baseField * 0.78 + rayField * (1.25 + u_glowIntensity * 0.45)) * 0.7;
-    totalGlow *= u_glowIntensity;
+    float totalGlow = (baseField * 0.82 + rayField * (0.92 + u_glowIntensity * 0.22)) * 0.7;
+    totalGlow *= u_glowIntensity * (0.94 + stableEdge * 0.06);
     totalGlow = clamp(totalGlow, 0.0, 1.0);
 
     vec3 baseColor = u_color;
-    vec3 coreColor = clamp(baseColor * (1.05 + u_edgeEnergy * 0.08), 0.0, 1.0);
-    vec3 bloomColor = clamp(baseColor * (0.72 + u_glowIntensity * 0.16), 0.0, 1.0);
+    vec3 coreColor = clamp(baseColor * (1.04 + stableEdge * 0.06), 0.0, 1.0);
+    vec3 bloomColor = clamp(baseColor * (0.72 + u_glowIntensity * 0.14), 0.0, 1.0);
     vec3 glowColor = mix(bloomColor, coreColor, clamp(rayField * 1.15, 0.0, 1.0));
     gl_FragColor = vec4(glowColor * totalGlow, totalGlow * u_opacity);
   }
