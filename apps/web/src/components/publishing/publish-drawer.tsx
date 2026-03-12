@@ -496,36 +496,38 @@ export function PublishDrawer({
   }
 
   return (
-    <ResponsiveDrawer open={open} onOpenChange={openDrawer}>
+    <ResponsiveDrawer
+      open={open}
+      onOpenChange={openDrawer}
+      className="w-full sm:max-w-4xl overflow-hidden"
+      closeOnOutsideClick={false}
+      data-publish-status={publishStatus ?? undefined}
+      data-publish-stage={publishStage ?? undefined}
+      data-publish-progress={
+        typeof publishProgress === "number"
+          ? publishProgress.toFixed(3)
+          : undefined
+      }
+      data-publish-bytes={
+        publishBytes
+          ? `${publishBytes.uploaded ?? 0}/${publishBytes.total ?? 0}`
+          : undefined
+      }
+    >
       {trigger ? (
         <ResponsiveDrawerTrigger asChild>{trigger}</ResponsiveDrawerTrigger>
       ) : null}
-      <ResponsiveDrawerContent
-        className="w-full sm:max-w-4xl overflow-hidden"
-        closeOnOutsideClick={false}
-        data-publish-status={publishStatus ?? undefined}
-        data-publish-stage={publishStage ?? undefined}
-        data-publish-progress={
-          typeof publishProgress === "number"
-            ? publishProgress.toFixed(3)
-            : undefined
-        }
-        data-publish-bytes={
-          publishBytes
-            ? `${publishBytes.uploaded ?? 0}/${publishBytes.total ?? 0}`
-            : undefined
-        }
-      >
-        <ResponsiveDrawerHeader>
-          <ResponsiveDrawerTitle className="text-xl">
-            Publish
-          </ResponsiveDrawerTitle>
-          <ResponsiveDrawerDescription>
-            Pick a destination, choose a render, then add your metadata.
-          </ResponsiveDrawerDescription>
-        </ResponsiveDrawerHeader>
+      <ResponsiveDrawerHeader>
+        <ResponsiveDrawerTitle className="text-xl">
+          Publish
+        </ResponsiveDrawerTitle>
+        <ResponsiveDrawerDescription>
+          Pick a destination, choose a render, then add your metadata.
+        </ResponsiveDrawerDescription>
+      </ResponsiveDrawerHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-2">
+      <ResponsiveDrawerContent className="overflow-y-auto px-4 pb-2">
+        <div className="flex-1">
           {status === "unauthenticated" ? (
             <Card className="mt-6 border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200">
               Sign in to manage publish destinations.
@@ -979,52 +981,52 @@ export function PublishDrawer({
             </StepperShell>
           )}
         </div>
+      </ResponsiveDrawerContent>
 
-        <ResponsiveDrawerFooter>
-          <StepperFooter>
-            <div className="flex items-center justify-between gap-2">
+      <ResponsiveDrawerFooter>
+        <StepperFooter>
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleBack}
+              disabled={activeStepIndex === 0 || submitting}
+            >
+              Back
+            </Button>
+            {stepId !== "review" ? (
               <Button
                 type="button"
-                variant="outline"
-                onClick={handleBack}
-                disabled={activeStepIndex === 0 || submitting}
+                onClick={handleNext}
+                disabled={
+                  submitting ||
+                  (stepId === "provider" && !canContinueProvider) ||
+                  (stepId === "render" && !canContinueRender) ||
+                  (stepId === "details" && !canContinueDetails) ||
+                  (stepId === "options" && !canContinueOptions)
+                }
               >
-                Back
+                Next
               </Button>
-              {stepId !== "review" ? (
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={
-                    submitting ||
-                    (stepId === "provider" && !canContinueProvider) ||
-                    (stepId === "render" && !canContinueRender) ||
-                    (stepId === "details" && !canContinueDetails) ||
-                    (stepId === "options" && !canContinueOptions)
-                  }
-                >
-                  Next
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handlePublish}
-                  disabled={!canContinueDetails || submitting}
-                  loading={submitting}
-                  loadingText="Publishing..."
-                >
-                  Publish
-                </Button>
-              )}
-            </div>
-            {/* <ResponsiveDrawerClose asChild>
-              <Button type="button" variant="ghost" disabled={submitting}>
-                Cancel
+            ) : (
+              <Button
+                type="button"
+                onClick={handlePublish}
+                disabled={!canContinueDetails || submitting}
+                loading={submitting}
+                loadingText="Publishing..."
+              >
+                Publish
               </Button>
-            </ResponsiveDrawerClose> */}
-          </StepperFooter>
-        </ResponsiveDrawerFooter>
-      </ResponsiveDrawerContent>
+            )}
+          </div>
+          {/* <ResponsiveDrawerClose asChild>
+            <Button type="button" variant="ghost" disabled={submitting}>
+              Cancel
+            </Button>
+          </ResponsiveDrawerClose> */}
+        </StepperFooter>
+      </ResponsiveDrawerFooter>
     </ResponsiveDrawer>
   );
 }

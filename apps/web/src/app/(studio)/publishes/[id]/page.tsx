@@ -613,17 +613,17 @@ export default function PublishesPage() {
         onOpenChange={(open) => {
           if (!open) setErrorPublish(null);
         }}
+        className="w-full"
       >
-        <ResponsiveDrawerContent className="w-full">
-          <ResponsiveDrawerHeader>
-            <ResponsiveDrawerTitle>Publish {errorPublish?.status === "failed" ? "Error" : "Warning"}</ResponsiveDrawerTitle>
-            <ResponsiveDrawerDescription>
-              {errorPublish?.metadata
-                ? getMetadataTitle(errorPublish.metadata) ?? "Publish error details"
-                : "Publish error details"}
-            </ResponsiveDrawerDescription>
-          </ResponsiveDrawerHeader>
-          <div className="px-4 pb-6 text-sm text-slate-700 dark:text-zinc-200">
+        <ResponsiveDrawerHeader>
+          <ResponsiveDrawerTitle>Publish {errorPublish?.status === "failed" ? "Error" : "Warning"}</ResponsiveDrawerTitle>
+          <ResponsiveDrawerDescription>
+            {errorPublish?.metadata
+              ? getMetadataTitle(errorPublish.metadata) ?? "Publish error details"
+              : "Publish error details"}
+          </ResponsiveDrawerDescription>
+        </ResponsiveDrawerHeader>
+        <ResponsiveDrawerContent className="px-4 pb-6 text-sm text-slate-700 dark:text-zinc-200">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
               <p className="font-semibold text-slate-900 dark:text-white">
                 {errorPublish?.status ?? "failed"}
@@ -632,7 +632,6 @@ export default function PublishesPage() {
                 {errorPublish?.error ?? "No error details were recorded."}
               </p>
             </div>
-          </div>
         </ResponsiveDrawerContent>
       </ResponsiveDrawer>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

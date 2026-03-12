@@ -640,12 +640,15 @@ export default function LibraryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <ResponsiveDrawer open={renderModePickerOpen} onOpenChange={setRenderModePickerOpen}>
-        <ResponsiveDrawerContent className="w-full">
-          <ResponsiveDrawerHeader>
-            <ResponsiveDrawerTitle>Choose Render Mode</ResponsiveDrawerTitle>
-          </ResponsiveDrawerHeader>
-          <div className="space-y-4 px-4 pb-4">
+      <ResponsiveDrawer
+        open={renderModePickerOpen}
+        onOpenChange={setRenderModePickerOpen}
+        className="w-full"
+      >
+        <ResponsiveDrawerHeader>
+          <ResponsiveDrawerTitle>Choose Render Mode</ResponsiveDrawerTitle>
+        </ResponsiveDrawerHeader>
+        <ResponsiveDrawerContent className="space-y-4 px-4 pb-4">
             {pendingRenderItem ? (
               <>
                 <p className="text-sm text-slate-600 dark:text-zinc-300">
@@ -707,7 +710,6 @@ export default function LibraryPage() {
                 </div>
               </>
             ) : null}
-          </div>
         </ResponsiveDrawerContent>
       </ResponsiveDrawer>
       {publishContentId ? (
@@ -757,11 +759,11 @@ export default function LibraryPage() {
                     <SlidersHorizontal className="h-4 w-4" />
                   </Button>
                 </ResponsiveDrawerTrigger>
-                <ResponsiveDrawerContent className="md:hidden">
-                  <ResponsiveDrawerHeader>
-                    <ResponsiveDrawerTitle>Filters</ResponsiveDrawerTitle>
-                  </ResponsiveDrawerHeader>
-                  <div className="px-4 pb-4">{filtersPanel}</div>
+                <ResponsiveDrawerHeader>
+                  <ResponsiveDrawerTitle>Filters</ResponsiveDrawerTitle>
+                </ResponsiveDrawerHeader>
+                <ResponsiveDrawerContent className="px-4 pb-4">
+                  {filtersPanel}
                 </ResponsiveDrawerContent>
               </ResponsiveDrawer>
             </div>

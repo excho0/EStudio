@@ -294,6 +294,12 @@ export default function RendersPage() {
     router.replace(`/renders/${id}?${nextSearchParams.toString()}`, { scroll: false });
   };
 
+  const previewName = previewItem?.name ?? "";
+  const previewMeta = previewItem
+    ? `${formatBytes(previewItem.size)} · ${formatDateTime(previewItem.mtimeMs)}`
+    : "";
+  const previewAssetUrl = previewItem?.assetUrl ?? "";
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -452,9 +458,6 @@ export default function RendersPage() {
                             />
                             <div>
                               <div className="font-medium">{item.name}</div>
-                              <div className="text-xs text-slate-500 dark:text-zinc-500">
-                                Render asset
-                              </div>
                               </div>
                             </div>
                           </td>
@@ -578,50 +581,46 @@ export default function RendersPage() {
             clearPreviewQueryParam();
           }
         }}
+        className="flex h-dvh max-h-dvh w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:h-auto sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1440px)] lg:max-w-[min(86vw,1440px)]"
       >
-          {previewItem ? (
-            <ResponsiveDrawerContent className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:h-auto sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1440px)] lg:max-w-[min(86vw,1440px)]">
-              <ResponsiveDrawerHeader className="shrink-0 border-b border-slate-200 px-4 py-4 text-left dark:border-white/10 sm:px-5">
-                <ResponsiveDrawerTitle className="text-lg font-semibold break-all sm:break-normal">
-                  {previewItem.name}
-                </ResponsiveDrawerTitle>
-                <ResponsiveDrawerDescription>
-                  {formatBytes(previewItem.size)} · {formatDateTime(previewItem.mtimeMs)}
-                </ResponsiveDrawerDescription>
-              </ResponsiveDrawerHeader>
+        <ResponsiveDrawerHeader className="shrink-0 border-b border-slate-200 px-4 py-4 text-left dark:border-white/10 sm:px-5">
+          <ResponsiveDrawerTitle className="text-lg font-semibold break-all sm:break-normal">
+            {previewName}
+          </ResponsiveDrawerTitle>
+          <ResponsiveDrawerDescription>
+            {previewMeta}
+          </ResponsiveDrawerDescription>
+        </ResponsiveDrawerHeader>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-0 pb-0 pt-0 sm:px-5 sm:pb-5 sm:pt-3">
-                <div className="mx-auto flex min-h-full w-full items-center justify-center sm:max-w-[min(100%,calc(92dvh*1.777))]">
-                  <div className="w-full overflow-hidden bg-black shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:rounded-2xl sm:border sm:border-slate-200 dark:sm:border-white/10">
-                    <video
-                      key={previewItem.assetUrl}
-                      src={previewItem.assetUrl}
-                      controls
-                      playsInline
-                      disablePictureInPicture
-                      preload="metadata"
-                      className="aspect-video h-auto max-h-[calc(100dvh-13.5rem)] w-full bg-black object-contain sm:max-h-[calc(92dvh-15rem)]"
-                    />
-                  </div>
-                </div>
-              </div>
+        <ResponsiveDrawerContent className="min-h-0 overflow-y-auto px-0 pb-0 pt-0 sm:px-5 sm:pb-5 sm:pt-3">
+          <div className="mx-auto flex min-h-full w-full items-center justify-center sm:max-w-[min(100%,calc(92dvh*1.777))]">
+            <div className="w-full overflow-hidden sm:rounded-2xl sm:border ">
+              <video
+                src={previewAssetUrl || undefined}
+                controls
+                playsInline
+                disablePictureInPicture
+                preload="metadata"
+                className="aspect-video h-auto max-h-[calc(100dvh-13.5rem)] w-full bg-black object-contain sm:max-h-[calc(92dvh-15rem)]"
+              />
+            </div>
+          </div>
+        </ResponsiveDrawerContent>
 
-              <ResponsiveDrawerFooter className="w-full shrink-0 border-t border-slate-200 px-4 py-4 dark:border-white/10 sm:flex-row sm:px-5">
-                  <Button asChild variant="outline" className="flex-1">
-                    <a href={previewItem.assetUrl} download>
-                      <Download className="h-4 w-4" />
-                      <span>Download</span>
-                    </a>
-                  </Button>
-                  <Button asChild variant="secondary" className="flex-1">
-                    <a href={previewItem.assetUrl} target="_blank" rel="noreferrer">
-                      <Eye className="h-4 w-4" />
-                      <span>Open raw file</span>
-                    </a>
-                  </Button>
-              </ResponsiveDrawerFooter>
-            </ResponsiveDrawerContent>
-          ) : null}
+        <ResponsiveDrawerFooter className="w-full shrink-0 border-t border-slate-200 px-4 py-4 dark:border-white/10 sm:flex-row sm:px-5">
+          <Button asChild variant="outline" className="flex-1" disabled={!previewItem}>
+            <a href={previewAssetUrl || undefined} download={Boolean(previewAssetUrl) || undefined}>
+              <Download className="h-4 w-4" />
+              <span>Download</span>
+            </a>
+          </Button>
+          <Button asChild variant="secondary" className="flex-1" disabled={!previewItem}>
+            <a href={previewAssetUrl || undefined} target="_blank" rel="noreferrer">
+              <Eye className="h-4 w-4" />
+              <span>Open raw file</span>
+            </a>
+          </Button>
+        </ResponsiveDrawerFooter>
       </ResponsiveDrawer>
     </div>
   );

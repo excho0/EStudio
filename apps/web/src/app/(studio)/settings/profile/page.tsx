@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Link2, UserRound, Pencil } from "lucide-react";
+import { AtSignIcon, CircleAlert, Link2, Pencil, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
@@ -11,6 +11,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authProviderIcons } from "@/components/auth/auth-page";
@@ -27,6 +33,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  ResponsiveDrawer,
+  ResponsiveDrawerContent,
+  ResponsiveDrawerDescription,
+  ResponsiveDrawerFooter,
+  ResponsiveDrawerHeader,
+  ResponsiveDrawerTitle,
+} from "@/components/ui/responsive-drawer";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { ConnectionsResponse, ProfilePayload } from "@/types";
@@ -94,7 +115,7 @@ const ProfilePreviewSkeleton = () => (
   <div className="px-6 pb-6 -mt-8">
     <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
       <Skeleton className="h-24 w-24 rounded-full sm:h-28 sm:w-28" />
-      <div className="space-y-2 text-center sm:pb-1 sm:text-left">
+      <div className="flex flex-col items-center space-y-2 text-center sm:items-start sm:text-left sm:pb-1">
         <Skeleton className="h-6 w-44" />
         <Skeleton className="h-4 w-56" />
       </div>
@@ -120,6 +141,8 @@ export default function ProfileSettingsPage() {
   >({});
   const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
   const queryClient = useQueryClient();
+  const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
   const [pendingProvider, setPendingProvider] = useState<
     (typeof allProviders)[number] | null
   >(null);
@@ -139,8 +162,14 @@ export default function ProfileSettingsPage() {
       .join("");
   }, [draft.name, session?.user?.name]);
 
+  const currentEmail = profile.email;
   const compareEmail = profile.pendingEmail ?? profile.email;
-  const isDirty = draft.name !== profile.name || draft.email !== compareEmail;
+  const isDirty = draft.name !== profile.name;
+  const normalizedDrawerEmail = emailDraft.trim().toLowerCase();
+  const normalizedCompareEmail = compareEmail.trim().toLowerCase();
+  const canSubmitEmailChange =
+    normalizedDrawerEmail.length > 0 &&
+    normalizedDrawerEmail !== normalizedCompareEmail;
   const avatarProvider = useMemo(() => {
     if (providerProfiles.google?.image) return "google";
     if (providerProfiles.github?.image) return "github";
@@ -240,21 +269,23 @@ export default function ProfileSettingsPage() {
     }
   }, [metaProvidersQuery.data, metaProvidersQuery.isError]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      return (await sdk.user.updateProfile({
-        name: draft.name,
-        email: draft.email,
-      })) as ProfilePayload;
+  const applyProfileState = (payload: ProfilePayload) => {
+    const nextDraft = {
+      ...payload,
+      email: payload.pendingEmail ?? payload.email,
+    };
+    setProfile(payload);
+    setDraft(nextDraft);
+    setEmailDraft(payload.pendingEmail ?? payload.email);
+    queryClient.setQueryData(queryKeys.profile, payload);
+  };
+
+  const updateNameMutation = useMutation({
+    mutationFn: async (payload: { name: string }) => {
+      return (await sdk.user.updateProfile(payload)) as ProfilePayload;
     },
     onSuccess: async (payload) => {
-      const nextDraft = {
-        ...payload,
-        email: payload.pendingEmail ?? payload.email,
-      };
-      setProfile(payload);
-      setDraft(nextDraft);
-      queryClient.setQueryData(queryKeys.profile, payload);
+      applyProfileState(payload);
       if (update) {
         await update({
           name: payload.name,
@@ -262,12 +293,7 @@ export default function ProfileSettingsPage() {
           image: payload.image ?? undefined,
         });
       }
-      if (payload.pendingEmail) {
-        sessionStorage.removeItem("profile-email-confirmed");
-        toast.success("Check your inbox to confirm the new email.");
-      } else {
-        toast.success("Profile updated.");
-      }
+      toast.success("Profile updated.");
     },
     onError: (error) => {
       toast.error(
@@ -276,11 +302,42 @@ export default function ProfileSettingsPage() {
     },
   });
 
+  const emailChangeMutation = useMutation({
+    mutationFn: async (payload: { email: string }) => {
+      return (await sdk.user.requestEmailChange(payload)) as ProfilePayload;
+    },
+    onSuccess: async (payload) => {
+      applyProfileState(payload);
+      sessionStorage.removeItem("profile-email-confirmed");
+      setEmailDrawerOpen(false);
+      toast.warning("Check your inbox to confirm the new email.");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to send verification email."
+      );
+    },
+  });
+
   const handleSave = async () => {
-    await saveMutation.mutateAsync();
+    await updateNameMutation.mutateAsync({
+      name: draft.name,
+    });
   };
 
-  const saving = saveMutation.isPending;
+  const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSubmitEmailChange) return;
+    await emailChangeMutation.mutateAsync({
+      email: normalizedDrawerEmail,
+    });
+  };
+
+  const saving = updateNameMutation.isPending;
+  const sendingVerification = emailChangeMutation.isPending;
+  const isBusy = saving || sendingVerification;
 
   useEffect(() => {
     const fallbackProfile: ProfilePayload = {
@@ -296,7 +353,13 @@ export default function ProfileSettingsPage() {
       ...prev,
       ...fallbackProfile,
     }));
+    setEmailDraft((prev) => prev || fallbackProfile.email);
   }, [session?.user?.email, session?.user?.image, session?.user?.name]);
+
+  const openEmailDrawer = () => {
+    setEmailDraft(profile.pendingEmail ?? profile.email);
+    setEmailDrawerOpen(true);
+  };
 
   useEffect(() => {
     const confirmed = searchParams?.get("email") === "confirmed";
@@ -309,6 +372,8 @@ export default function ProfileSettingsPage() {
         toast.success("Email confirmed. Your profile is updated.");
         sessionStorage.setItem("profile-email-confirmed", "true");
       }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      void queryClient.refetchQueries({ queryKey: queryKeys.profile });
       if (update) {
         void update();
       }
@@ -318,7 +383,28 @@ export default function ProfileSettingsPage() {
       document.cookie =
         "email-change-confirmed=; Path=/; Max-Age=0; SameSite=Lax";
     }
-  }, [searchParams, update]);
+  }, [queryClient, searchParams, update]);
+
+  useEffect(() => {
+    if (!profile.pendingEmail) return;
+
+    const syncProfileState = () => {
+      if (document.visibilityState !== "visible") return;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      void queryClient.refetchQueries({ queryKey: queryKeys.profile });
+      if (update) {
+        void update();
+      }
+    };
+
+    window.addEventListener("focus", syncProfileState);
+    document.addEventListener("visibilitychange", syncProfileState);
+
+    return () => {
+      window.removeEventListener("focus", syncProfileState);
+      document.removeEventListener("visibilitychange", syncProfileState);
+    };
+  }, [profile.pendingEmail, queryClient, update]);
 
   return (
     <div className="flex flex-col w-full max-w-screen-md mx-auto justify-center items-center gap-6">
@@ -367,7 +453,7 @@ export default function ProfileSettingsPage() {
                       {draft.name || "Your name"}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {draft.email || "you@studio.com"}
+                      {profile.email || "you@studio.com"}
                     </p>
                   </div>
                 </div>
@@ -415,26 +501,45 @@ export default function ProfileSettingsPage() {
 
                 <div className="grid gap-2">
                   <Label htmlFor="profile-email">Email address</Label>
-                  <Input
-                    id="profile-email"
-                    type="email"
-                    value={draft.email}
-                    placeholder="you@studio.com"
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                    disabled={loading || status !== "authenticated"}
-                    className="h-11"
-                  />
+                  <InputGroup className="h-11 bg-white dark:bg-white/5">
+                    <InputGroupInput
+                      id="profile-email"
+                      type="email"
+                      value={currentEmail}
+                      placeholder="you@studio.com"
+                      readOnly
+                      disabled
+                      className="h-11"
+                    />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={openEmailDrawer}
+                        disabled={loading || status !== "authenticated" || saving}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span className="hidden sm:block">Change</span>
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  </InputGroup>
                   {profile.pendingEmail ? (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Pending verification for {profile.pendingEmail}. Check your
-                      inbox to confirm.
-                    </p>
+                    <Alert variant="warning" appearance="light" size="sm">
+                      <AlertIcon>
+                        <CircleAlert />
+                      </AlertIcon>
+                      <AlertContent>
+                        <AlertTitle>Pending verification</AlertTitle>
+                        <AlertDescription>
+                          Check your inbox to confirm {profile.pendingEmail}.
+                        </AlertDescription>
+                      </AlertContent>
+                    </Alert>
                   ) : null}
-                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  {/* <p className="text-xs text-slate-500 dark:text-zinc-400">
                     We will use this email for sign-in alerts and account recovery.
-                  </p>
+                  </p> */}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -478,6 +583,88 @@ export default function ProfileSettingsPage() {
             )}
           </AnimatePresence>
         </Card>
+
+      <ResponsiveDrawer
+        open={emailDrawerOpen}
+        onOpenChange={setEmailDrawerOpen}
+        className="w-full"
+      >
+        <ResponsiveDrawerHeader className="text-left">
+          <ResponsiveDrawerTitle>Change email address</ResponsiveDrawerTitle>
+          <ResponsiveDrawerDescription>
+            Enter the email you want to verify. We&apos;ll send a confirmation
+            link before updating your sign-in email.
+          </ResponsiveDrawerDescription>
+        </ResponsiveDrawerHeader>
+
+        <ResponsiveDrawerContent className="px-4">
+          <form
+            id="email-change-form"
+            className="grid gap-3"
+            onSubmit={handleEmailSubmit}
+          >
+            <div className="grid gap-3">
+              <Label htmlFor="new-email" className="sr-only">
+                New email address
+              </Label>
+              <InputGroup className="h-11 bg-white dark:bg-white/5">
+                <InputGroupInput
+                  id="new-email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@studio.com"
+                  value={emailDraft}
+                  onChange={(event) => setEmailDraft(event.target.value)}
+                  disabled={loading || status !== "authenticated" || isBusy}
+                  className="h-11"
+                />
+                <InputGroupAddon align="inline-end">
+                  <AtSignIcon />
+                </InputGroupAddon>
+              </InputGroup>
+              {profile.pendingEmail ? (
+                <Alert variant="warning" appearance="light" size="sm">
+                  <AlertIcon>
+                    <CircleAlert />
+                  </AlertIcon>
+                  <AlertContent>
+                    <AlertTitle>Pending verification</AlertTitle>
+                    <AlertDescription>
+                      Verification is still active for {profile.pendingEmail}.
+                    </AlertDescription>
+                  </AlertContent>
+                </Alert>
+              ) : null}
+            </div>
+          </form>
+        </ResponsiveDrawerContent>
+
+        <ResponsiveDrawerFooter className="px-4 pb-4">
+          <Button
+            type="submit"
+            form="email-change-form"
+            loading={sendingVerification}
+            disabled={
+              loading ||
+              status !== "authenticated" ||
+              isBusy ||
+              !canSubmitEmailChange
+            }
+          >
+            Send verification email
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setEmailDrawerOpen(false)}
+            disabled={saving}
+            className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+          >
+            Cancel
+          </Button>
+        </ResponsiveDrawerFooter>
+      </ResponsiveDrawer>
 
 
       <Card className="flex border-slate-200 w-full bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">

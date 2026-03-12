@@ -20,11 +20,19 @@ export const userSdk = {
       profilePayloadSchema
     );
   },
-  updateProfile(payload: { name: string; email: string }): Promise<UserProfileResponse> {
+  updateProfile(payload: { name: string }): Promise<UserProfileResponse> {
     return client.putJson(
       "/api/user/profile",
       payload,
       "Failed to update profile",
+      profilePayloadSchema
+    );
+  },
+  requestEmailChange(payload: { email: string }): Promise<UserProfileResponse> {
+    return client.postJson(
+      "/api/user/profile/email",
+      payload,
+      "Failed to send verification email",
       profilePayloadSchema
     );
   },
