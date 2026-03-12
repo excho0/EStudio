@@ -7,6 +7,7 @@ import {
   Upload,
   X,
   Captions,
+  TriangleAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +17,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
+} from "@/components/ui/alert";
 import {
   Drawer,
   DrawerClose,
@@ -244,14 +252,14 @@ const JobCard = ({
     typeof progressValue === "number";
   const modeLabel = job.mode?.trim();
   const showMode = job.kind !== "publish" && Boolean(modeLabel);
-  const warningCompletedClassName =
-    job.status === "completed" && typeof job.error === "string" && job.error.trim().length > 0
-      ? "border-emerald-300/60 bg-gradient-to-r from-amber-100 via-lime-100 to-emerald-100 text-emerald-900 dark:border-emerald-400/40 dark:from-amber-500/25 dark:via-lime-500/20 dark:to-emerald-500/25 dark:text-emerald-100 [&_svg]:text-amber-700 dark:[&_svg]:text-lime-200"
-      : undefined;
-  const warningCompletedErrorClassName =
-    job.status === "completed" && typeof job.error === "string" && job.error.trim().length > 0
-      ? "text-amber-700 dark:text-amber-300"
-      : "text-destructive";
+  const hasWarning =
+    job.status === "completed" &&
+    typeof job.error === "string" &&
+    job.error.trim().length > 0;
+  const hasError =
+    job.status === "failed" &&
+    typeof job.error === "string" &&
+    job.error.trim().length > 0;
 
   return (
     <motion.button
@@ -274,7 +282,11 @@ const JobCard = ({
         <JobStatusBadge
           status={job.status}
           showLabel
-          className={warningCompletedClassName}
+          className={
+            hasWarning
+              ? "border-emerald-300/60 bg-gradient-to-r from-amber-100 via-lime-100 to-emerald-100 text-emerald-900 dark:border-emerald-400/40 dark:from-amber-500/25 dark:via-lime-500/20 dark:to-emerald-500/25 dark:text-emerald-100 [&_svg]:text-amber-700 dark:[&_svg]:text-lime-200"
+              : undefined
+          }
         />
       </div>
 
@@ -294,10 +306,32 @@ const JobCard = ({
         </div>
       ) : null}
 
-      {job.error ? (
-        <p className={`mt-2 line-clamp-2 text-[11px] ${warningCompletedErrorClassName}`}>
-          {job.error}
-        </p>
+      {hasWarning ? (
+        <Alert variant="warning" appearance="light" size="sm" className="mt-2">
+          <AlertIcon>
+            <TriangleAlert className="h-4 w-4" />
+          </AlertIcon>
+          <AlertContent>
+            <AlertTitle className="capitalize">warning</AlertTitle>
+            <AlertDescription className="line-clamp-2">
+              {job.error}
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+      ) : null}
+
+      {hasError ? (
+        <Alert variant="destructive" appearance="light" size="sm" className="mt-2">
+          <AlertIcon>
+            <X className="h-4 w-4" />
+          </AlertIcon>
+          <AlertContent>
+            <AlertTitle className="capitalize">failed</AlertTitle>
+            <AlertDescription className="line-clamp-2 ">
+              {job.error}
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
       ) : null}
     </motion.button>
   );
@@ -334,11 +368,47 @@ const NotificationSkeletonList = () => (
   </div>
 );
 
+const demoNotificationJobs: ActivityJob[] = [
+  {
+    key: "demo:publish:warning",
+    id: "demo-publish-warning",
+    title: "Demo publish with warning",
+    kind: "publish",
+    status: "completed",
+    progress: 1,
+    error: "Published successfully, but thumbnail optimization could not be applied.",
+    updatedAt: Date.now() + 2,
+  },
+  {
+    key: "demo:render:failed",
+    id: "demo-render-failed",
+    title: "Demo render failure",
+    kind: "render",
+    status: "failed",
+    progress: 1,
+    error: "Rendering failed because the source asset could not be decoded.",
+    updatedAt: Date.now() + 1,
+  },
+];
+
 export function NotificationCenterDrawer() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>({});
   const { socket } = useSocketIO();
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
+    setJobs((current) => {
+      const next = { ...current };
+      demoNotificationJobs.forEach((job) => {
+        next[job.key] = job;
+      });
+      return next;
+    });
+  }, []);
 
   const bootstrapQuery = useQuery({
     queryKey: ["notification-center", "bootstrap"],
