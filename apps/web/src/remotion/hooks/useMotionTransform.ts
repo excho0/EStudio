@@ -25,7 +25,7 @@ export const useMotionTransform = ({
   const motionEnvelopeRef = useRef(0);
   const motionLastEnergyRef = useRef(0);
   const motionTransientRef = useRef(0);
-  const motionKickRef = useRef(0);
+  const motionDriftRef = useRef(0);
 
   const motionEnergy = useMemo(() => {
     const target = Math.max(0, Math.min(1, bassMotionEnergy));
@@ -33,7 +33,7 @@ export const useMotionTransform = ({
       motionEnvelopeRef.current = target;
       motionLastEnergyRef.current = target;
       motionTransientRef.current = 0;
-      motionKickRef.current = 0;
+      motionDriftRef.current = target;
       return target;
     }
     const attack = Math.max(0.22, Math.min(0.995, motionAttack));
@@ -47,16 +47,15 @@ export const useMotionTransform = ({
 
     const rise = Math.max(0, target - motionLastEnergyRef.current);
     motionLastEnergyRef.current = target;
-    const transient = lerp(motionTransientRef.current, rise, 0.75);
+    const transient = lerp(motionTransientRef.current, rise, 0.28);
     motionTransientRef.current = transient;
-    const kickTarget = rise > 0.016 ? 1 : 0;
-    const kick = lerp(motionKickRef.current, kickTarget, 0.78);
-    motionKickRef.current = kick;
-    return Math.min(1, smoothed * 0.78 + transient * 3.8 * kick);
+    const drift = lerp(motionDriftRef.current, target, 0.08);
+    motionDriftRef.current = drift;
+    return Math.min(1, drift * 0.64 + smoothed * 0.28 + transient * 1.1);
   }, [bassMotionEnergy, frame, motionAttack, motionRelease]);
 
   const motionTime = (frame / fps) * Math.PI * 2 * Math.max(0, motionSpeed);
-  const motionBase = Math.max(0, Math.min(1, motionEnergy * 1.55 + 0.08));
+  const motionBase = Math.max(0, Math.min(1, motionEnergy * 1.18 + 0.06));
   const motionAmp = Math.max(0, motionAmountPx) * motionBase;
   const motionXRaw = motionEnabled ? Math.sin(motionTime) * motionAmp : 0;
   const motionYRaw = motionEnabled
@@ -65,8 +64,8 @@ export const useMotionTransform = ({
 
   const motionXRef = useRef(0);
   const motionYRef = useRef(0);
-  const motionLerpAlpha = 0.22;
-  const motionMaxStep = Math.max(0.5, motionAmountPx * 0.35);
+  const motionLerpAlpha = 0.14;
+  const motionMaxStep = Math.max(0.35, motionAmountPx * 0.18);
   if (frame === 0) {
     motionXRef.current = motionXRaw;
     motionYRef.current = motionYRaw;
