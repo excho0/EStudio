@@ -1,5 +1,4 @@
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
+import { clamp } from "@/remotion/utils";
 
 const DEFAULT_FOCUS_MIN = 200;
 const DEFAULT_FOCUS_MAX = 2000;

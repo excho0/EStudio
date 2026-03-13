@@ -20,6 +20,7 @@ import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { clamp } from "@/remotion/utils";
 import {
   Drawer,
   DrawerContent,
@@ -92,8 +93,6 @@ const MIN_SEGMENT_MS = 120;
 const SNAP_MS = 50;
 const DEFAULT_NEW_SEGMENT_MS = 1200;
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
 const snapMs = (value: number) => Math.round(value / SNAP_MS) * SNAP_MS;
 const toSeconds = (ms: number) => (ms / 1000).toFixed(2);
 const getWheelPrimaryDelta = (event: Pick<WheelEvent, "deltaX" | "deltaY">) =>
