@@ -20,6 +20,8 @@ import {
   Save,
   AlertCircle,
   Subtitles,
+  Image,
+  Film,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import {
   InputGroup,
   InputGroupAddon,
@@ -223,15 +231,21 @@ export default function EditContentPage() {
   const routeTransition = useRouteTransition();
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(max-width: 1024px)");
+  const isCompactLayout = isMobile || isTablet;
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const [item, setItem] = useState<ContentItem | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
   const [paletteState, setPaletteState] = useState<string[]>([]);
   const [formValues, setFormValues] = useState<FormValues>(defaultFormValues);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoVersion, setVideoVersion] = useState<number>(0);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
+  const [mediaActionsOpen, setMediaActionsOpen] = useState(false);
   const [fieldActionLoading, setFieldActionLoading] = useState<
     Record<string, boolean>
   >({});
@@ -267,6 +281,7 @@ export default function EditContentPage() {
     }
     setItem(data);
     setError(null);
+    setVideoVersion(Date.now());
     setThumbnailVersion(Date.now());
     const nextFormValues = buildFormValuesFromItem(data);
     setFormValues(nextFormValues);
@@ -289,11 +304,16 @@ export default function EditContentPage() {
         throw new Error("No content item loaded.");
       }
       const payload = buildPayloadFromForm(formValues, paletteMode, paletteState);
-      const response = await (thumbnailFile
+      const response = await (thumbnailFile || videoFile
         ? (() => {
             const formData = new FormData();
             appendPayloadToFormData(payload, formData);
-            formData.append("thumbnail", thumbnailFile);
+            if (thumbnailFile) {
+              formData.append("thumbnail", thumbnailFile);
+            }
+            if (videoFile) {
+              formData.append("video", videoFile);
+            }
             return fetch(`/api/content/${item.id}`, {
               method: "PATCH",
               body: formData,
@@ -310,6 +330,7 @@ export default function EditContentPage() {
       return (await response.json()) as ContentItem;
     },
     onSuccess: (updated) => {
+      const didUploadVideo = Boolean(videoFile);
       const didUploadThumbnail = Boolean(thumbnailFile);
       const nextFormValues = buildFormValuesFromItem(updated);
       const nextPaletteMode = updated.paletteMode === "manual" ? "manual" : "auto";
@@ -321,8 +342,13 @@ export default function EditContentPage() {
       setFormValues(nextFormValues);
       setPaletteMode(nextPaletteMode);
       setPaletteState(nextPaletteState);
+      setVideoFile(null);
+      setVideoPreview(null);
       setThumbnailFile(null);
       setThumbnailPreview(null);
+      if (didUploadVideo) {
+        setVideoVersion(Date.now());
+      }
       if (didUploadThumbnail) {
         setThumbnailVersion(Date.now());
       }
@@ -336,7 +362,11 @@ export default function EditContentPage() {
     },
   });
   const saving = saveMutation.isPending;
-  const videoUrl = resolvedItem ? `/api/content/${resolvedItem.id}/asset?type=video` : null;
+  const videoUrl = resolvedItem
+    ? sdk.content.assetUrl(resolvedItem.id, "video", {
+        version: String(videoVersion),
+      })
+    : null;
   const audioUrl = resolvedItem ? `/api/content/${resolvedItem.id}/asset?type=song` : null;
   const thumbnailUrl = resolvedItem
     ? `/api/content/${resolvedItem.id}/asset?type=thumbnail&v=${thumbnailVersion}`
@@ -456,7 +486,7 @@ export default function EditContentPage() {
         },
         assets: {
           thumbnailSrc: thumbnailPreview ?? thumbnailUrl ?? "",
-          videoSrc: videoBlobUrl ?? videoUrl ?? "",
+          videoSrc: videoPreview ?? videoBlobUrl ?? videoUrl ?? "",
           audioSrc: audioBlobUrl ?? audioUrl ?? "",
         },
       })
@@ -695,6 +725,16 @@ export default function EditContentPage() {
 
 
   useEffect(() => {
+    if (!videoFile) {
+      setVideoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(videoFile);
+    setVideoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoFile]);
+
+  useEffect(() => {
     if (!thumbnailFile) {
       setThumbnailPreview(null);
       return;
@@ -713,6 +753,20 @@ export default function EditContentPage() {
     setThumbnailFile(file);
   };
 
+  const handleVideoChange = (file: File | null) => {
+    setVideoFile(file);
+  };
+
+  const openThumbnailPicker = () => {
+    setMediaActionsOpen(false);
+    thumbnailInputRef.current?.click();
+  };
+
+  const openVideoPicker = () => {
+    setMediaActionsOpen(false);
+    videoInputRef.current?.click();
+  };
+
   const handleSave = async () => {
     await saveMutation.mutateAsync();
   };
@@ -723,22 +777,26 @@ export default function EditContentPage() {
       formValues,
       paletteMode,
       paletteState,
+      hasVideo: Boolean(videoFile),
       hasThumbnail: Boolean(thumbnailFile),
     };
     const baseline = {
       formValues: initialSnapshot.formValues,
       paletteMode: initialSnapshot.paletteMode,
       paletteState: initialSnapshot.paletteState,
+      hasVideo: false,
       hasThumbnail: false,
     };
     return JSON.stringify(current) !== JSON.stringify(baseline);
-  }, [formValues, paletteMode, paletteState, thumbnailFile, initialSnapshot]);
+  }, [formValues, paletteMode, paletteState, videoFile, thumbnailFile, initialSnapshot]);
 
   const handleRevert = () => {
     if (!initialSnapshot) return;
     setFormValues(initialSnapshot.formValues);
     setPaletteMode(initialSnapshot.paletteMode);
     setPaletteState(initialSnapshot.paletteState);
+    setVideoFile(null);
+    setVideoPreview(null);
     setThumbnailFile(null);
     setThumbnailPreview(null);
   };
@@ -762,12 +820,12 @@ export default function EditContentPage() {
           </p>
         </div>
       </div>
-      <StickyBox top={isMobile || isTablet ? 80 : 80} fullWidth={isMobile || isTablet}>
+      <StickyBox top={80} fullWidth={isCompactLayout}>
         {(isSticky) => (
           <div
             className={cn(
               "flex items-center gap-3",
-              isSticky && isMobile || isTablet ? "justify-center" : "justify-end"
+              isSticky && isCompactLayout ? "justify-center" : "justify-end"
             )}
           >
             <AnimatePresence mode="wait" initial={false}>
@@ -928,45 +986,81 @@ export default function EditContentPage() {
                   />
                 </div>
 
-                {!isTablet && (
-                  <div className="grid gap-2">
-                    <LabelWithTooltip
-                      htmlFor="thumbnail"
-                      text="Thumbnail"
-                      tip="Image shown in the library and preview."
-                    />
-                    <div className="flex items-center gap-4 py-2">
-                      <div className="h-20 w-28 overflow-hidden rounded-md ">
-                        {thumbnailPreview || resolvedItem ? (
-                          <ImageWithSkeleton
-                            src={thumbnailPreview ?? thumbnailUrl ?? ""}
-                            alt="Thumbnail preview"
-                            className="h-full w-full object-cover"
-                            wrapperClassName="h-full w-full"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs text-slate-400 dark:text-zinc-500">
-                            No thumbnail
+                {!isCompactLayout && (
+                  <>
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="video"
+                        text="Source video"
+                        tip="Replace the original source video for this content item."
+                      />
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
+                              <Upload className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                                {videoFile ? videoFile.name : "Current source video"}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                                Replace the original source footage for this content item.
+                              </p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button
+                        </div>
+                        <Button
                           type="button"
-                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
-                          onClick={() => fileInputRef.current?.click()}
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                          onClick={() => videoInputRef.current?.click()}
                         >
-                          <Pencil className="h-4 w-4" />
-                          Change thumbnail
-                        </button>
-                        {thumbnailFile ? (
-                          <div className="text-xs text-slate-500 dark:text-zinc-400">
-                            Selected: {thumbnailFile.name}
-                          </div>
-                        ) : null}
+                          Replace
+                        </Button>
                       </div>
                     </div>
-                  </div>
+
+                    <div className="grid gap-2">
+                      <LabelWithTooltip
+                        htmlFor="thumbnail"
+                        text="Thumbnail"
+                        tip="Image shown in the library and preview."
+                      />
+                      <div className="flex items-center gap-4 py-2">
+                        <div className="h-20 w-28 overflow-hidden rounded-md ">
+                          {thumbnailPreview || resolvedItem ? (
+                            <ImageWithSkeleton
+                              src={thumbnailPreview ?? thumbnailUrl ?? ""}
+                              alt="Thumbnail preview"
+                              className="h-full w-full object-cover"
+                              wrapperClassName="h-full w-full"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs text-slate-400 dark:text-zinc-500">
+                              No thumbnail
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                            onClick={() => thumbnailInputRef.current?.click()}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Change thumbnail
+                          </button>
+                          {thumbnailFile ? (
+                            <div className="text-xs text-slate-500 dark:text-zinc-400">
+                              Selected: {thumbnailFile.name}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <Collapsible
@@ -1085,13 +1179,23 @@ export default function EditContentPage() {
                 />
 
                 <input
-                  ref={fileInputRef}
+                  ref={thumbnailInputRef}
                   id="thumbnail"
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={(event) =>
                     handleThumbnailChange(event.target.files?.[0] ?? null)
+                  }
+                />
+                <input
+                  ref={videoInputRef}
+                  id="video"
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(event) =>
+                    handleVideoChange(event.target.files?.[0] ?? null)
                   }
                 />
               </div>
@@ -1114,8 +1218,8 @@ export default function EditContentPage() {
           </AnimatePresence>
         <div>
           <StickyBox
-            top={isMobile || isTablet ? 120 : 140}
-            fullWidth={isMobile || isTablet}
+            top={isCompactLayout ? 120 : 140}
+            fullWidth={isCompactLayout}
             className="self-start"
           >
             <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
@@ -1156,12 +1260,12 @@ export default function EditContentPage() {
                 )}
               </AnimatePresence>
               
-              {isTablet ? (
+              {isCompactLayout ? (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setMediaActionsOpen(true)}
                   className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
-                  aria-label="Edit thumbnail"
+                  aria-label="Edit media"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -1187,6 +1291,34 @@ export default function EditContentPage() {
           </div>
         </div>
       </div>
+
+      <Drawer open={mediaActionsOpen} onOpenChange={setMediaActionsOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Edit media</DrawerTitle>
+          </DrawerHeader>
+          <div className="grid gap-2 px-6 pb-4">
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={openThumbnailPicker}
+            >
+              <Image className="h-4 w-4" />
+              Replace thumbnail
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start"
+              onClick={openVideoPicker}
+            >
+              <Film className="h-4 w-4" />
+              Replace Video
+            </Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

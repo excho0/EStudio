@@ -76,11 +76,21 @@ export const contentCreateFormSchema = z.object({
 /** Multipart/form-data update payload accepted by content update endpoint. */
 export const contentUpdateFormSchema = z.object({
   title: z.string().optional(),
-  status: z.string().optional(),
+  status: contentStatusSchema.optional(),
   paletteMode: paletteModeSchema.optional(),
   mode: z.string().optional(),
   settings: z.string().optional(),
 }).describe("Content update form payload.");
+
+export const contentThumbnailUploadSchema = z
+  .instanceof(File)
+  .refine((file) => file.size > 0, "Uploaded thumbnail file is empty.")
+  .refine((file) => file.type.startsWith("image/"), "Thumbnail must be an image file.");
+
+export const contentVideoUploadSchema = z
+  .instanceof(File)
+  .refine((file) => file.size > 0, "Uploaded video file is empty.")
+  .refine((file) => file.type.startsWith("video/"), "Video replacement must be a video file.");
 
 /** UI edit form values used in studio editor state. */
 export const editFormValuesSchema = z.object({

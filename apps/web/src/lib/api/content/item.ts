@@ -13,7 +13,9 @@ import { getStorage } from "@/lib/storage";
 import { getPaletteFromPath } from "@/lib/content/color-palette";
 import { emitContentUpdate, getRenderProgressSnapshot } from "@/lib/socket/manager";
 import {
+  contentThumbnailUploadSchema,
   contentUpdateFormSchema,
+  contentVideoUploadSchema,
   deleteContentItem,
   getContentItem,
   parseContentSettingsString,
@@ -24,14 +26,13 @@ import {
   mergeContentSettings,
   normalizeSettingsMap,
 } from "@/lib/content/modes";
-
 const storage = getStorage();
 
 const writeUpload = async (
   userId: string,
   file: File,
   id: string,
-  kind: "thumbnail"
+  kind: "thumbnail" | "video"
 ) => {
   const extension = path.extname(file.name || "");
   const relativePath = getContentAssetPath(userId, id, kind, extension || ".bin");
@@ -94,11 +95,19 @@ export const handlePatchContentItem = async (
     }
 
     const thumbnail = formData.get("thumbnail");
+    const video = formData.get("video");
 
     if (thumbnail instanceof File) {
+      const parsedThumbnail = contentThumbnailUploadSchema.safeParse(thumbnail);
+      if (!parsedThumbnail.success) {
+        return NextResponse.json(
+          { error: parsedThumbnail.error.issues[0]?.message ?? "Invalid thumbnail file." },
+          { status: 400 }
+        );
+      }
       const thumbnailPath = await writeUpload(
         userId,
-        thumbnail,
+        parsedThumbnail.data,
         item.id,
         "thumbnail"
       );
@@ -108,6 +117,17 @@ export const handlePatchContentItem = async (
         );
       }
       payload.status = item.status;
+    }
+
+    if (video instanceof File) {
+      const parsedVideo = contentVideoUploadSchema.safeParse(video);
+      if (!parsedVideo.success) {
+        return NextResponse.json(
+          { error: parsedVideo.error.issues[0]?.message ?? "Invalid video file." },
+          { status: 400 }
+        );
+      }
+      await writeUpload(userId, parsedVideo.data, item.id, "video");
     }
   } else {
     payload = await request.json();
