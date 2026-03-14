@@ -37,6 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/audio-core/package.json ./packages/audio-core/package.json
+COPY packages/utils/package.json ./packages/utils/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
@@ -69,6 +71,7 @@ COPY --from=build /app/node_modules ./node_modules
 
 # Built web workspace
 COPY --from=build /app/apps/web ./apps/web
+COPY --from=build /app/packages ./packages
 
 EXPOSE 3000
 
