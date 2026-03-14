@@ -526,7 +526,7 @@ export function PublishDrawer({
         </ResponsiveDrawerDescription>
       </ResponsiveDrawerHeader>
 
-      <ResponsiveDrawerContent className="overflow-y-auto px-4 pb-2">
+      <ResponsiveDrawerContent className="min-h-0 px-4 pb-4">
         <div className="flex-1">
           {status === "unauthenticated" ? (
             <Card className="mt-6 border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200">
@@ -553,7 +553,9 @@ export function PublishDrawer({
                 return true;
               }}
             >
-              <StepperHeader />
+              <div className="sticky top-0 z-20 -mx-4 border-b bg-background/95 px-4 pb-3 pt-1 backdrop-blur supports-backdrop-filter:bg-background">
+                <StepperHeader />
+              </div>
               <StepperContent>
                 {({ direction }) => (
                   <StepperMotion
@@ -808,6 +810,7 @@ export function PublishDrawer({
                             value={description}
                             onChange={(event) => setDescription(event.target.value)}
                             placeholder="Add a short description (optional)"
+                            className="resize-none"
                             rows={4}
                           />
                         </div>
@@ -983,7 +986,7 @@ export function PublishDrawer({
         </div>
       </ResponsiveDrawerContent>
 
-      <ResponsiveDrawerFooter>
+      <ResponsiveDrawerFooter className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur supports-backdrop-filter:bg-background">
         <StepperFooter>
           <div className="flex items-center justify-between gap-2">
             <Button

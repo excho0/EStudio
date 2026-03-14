@@ -45,6 +45,71 @@ function DrawerOverlay({
   )
 }
 
+function DrawerHeightAnimator({ children }: { children: React.ReactNode }) {
+  const innerRef = React.useRef<HTMLDivElement | null>(null)
+  const [height, setHeight] = React.useState<number | null>(null)
+  const [isSettling, setIsSettling] = React.useState(false)
+  const settleTimerRef = React.useRef<number | null>(null)
+
+  React.useLayoutEffect(() => {
+    const inner = innerRef.current
+    if (!inner) return
+
+    const update = () => {
+      setHeight((current) => {
+        const next = inner.offsetHeight
+        if (current !== null && Math.abs(current - next) > 2) {
+          setIsSettling(true)
+          if (settleTimerRef.current !== null) {
+            window.clearTimeout(settleTimerRef.current)
+          }
+          settleTimerRef.current = window.setTimeout(() => {
+            setIsSettling(false)
+            settleTimerRef.current = null
+          }, 240)
+        }
+        return next
+      })
+    }
+
+    update()
+    if (typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => {
+      update()
+    })
+    observer.observe(inner)
+    return () => {
+      observer.disconnect()
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current)
+      }
+    }
+  }, [children])
+
+  return (
+    <div
+      className="min-h-0 max-h-full overflow-y-auto overflow-x-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      style={height !== null ? { height: `${height}px` } : undefined}
+    >
+      <div
+        ref={innerRef}
+        className="flex min-h-0 flex-col transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none"
+        style={
+          isSettling
+            ? {
+                opacity: 0.985,
+                transform: 'translateY(0)',
+              }
+            : undefined
+        }
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function DrawerContent({
   className,
   children,
@@ -56,7 +121,7 @@ function DrawerContent({
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          "group/drawer-content bg-background fixed z-50 flex h-auto flex-col",
+          "group/drawer-content bg-background fixed z-50 flex h-auto min-h-0 flex-col overflow-hidden",
           "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=top]:rounded-b-lg data-[vaul-drawer-direction=top]:border-b",
           "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[80vh] data-[vaul-drawer-direction=bottom]:rounded-t-lg data-[vaul-drawer-direction=bottom]:border-t",
           "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=right]:border-l data-[vaul-drawer-direction=right]:sm:max-w-sm",
@@ -66,7 +131,7 @@ function DrawerContent({
         {...props}
       >
         <div className="bg-muted mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
-        {children}
+        <DrawerHeightAnimator>{children}</DrawerHeightAnimator>
       </DrawerPrimitive.Content>
     </DrawerPortal>
   )
