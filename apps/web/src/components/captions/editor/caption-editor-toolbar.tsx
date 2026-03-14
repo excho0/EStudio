@@ -2,18 +2,15 @@
 
 import {
   Captions,
-  Check,
   Clipboard,
   Copy,
   Loader2,
-  Minus,
   Monitor,
   Pause,
   Pencil,
   Play,
   Plus,
   Redo2,
-  Save,
   SlidersHorizontal,
   Sparkles,
   SquareDashedMousePointer,
@@ -23,7 +20,7 @@ import {
   Volume2
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Button } from "@/components/ui/button";
@@ -41,7 +38,6 @@ import type { ContentModePreviewVariant } from "@/lib/content/modes/ui-registry"
 type CaptionEditorToolbarProps = {
   isMobileInspectorOpen?: boolean;
   isMobileSelectionMode?: boolean;
-  selectedCount?: number;
   canEditSelected?: boolean;
   isPlaying: boolean;
   volume: number;
@@ -61,8 +57,6 @@ type CaptionEditorToolbarProps = {
   onDelete: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onZoomOut: () => void;
-  onZoomIn: () => void;
   onEditSelected?: () => void;
   onToggleMobileSelectionMode?: () => void;
   onOpenGlobalOffsetEditor?: () => void;
@@ -73,7 +67,6 @@ type CaptionEditorToolbarProps = {
 
 export function CaptionEditorToolbar({
   isMobileSelectionMode = false,
-  selectedCount = 0,
   canEditSelected,
   isPlaying,
   volume,
@@ -93,8 +86,6 @@ export function CaptionEditorToolbar({
   onDelete,
   onUndo,
   onRedo,
-  onZoomOut,
-  onZoomIn,
   onEditSelected,
   onToggleMobileSelectionMode,
   onOpenGlobalOffsetEditor,
@@ -108,10 +99,10 @@ export function CaptionEditorToolbar({
   const [mobileVolumeOpen, setMobileVolumeOpen] = useState(false);
   const hasNoCaptions = segmentCount === 0;
 
-  const triggerGenerateFromMenu = () => {
+  const triggerGenerateFromMenu = useCallback(() => {
     if (!onGenerateSegments || isGeneratingSegments) return;
     onGenerateSegments();
-  };
+  }, [isGeneratingSegments, onGenerateSegments]);
   const previewModeItems = useMemo<ActionItem[]>(
     () =>
       previewModes.map((mode) => ({
@@ -227,6 +218,7 @@ export function CaptionEditorToolbar({
       onPaste,
       onOpenGlobalOffsetEditor,
       triggerGenerateFromMenu,
+      canEditSelected,
     ]
   );
 

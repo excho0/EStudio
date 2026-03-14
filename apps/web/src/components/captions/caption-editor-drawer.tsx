@@ -1,21 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Info, RotateCw, Save } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Info, RotateCw, Save } from "lucide-react";
 import type { PlayerRef } from "@remotion/player";
 import type { CaptionDocument, CaptionSegment } from "@/types";
 import { captionDocumentSchema } from "@/types";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/ui/alert";
 import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -28,6 +27,13 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import {
+  ResponsiveDrawer,
+  ResponsiveDrawerContent,
+  ResponsiveDrawerFooter,
+  ResponsiveDrawerHeader,
+  ResponsiveDrawerTitle,
+} from "@/components/ui/responsive-drawer";
+import {
   CaptionEditorPreview,
   type CaptionEditorPreviewProps,
 } from "./editor/caption-editor-preview";
@@ -36,6 +42,7 @@ import { CaptionEditorTimeline } from "./editor/caption-editor-timeline";
 import { CaptionEditorInspector } from "./editor/caption-editor-inspector";
 import { useCaptionEditorShortcuts } from "./editor/use-caption-editor-shortcuts";
 import type { ContentModePreviewVariant } from "@/lib/content/modes/ui-registry";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type CaptionEditorDrawerProps = {
   open: boolean;
@@ -147,6 +154,20 @@ const hasMeaningfulDraftChange = (current: CaptionDocument, next: CaptionDocumen
   );
 };
 
+const appendHistoryIfChanged = (
+  history: DraftHistory,
+  snapshot: CaptionDocument
+): DraftHistory => {
+  const last = history.past[history.past.length - 1];
+  if (last && !hasMeaningfulDraftChange(last, snapshot)) {
+    return history;
+  }
+  return {
+    past: [...history.past, snapshot],
+    future: [],
+  };
+};
+
 const buildDefaultDocument = (_mode: string, language: string): CaptionDocument => ({
   backend: "manual",
   language: (language || "en").trim() || "en",
@@ -237,7 +258,6 @@ export function CaptionEditor({
   );
   const [cursorMs, setCursorMs] = useState(0);
   const [zoomPxPerSecond, setZoomPxPerSecond] = useState(90);
-  const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDraggingSegments, setIsDraggingSegments] = useState(false);
@@ -245,6 +265,8 @@ export function CaptionEditor({
   const [volume, setVolume] = useState(1);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [globalOffsetDialogOpen, setGlobalOffsetDialogOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [autosaveCountdownMs, setAutosaveCountdownMs] = useState<number | null>(null);
   const [activePreviewMode, setActivePreviewMode] = useState<"full" | "performance">("full");
   const [playerInstanceKey, setPlayerInstanceKey] = useState(0);
   const [playerInitialFrame, setPlayerInitialFrame] = useState(0);
@@ -284,13 +306,30 @@ export function CaptionEditor({
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
 
+  const autosaveCountdownSeconds = useMemo(() => {
+    if (autosaveCountdownMs === null) return null;
+    return Math.max(1, Math.ceil(autosaveCountdownMs / 1000));
+  }, [autosaveCountdownMs]);
+
+  const autosaveProgressPercent = useMemo(() => {
+    if (autosaveCountdownMs === null) return 0;
+    const elapsed = AUTOSAVE_DEBOUNCE_MS - autosaveCountdownMs;
+    return clamp((elapsed / AUTOSAVE_DEBOUNCE_MS) * 100, 0, 100);
+  }, [autosaveCountdownMs]);
+
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
 
   const globalOffsetMs = Math.round(draft.globalOffsetMs ?? 0);
-  const toDisplayMs = (ms: number) => Math.max(0, Math.round(ms + globalOffsetMs));
-  const toRawMsFromDisplay = (ms: number) => Math.max(0, Math.round(ms - globalOffsetMs));
+  const toDisplayMs = useCallback(
+    (ms: number) => Math.max(0, Math.round(ms + globalOffsetMs)),
+    [globalOffsetMs]
+  );
+  const toRawMsFromDisplay = useCallback(
+    (ms: number) => Math.max(0, Math.round(ms - globalOffsetMs)),
+    [globalOffsetMs]
+  );
 
   const sortedSegments = useMemo(
     () =>
@@ -301,7 +340,7 @@ export function CaptionEditor({
           startMs: toDisplayMs(segment.startMs),
           endMs: Math.max(toDisplayMs(segment.endMs), toDisplayMs(segment.startMs) + 1),
         })),
-    [draft.segments, globalOffsetMs]
+    [draft.segments, toDisplayMs]
   );
 
   const durationMs = useMemo(() => {
@@ -487,7 +526,6 @@ export function CaptionEditor({
     const initialOffset = next.globalOffsetMs ?? 0;
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(initialOffset));
-    setError(null);
   }, [active, language, mode, value]);
 
   useEffect(() => {
@@ -512,7 +550,6 @@ export function CaptionEditor({
     setCursorMs(0);
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(next.globalOffsetMs ?? 0));
-    setError(null);
   }, [active, isDirty, language, mode, value]);
 
   const handleRestore = () => {
@@ -529,8 +566,25 @@ export function CaptionEditor({
     const restoredOffset = parsed.data.globalOffsetMs ?? 0;
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(restoredOffset));
-    setError(null);
   };
+
+  const applyDraftUpdate = useCallback((
+    updater: (current: CaptionDocument) => CaptionDocument,
+    options?: { recordHistory?: boolean }
+  ) => {
+    const recordHistory = options?.recordHistory ?? true;
+    setDraft((current) => {
+      const next = updater(current);
+      if (next === current) return current;
+      if (!hasMeaningfulDraftChange(current, next)) return current;
+      if (recordHistory) {
+        setHistory((prev) => appendHistoryIfChanged(prev, current));
+      } else {
+        dragSessionDirtyRef.current = true;
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (suppressOffsetInputEffectRef.current) {
@@ -563,7 +617,7 @@ export function CaptionEditor({
       suppressOffsetInputEffectRef.current = true;
       setGlobalOffsetMsInput(String(appliedOffset));
     }
-  }, [globalOffsetMsInput]);
+  }, [applyDraftUpdate, globalOffsetMsInput]);
 
   useEffect(() => {
     sortedSegmentsRef.current = sortedSegments;
@@ -602,25 +656,7 @@ export function CaptionEditor({
       .filter((idx) => idx >= 0 && idx < length)
       .sort((a, b) => a - b);
 
-  const applyDraftUpdate = (
-    updater: (current: CaptionDocument) => CaptionDocument,
-    options?: { recordHistory?: boolean }
-  ) => {
-    const recordHistory = options?.recordHistory ?? true;
-    setDraft((current) => {
-      const next = updater(current);
-      if (next === current) return current;
-      if (!hasMeaningfulDraftChange(current, next)) return current;
-      if (recordHistory) {
-        setHistory((prev) => ({ past: [...prev.past, current], future: [] }));
-      } else {
-        dragSessionDirtyRef.current = true;
-      }
-      return next;
-    });
-  };
-
-  const setSegmentTiming = (
+  const setSegmentTiming = useCallback((
     index: number,
     startMs: number,
     endMs: number,
@@ -658,7 +694,7 @@ export function CaptionEditor({
       };
       return { ...current, segments: sorted };
     }, { recordHistory });
-  };
+  }, [applyDraftUpdate, toRawMsFromDisplay]);
 
   const addSegment = () => {
     let nextSelected = 0;
@@ -1099,7 +1135,7 @@ export function CaptionEditor({
       setIsDraggingSegments(false);
       if (dragSessionDirtyRef.current && dragBaselineDraftRef.current) {
         const baseline = dragBaselineDraftRef.current;
-        setHistory((prev) => ({ past: [...prev.past, baseline], future: [] }));
+        setHistory((prev) => appendHistoryIfChanged(prev, baseline));
       }
       dragBaselineDraftRef.current = null;
       dragSessionDirtyRef.current = false;
@@ -1111,7 +1147,7 @@ export function CaptionEditor({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, []);
+  }, [applyDraftUpdate, setSegmentTiming, toRawMsFromDisplay]);
 
   useCaptionEditorShortcuts({
     open: active,
@@ -1140,6 +1176,44 @@ export function CaptionEditor({
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
+    const followPlaybackCursor = (timeMs: number) => {
+      if (Date.now() < followSuspendUntilRef.current) return;
+      const scroller = timelineScrollerRef.current;
+      if (!scroller || durationMs <= 0) return;
+      const currentZoom = zoomPxPerSecondRef.current;
+      const contentWidth = Math.max(900, Math.round((durationMs / 1000) * currentZoom));
+      const cursorX = (timeMs / durationMs) * contentWidth;
+      const viewWidth = scroller.clientWidth;
+      const leadEdge = scroller.scrollLeft + viewWidth * 0.78;
+      const trailEdge = scroller.scrollLeft + viewWidth * 0.14;
+      const pageStep = viewWidth * 0.62;
+
+      if (cursorX > leadEdge) {
+        const target = clamp(
+          scroller.scrollLeft + pageStep,
+          0,
+          Math.max(0, contentWidth - viewWidth)
+        );
+        if (isCompactLayout) {
+          scroller.scrollLeft = target;
+          return;
+        }
+        followScrollTargetRef.current = target;
+        return;
+      }
+      if (cursorX < trailEdge) {
+        const target = clamp(
+          scroller.scrollLeft - pageStep,
+          0,
+          Math.max(0, contentWidth - viewWidth)
+        );
+        if (isCompactLayout) {
+          scroller.scrollLeft = target;
+          return;
+        }
+        followScrollTargetRef.current = target;
+      }
+    };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
@@ -1184,28 +1258,7 @@ export function CaptionEditor({
       player.removeEventListener("frameupdate", onFrameUpdate);
       player.removeEventListener("volumechange", onVolumeChange);
     };
-  }, [activeResolvedPreview, isCompactLayout]);
-
-  useEffect(() => {
-    const player = playerRef.current;
-    if (!player || !activeResolvedPreview) return;
-    // While playback is running, let player events drive cursor state.
-    // Only seek from cursor during direct timeline interactions.
-    const isInteracting = scrubRef.current.active || dragRef.current !== null;
-    if (player.isPlaying() && !isInteracting) {
-      return;
-    }
-    const nextFrame = clamp(
-      Math.round((cursorMs / 1000) * activeResolvedPreview.fps),
-      0,
-      Math.max(0, activeResolvedPreview.durationInFrames - 1)
-    );
-    const currentFrame = player.getCurrentFrame();
-    if (Math.abs(currentFrame - nextFrame) <= 0) return;
-    if (nextFrame === lastPlayerFrameRef.current) return;
-    lastPlayerFrameRef.current = nextFrame;
-    player.seekTo(nextFrame);
-  }, [activeResolvedPreview, cursorMs]);
+  }, [activeResolvedPreview, durationMs, isCompactLayout]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -1272,7 +1325,7 @@ export function CaptionEditor({
     });
   };
 
-  const setZoomAnchored = (nextZoom: number, anchorClientX?: number) => {
+  const setZoomAnchored = useCallback((nextZoom: number, anchorClientX?: number) => {
     const clampedZoom = clamp(nextZoom, 40, 240);
     const scroller = timelineScrollerRef.current;
     const currentZoom = zoomPxPerSecondRef.current;
@@ -1302,51 +1355,33 @@ export function CaptionEditor({
       if (!liveScroller) return;
       liveScroller.scrollLeft = nextScrollLeft;
     });
-  };
-
-  const followPlaybackCursor = (timeMs: number) => {
-    if (Date.now() < followSuspendUntilRef.current) return;
-    const scroller = timelineScrollerRef.current;
-    if (!scroller || durationMs <= 0) return;
-    const currentZoom = zoomPxPerSecondRef.current;
-    const contentWidth = Math.max(900, Math.round((durationMs / 1000) * currentZoom));
-    const cursorX = (timeMs / durationMs) * contentWidth;
-    const viewWidth = scroller.clientWidth;
-    const leadEdge = scroller.scrollLeft + viewWidth * 0.78;
-    const trailEdge = scroller.scrollLeft + viewWidth * 0.14;
-    const pageStep = viewWidth * 0.62;
-
-    if (cursorX > leadEdge) {
-      const target = clamp(
-        scroller.scrollLeft + pageStep,
-        0,
-        Math.max(0, contentWidth - viewWidth)
-      );
-      if (isCompactLayout) {
-        scroller.scrollLeft = target;
-        return;
-      }
-      followScrollTargetRef.current = target;
-      return;
-    }
-    if (cursorX < trailEdge) {
-      const target = clamp(
-        scroller.scrollLeft - pageStep,
-        0,
-        Math.max(0, contentWidth - viewWidth)
-      );
-      if (isCompactLayout) {
-        scroller.scrollLeft = target;
-        return;
-      }
-      followScrollTargetRef.current = target;
-    }
-  };
+  }, [durationMs]);
 
   const suspendAutoFollow = (ms = 650) => {
     followSuspendUntilRef.current = Date.now() + ms;
     followScrollTargetRef.current = null;
   };
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !activeResolvedPreview) return;
+    // While playback is running, let player events drive cursor state.
+    // Only seek from cursor during direct timeline interactions.
+    const isInteracting = scrubRef.current.active || dragRef.current !== null;
+    if (player.isPlaying() && !isInteracting) {
+      return;
+    }
+    const nextFrame = clamp(
+      Math.round((cursorMs / 1000) * activeResolvedPreview.fps),
+      0,
+      Math.max(0, activeResolvedPreview.durationInFrames - 1)
+    );
+    const currentFrame = player.getCurrentFrame();
+    if (Math.abs(currentFrame - nextFrame) <= 0) return;
+    if (nextFrame === lastPlayerFrameRef.current) return;
+    lastPlayerFrameRef.current = nextFrame;
+    player.seekTo(nextFrame);
+  }, [activeResolvedPreview, cursorMs]);
 
   useEffect(() => {
     if (isCompactLayout) return;
@@ -1431,9 +1466,9 @@ export function CaptionEditor({
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("wheel", onWheelNative, true);
     };
-  }, [active]);
+  }, [active, setZoomAnchored]);
 
-  const buildNormalizedDraft = (source: CaptionDocument): CaptionDocument => ({
+  const buildNormalizedDraft = useCallback((source: CaptionDocument): CaptionDocument => ({
     ...source,
     generatedAt: new Date().toISOString(),
     globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
@@ -1445,9 +1480,9 @@ export function CaptionEditor({
       })
       .filter((segment) => segment.text.length > 0)
       .sort((a, b) => a.startMs - b.startMs),
-  });
+  }), []);
 
-  const persistDraft = async (
+  const persistDraft = useCallback(async (
     source: CaptionDocument,
     options?: {
       closeAfterSave?: boolean;
@@ -1457,11 +1492,12 @@ export function CaptionEditor({
   ) => {
     const parsed = captionDocumentSchema.safeParse(buildNormalizedDraft(source));
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Invalid captions data.");
+      toast.error(parsed.error.issues[0]?.message ?? "Invalid captions data.");
       return false;
     }
 
     setIsSaving(true);
+    setAutosaveCountdownMs(null);
     const savePromise = Promise.resolve(
       onSave(parsed.data, {
         source: options?.toastMode === "autosave" ? "autosave" : "manual",
@@ -1484,27 +1520,46 @@ export function CaptionEditor({
       if (options?.resetHistory ?? true) {
         setHistory({ past: [], future: [] });
       }
-      setError(null);
       if (options?.closeAfterSave) {
         onRequestClose?.();
       }
       return true;
     } catch (saveError) {
-      setError(
+      toast.error(
         saveError instanceof Error ? saveError.message : "Failed to save captions."
       );
       return false;
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [buildNormalizedDraft, onRequestClose, onSave]);
+
+  useEffect(() => {
+    if (!active || isSaving || restoreConfirmOpen || !isDirty) {
+      setAutosaveCountdownMs(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const updateRemaining = () => {
+      const remaining = AUTOSAVE_DEBOUNCE_MS - (Date.now() - startedAt);
+      setAutosaveCountdownMs(remaining > 0 ? remaining : 0);
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 250);
+
+    return () => {
+      window.clearInterval(interval);
+      setAutosaveCountdownMs(null);
+    };
+  }, [active, draftSnapshot, isDirty, isSaving, restoreConfirmOpen]);
 
   useEffect(() => {
     if (!active) return;
     if (isSaving) return;
+    if (restoreConfirmOpen) return;
     if (!isDirty) return;
-    if (history.past.length === 0) return;
-
     const timeout = window.setTimeout(() => {
       void persistDraft(draftRef.current, {
         toastMode: "autosave",
@@ -1515,14 +1570,14 @@ export function CaptionEditor({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [active, history.past.length, isDirty, isSaving]);
+  }, [active, draftSnapshot, isDirty, isSaving, persistDraft, restoreConfirmOpen]);
 
   const handleSave = async () => {
     if (isSaving) return;
     await persistDraft(draftRef.current, {
       closeAfterSave: true,
       toastMode: "none",
-      resetHistory: true,
+      resetHistory: false,
     });
   };
 
@@ -1594,15 +1649,25 @@ export function CaptionEditor({
             <Button
               type="button"
               variant="outline"
-              onClick={handleRestore}
+              onClick={() => setRestoreConfirmOpen(true)}
               disabled={!isDirty || isSaving}
             >
               <RotateCw className="size-5" />
-              <span className="hidden sm:inline">Restore</span>
+              <span className="hidden sm:inline">Discard Changes</span>
             </Button>
-            <Button type="button" onClick={handleSave} disabled={!canSave} loading={isSaving}>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              loading={isSaving}
+              progress={autosaveCountdownSeconds !== null && !isSaving ? autosaveProgressPercent : null}
+            >
               <Save className="size-5" />
-              <span className="hidden sm:inline">Save Caption</span>
+              <span className="hidden sm:inline">
+                {autosaveCountdownSeconds !== null
+                  ? `Save Caption (${autosaveCountdownSeconds}s)`
+                  : "Save Caption"}
+              </span>
             </Button>
           </div>
       </div>
@@ -1617,7 +1682,6 @@ export function CaptionEditor({
           />
           <CaptionEditorToolbar
             isMobileSelectionMode={mobileSelectionMode}
-            selectedCount={selectedIndices.length}
             canEditSelected={selectedIndices.length === 1 && !mobileSelectionMode}
             isPlaying={isPlaying}
             volume={volume}
@@ -1642,8 +1706,6 @@ export function CaptionEditor({
             onDelete={removeSelectedSegments}
             onUndo={undo}
             onRedo={redo}
-            onZoomOut={() => setZoomAnchored(zoomPxPerSecond - 10)}
-            onZoomIn={() => setZoomAnchored(zoomPxPerSecond + 10)}
             onEditSelected={() => setMobileInspectorOpen(true)}
             onOpenGlobalOffsetEditor={() => setGlobalOffsetDialogOpen(true)}
             onToggleMobileSelectionMode={() =>
@@ -1683,10 +1745,7 @@ export function CaptionEditor({
             <CaptionEditorTimeline
               isMobile={isCompactLayout}
               isSelectionMode={mobileSelectionMode}
-              isPlaying={isPlaying}
               isDraggingSegments={isDraggingSegments}
-              canUndo={canUndo}
-              canRedo={canRedo}
               canCopy={selectedIndices.length > 0}
               canPaste={Boolean(clipboardRef.current)}
               canDelete={selectedIndices.length > 0}
@@ -1713,20 +1772,10 @@ export function CaptionEditor({
                 el.scrollLeft += delta;
               }}
               getWheelPrimaryDelta={getWheelPrimaryDelta}
-              onTogglePlay={() => {
-                const player = playerRef.current;
-                if (!player) return;
-                if (player.isPlaying()) player.pause();
-                else player.play();
-              }}
               onAddSegment={addSegment}
               onCopy={copySelectedSegments}
               onPaste={pasteSegmentsAtCursor}
               onDelete={removeSelectedSegments}
-              onUndo={undo}
-              onRedo={redo}
-              onZoomOut={() => setZoomAnchored(zoomPxPerSecond - 10)}
-              onZoomIn={() => setZoomAnchored(zoomPxPerSecond + 10)}
               onBeginNavigate={() => {
                 const player = playerRef.current;
                 if (!player) return;
@@ -1792,6 +1841,49 @@ export function CaptionEditor({
               </div>
             </DialogContent>
           </Dialog>
+
+          <ResponsiveDrawer
+            open={restoreConfirmOpen}
+            onOpenChange={setRestoreConfirmOpen}
+          >
+            <ResponsiveDrawerHeader>
+              <ResponsiveDrawerTitle>Discard unsaved changes?</ResponsiveDrawerTitle>
+            </ResponsiveDrawerHeader>
+            <ResponsiveDrawerContent>
+              <Alert variant="warning" appearance="light" size="md">
+                <AlertIcon>
+                  <AlertTriangle />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertTitle>Unsaved changes will be discarded</AlertTitle>
+                  <AlertDescription>
+                    This will discard your current unsaved caption edits and revert the editor to the last saved version.
+                  </AlertDescription>
+                  <AlertDescription>
+                    Your current undo and redo history for these unsaved edits will be cleared.
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+            </ResponsiveDrawerContent>
+            <ResponsiveDrawerFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRestoreConfirmOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  handleRestore();
+                  setRestoreConfirmOpen(false);
+                }}
+              >
+                Discard Changes
+              </Button>
+            </ResponsiveDrawerFooter>
+          </ResponsiveDrawer>
 
         {isCompactLayout ? (
           <Drawer open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>

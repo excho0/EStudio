@@ -37,44 +37,86 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  loading = false,
-  loadingText,
-  ...props
-}: React.ComponentProps<"button"> &
+type ButtonProps = React.ComponentPropsWithoutRef<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
     loading?: boolean
     loadingText?: string
-  }) {
-  const Comp = asChild ? Slot : "button"
+    progress?: number | null
+    progressClassName?: string
+  }
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    className,
+    variant = "default",
+    size = "default",
+    asChild = false,
+    loading = false,
+    loadingText,
+    children,
+    disabled,
+    progress = null,
+    progressClassName,
+    ...props
+  },
+  ref
+) {
+  const isDisabled = disabled || loading
+  const hasProgress = progress !== null && !loading
+  const classNames = cn(
+    buttonVariants({ variant, size, className }),
+    hasProgress && "relative overflow-hidden"
+  )
   const content = (
     <>
       {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-      {loading
-        ? loadingText
-          ? loadingText
-          : null
-        : props.children}
+      {loading ? (loadingText ?? null) : children}
     </>
   )
+  const clampedProgress = Math.max(0, Math.min(progress ?? 0, 100))
+  const progressFill = hasProgress ? (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[calc(var(--radius-md)-2px)] bg-current/18 ring-1 ring-current/12 transition-[width] duration-200 ease-linear",
+        progressClassName
+      )}
+      style={{ width: `calc((100% - 4px) * ${clampedProgress / 100})` }}
+    />
+  ) : null
+
+  if (asChild) {
+    return (
+      <Slot
+        ref={ref}
+        data-slot="button"
+        data-variant={variant}
+        data-size={size}
+        className={classNames}
+        aria-disabled={isDisabled || undefined}
+        data-disabled={isDisabled ? "true" : undefined}
+        {...props}
+      >
+        {children}
+      </Slot>
+    )
+  }
 
   return (
-    <Comp
+    <button
+      ref={ref}
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
-      disabled={props.disabled || loading}
+      className={classNames}
+      disabled={isDisabled}
       {...props}
     >
-      {asChild ? props.children : content}
-    </Comp>
+      {progressFill}
+      {hasProgress ? <span className="relative z-10 flex items-center gap-2">{content}</span> : content}
+    </button>
   )
-}
+})
 
 export { Button, buttonVariants }

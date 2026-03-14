@@ -11,13 +11,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { IconSelect } from "@/components/ui/icon-select";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
-import { Progress } from "@/components/ui/progress";
-import { StatRow } from "@/components/ui/stat-row";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveDrawer,
@@ -873,6 +871,8 @@ export default function LibraryPage() {
                               <TableRow
                                 data-index={virtualRow.index}
                                 ref={desktopVirtualizer.measureElement}
+                                progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                                progressClassName="[--table-row-progress-color:rgb(15_23_42_/_0.05)] dark:[--table-row-progress-color:rgb(255_255_255_/_0.07)]"
                                 className="border-t border-slate-200 dark:border-white/10"
                               >
                                 {row.getVisibleCells().map((cell) => {
@@ -896,21 +896,6 @@ export default function LibraryPage() {
                                   );
                                 })}
                               </TableRow>
-                              {getEffectiveStatus(item) === "rendering" ? (
-                                <TableRow className="border-b border-slate-200 dark:border-white/10">
-                                  <TableCell colSpan={4} className="pb-4">
-                                    <StatRow show className="px-1">
-                                      <Progress
-                                        value={Math.round(
-                                          (renderProgress[item.id]?.progress ?? 0) *
-                                            100
-                                        )}
-                                        variant="amber"
-                                      />
-                                    </StatRow>
-                                  </TableCell>
-                                </TableRow>
-                              ) : null}
                             </React.Fragment>
                           );
                         })
@@ -918,7 +903,11 @@ export default function LibraryPage() {
                           const item = row.original;
                           return (
                             <React.Fragment key={row.id}>
-                              <TableRow className="border-t border-slate-200 dark:border-white/10">
+                              <TableRow
+                                progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                                progressClassName="[--table-row-progress-color:rgb(15_23_42_/_0.05)] dark:[--table-row-progress-color:rgb(255_255_255_/_0.07)]"
+                                className="border-t border-slate-200 dark:border-white/10"
+                              >
                                 {row.getVisibleCells().map((cell) => {
                                   const meta = cell.column.columnDef.meta as
                                     | ContentColumnMeta
@@ -940,21 +929,6 @@ export default function LibraryPage() {
                                   );
                                 })}
                               </TableRow>
-                              {getEffectiveStatus(item) === "rendering" ? (
-                                <TableRow className="border-b border-slate-200 dark:border-white/10">
-                                  <TableCell colSpan={4} className="pb-4">
-                                    <StatRow show className="px-1">
-                                      <Progress
-                                        value={Math.round(
-                                          (renderProgress[item.id]?.progress ?? 0) *
-                                            100
-                                        )}
-                                        variant="amber"
-                                      />
-                                    </StatRow>
-                                  </TableCell>
-                                </TableRow>
-                              ) : null}
                             </React.Fragment>
                           );
                         })}
@@ -1004,7 +978,12 @@ export default function LibraryPage() {
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                       >
-                        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                        <Card
+                          animateHeight={false}
+                          progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                          progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
+                          className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
+                        >
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex min-w-0 flex-1 gap-3">
                               <ImageWithSkeleton
@@ -1031,24 +1010,18 @@ export default function LibraryPage() {
                               <ResponsiveActionMenu items={getActionItems(item)} />
                             </div>
                           </div>
-                          <StatRow
-                            show={getEffectiveStatus(item) === "rendering"}
-                            className="w-full"
-                          >
-                            <Progress
-                              value={Math.round(
-                                (renderProgress[item.id]?.progress ?? 0) * 100
-                              )}
-                              variant="amber"
-                            />
-                          </StatRow>
-                        </div>
+                        </Card>
                       </div>
                     );
                   })
                     : items.map((item) => (
                         <div key={item.id} className="w-full px-1 py-1">
-                          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20">
+                          <Card
+                          animateHeight={false}
+                          progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                          progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
+                          className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
+                        >
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex min-w-0 flex-1 gap-3">
                                 <ImageWithSkeleton
@@ -1073,15 +1046,7 @@ export default function LibraryPage() {
                                 <ResponsiveActionMenu items={getActionItems(item)} />
                               </div>
                             </div>
-                            <StatRow show={getEffectiveStatus(item) === "rendering"} className="w-full">
-                              <Progress
-                                value={Math.round(
-                                  (renderProgress[item.id]?.progress ?? 0) * 100
-                                )}
-                                variant="amber"
-                              />
-                            </StatRow>
-                          </div>
+                          </Card>
                         </div>
                       ))}
                 </div>

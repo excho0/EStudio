@@ -15,10 +15,7 @@ import {
 type Props = {
   isMobile: boolean;
   isSelectionMode?: boolean;
-  isPlaying: boolean;
   isDraggingSegments: boolean;
-  canUndo: boolean;
-  canRedo: boolean;
   canCopy: boolean;
   canPaste: boolean;
   canDelete: boolean;
@@ -37,15 +34,10 @@ type Props = {
   onSelectSegment: (index: number, event: React.MouseEvent) => void;
   onWheelDelta: (delta: number) => void;
   getWheelPrimaryDelta: (event: Pick<WheelEvent, "deltaX" | "deltaY">) => number;
-  onTogglePlay: () => void;
   onAddSegment: () => void;
   onCopy: () => void;
   onPaste: () => void;
   onDelete: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  onZoomOut: () => void;
-  onZoomIn: () => void;
   onBeginNavigate: () => void;
   onOpenInspectorForSegment?: (index: number) => void;
 };
@@ -53,10 +45,7 @@ type Props = {
 export function CaptionEditorTimeline({
   isMobile,
   isSelectionMode = false,
-  isPlaying,
   isDraggingSegments,
-  canUndo,
-  canRedo,
   canCopy,
   canPaste,
   canDelete,
@@ -75,15 +64,10 @@ export function CaptionEditorTimeline({
   onSelectSegment,
   onWheelDelta,
   getWheelPrimaryDelta,
-  onTogglePlay,
   onAddSegment,
   onCopy,
   onPaste,
   onDelete,
-  onUndo,
-  onRedo,
-  onZoomOut,
-  onZoomIn,
   onBeginNavigate,
   onOpenInspectorForSegment,
 }: Props) {
@@ -408,8 +392,6 @@ export function CaptionEditorTimeline({
       </div>
     </div>
   );
-
-  if (isMobile) return body;
 
   return (
     <ContextMenu>

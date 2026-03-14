@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Sparkle, Sparkles, SquareDashed, SquareDashedMousePointer, Trash2 } from "lucide-react";
+import { Plus, Sparkles, SquareDashed, SquareDashedMousePointer, Trash2 } from "lucide-react";
 import type { CaptionSegment } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

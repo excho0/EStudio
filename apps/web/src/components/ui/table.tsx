@@ -52,14 +52,32 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+type TableRowProps = React.ComponentProps<"tr"> & {
+  progress?: number | null
+  progressClassName?: string
+}
+
+function TableRow({ className, progress = null, progressClassName, style, ...props }: TableRowProps) {
+  const hasProgress = progress !== null
+  const clampedProgress = Math.max(0, Math.min(progress ?? 0, 100))
+
   return (
     <tr
       data-slot="table-row"
       className={cn(
-        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
+        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b bg-no-repeat transition-[background-size,background-color,border-color] duration-300 ease-out",
+        hasProgress && "[background-image:linear-gradient(var(--table-row-progress-color),var(--table-row-progress-color))]",
+        progressClassName,
         className
       )}
+      style={{
+        ...style,
+        ...(hasProgress
+          ? ({
+              backgroundSize: `${clampedProgress}% 100%`,
+            } as React.CSSProperties)
+          : undefined),
+      }}
       {...props}
     />
   )

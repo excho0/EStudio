@@ -39,10 +39,14 @@ type TooltipProps = React.ComponentProps<typeof TooltipPrimitive.Root> & {
 function Tooltip({ disableMobileDrawer = false, ...props }: TooltipProps) {
   const isDrawer = useMediaQuery("(max-width: 1024px)")
   const [open, setOpen] = React.useState(false)
+  const contextValue = React.useMemo(
+    () => ({ isDrawer: isDrawer && !disableMobileDrawer, open, setOpen }),
+    [disableMobileDrawer, isDrawer, open]
+  )
 
-  if (isDrawer && !disableMobileDrawer) {
+  if (contextValue.isDrawer) {
     return (
-      <TooltipContext.Provider value={{ isDrawer: true, open, setOpen }}>
+      <TooltipContext.Provider value={contextValue}>
         <Drawer open={open} onOpenChange={setOpen}>
           {props.children}
         </Drawer>
@@ -52,16 +56,16 @@ function Tooltip({ disableMobileDrawer = false, ...props }: TooltipProps) {
 
   return (
     <TooltipProvider>
-      <TooltipContext.Provider value={{ isDrawer: false, open, setOpen }}>
+      <TooltipContext.Provider value={contextValue}>
         <TooltipPrimitive.Root data-slot="tooltip" {...props} />
       </TooltipContext.Provider>
     </TooltipProvider>
   )
 }
 
-function TooltipTrigger({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+function TooltipTrigger(
+  props: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>
+) {
   const ctx = React.useContext(TooltipContext)
 
   if (ctx?.isDrawer) {
@@ -76,7 +80,7 @@ function TooltipContent({
   sideOffset = 0,
   children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>) {
   const ctx = React.useContext(TooltipContext)
 
   if (ctx?.isDrawer) {

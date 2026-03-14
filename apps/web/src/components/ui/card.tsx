@@ -2,11 +2,21 @@ import * as React from "react"
 
 import { cn } from "@/lib/shared/utils"
 
+type CardProps = React.ComponentProps<"div"> & {
+  animateHeight?: boolean
+  progress?: number | null
+  progressClassName?: string
+}
+
 function Card({
   className,
   animateHeight = true,
+  progress = null,
+  progressClassName,
+  children,
+  style,
   ...props
-}: React.ComponentProps<"div"> & { animateHeight?: boolean }) {
+}: CardProps) {
   const cardRef = React.useRef<HTMLDivElement | null>(null)
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const [height, setHeight] = React.useState<number | null>(null)
@@ -28,21 +38,47 @@ function Card({
     return () => observer.disconnect()
   }, [animateHeight])
 
+  const hasProgress = progress !== null
+  const clampedProgress = Math.max(0, Math.min(progress ?? 0, 100))
+  const progressFill = hasProgress ? (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[calc(var(--radius-xl)-2px)] bg-current/10 ring-1 ring-current/8 transition-[width] duration-200 ease-linear",
+        progressClassName
+      )}
+      style={{ width: `calc((100% - 4px) * ${clampedProgress / 100})` }}
+    />
+  ) : null
+
+  const cardStyle =
+    animateHeight && height !== null ? { ...style, height: `${height}px` } : style
+
+  const content = animateHeight ? (
+    <div ref={contentRef} className={hasProgress ? "relative z-10" : undefined}>
+      {children}
+    </div>
+  ) : hasProgress ? (
+    <div className="relative z-10">{children}</div>
+  ) : (
+    children
+  )
+
   return (
     <div
       data-slot="card"
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
         animateHeight && "transition-[height] duration-100 ease-out",
+        hasProgress && "relative overflow-hidden",
         className
       )}
-      style={
-        animateHeight && height !== null ? { height: `${height}px` } : undefined
-      }
+      style={cardStyle}
       ref={cardRef}
       {...props}
     >
-      {animateHeight ? <div ref={contentRef}>{props.children}</div> : props.children}
+      {progressFill}
+      {content}
     </div>
   )
 }

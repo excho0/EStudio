@@ -9,23 +9,15 @@ import type { ContentItem } from "@/types";
 import { useRenderProgress } from "@/components/studio/use-render-progress";
 import {
   Activity,
-  CheckCircle2,
   CircleCheck,
-  Loader2,
-  Play,
-  XCircle,
   TriangleAlert,
-  Sparkles,
   Film,
   Music,
   SlidersHorizontal,
   Send,
-  Upload,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { StatRow } from "@/components/ui/stat-row";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 
 const CardHeaderRow = ({
@@ -178,9 +170,12 @@ export default function DashboardOverviewPage() {
           ) : (
             <div className="mt-6 grid gap-4">
               {recent.map((item: ContentItem) => (
-                <div
+                <Card
                   key={item.id}
-                  className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
+                  animateHeight={false}
+                  progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                  progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
+                  className="gap-3 border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -199,13 +194,7 @@ export default function DashboardOverviewPage() {
                     </div>
                     {<JobStatusBadge status={getEffectiveStatus(item)} showLabel progress={renderProgress[item.id]?.progress} />}
                   </div>
-                  <StatRow show={getEffectiveStatus(item) === "rendering"}>
-                    <Progress
-                      value={Math.round((renderProgress[item.id]?.progress ?? 0) * 100)}
-                      variant="amber"
-                    />
-                  </StatRow>
-                </div>
+                </Card>
               ))}
             </div>
           )}
