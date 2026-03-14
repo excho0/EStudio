@@ -1,7 +1,7 @@
 import FFT from "fft.js";
 import type { MediaUtilsAudioData } from "@remotion/media-utils";
 
-type SpectrumOptions = {
+export type SpectrumOptions = {
   audioData: MediaUtilsAudioData;
   frame: number;
   fps: number;

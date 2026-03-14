@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import { clamp, lerp } from "../utils";
+import { clamp, lerp } from "@estudio/utils";
 
 type UseMotionTransformArgs = {
   frame: number;

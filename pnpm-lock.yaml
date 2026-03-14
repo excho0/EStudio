@@ -16,6 +16,12 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.989.0
         version: 3.989.0
+      '@estudio/audio-core':
+        specifier: workspace:*
+        version: link:../../packages/audio-core
+      '@estudio/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       '@neondatabase/serverless':
         specifier: ^1.0.2
         version: 1.0.2
@@ -320,6 +326,27 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+
+  packages/audio-core:
+    dependencies:
+      '@estudio/utils':
+        specifier: workspace:*
+        version: link:../utils
+      '@remotion/media-utils':
+        specifier: 4.0.409
+        version: 4.0.409(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      fft.js:
+        specifier: ^4.0.4
+        version: 4.0.4
+
+  packages/utils:
+    dependencies:
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      tailwind-merge:
+        specifier: ^3.4.0
+        version: 3.4.0
 
 packages:
 

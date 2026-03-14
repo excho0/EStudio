@@ -20,7 +20,7 @@ import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { clamp } from "@/remotion/utils";
+import { clamp } from "@estudio/utils";
 import {
   Drawer,
   DrawerContent,

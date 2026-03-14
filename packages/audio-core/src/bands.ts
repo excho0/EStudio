@@ -1,11 +1,11 @@
-import { clamp } from "@/remotion/utils";
+import { clamp } from "@estudio/utils";
 
 const DEFAULT_FOCUS_MIN = 200;
 const DEFAULT_FOCUS_MAX = 2000;
 const DEFAULT_FOCUS_RATIO = 0.6;
 const DEFAULT_LOW_RATIO = 0.2;
 
-type LogBandOptions = {
+export type LogBandOptions = {
   magnitudes: number[];
   sampleRate: number;
   fftSize: number;

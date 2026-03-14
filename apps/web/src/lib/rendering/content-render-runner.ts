@@ -9,7 +9,7 @@ import {
 import { getStorage } from "@/lib/storage";
 import { emitContentUpdate } from "@/lib/socket/manager";
 import { getContentItem, updateContentItem } from "@/lib/data/content";
-import { getSlug } from "@/lib/shared/helpers";
+import { getSlug } from "@estudio/utils";
 import { createContentAssetToken } from "@/lib/content/asset-token";
 import {
   getContentMode,

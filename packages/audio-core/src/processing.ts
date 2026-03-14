@@ -1,16 +1,10 @@
-// lib/audio/processing.ts
-
-type ProcessAudioBarsOptions = {
-  // We keep these for styling the bars (EQ)
+export type ProcessAudioBarsOptions = {
   maxOutput?: number;
   gain?: number;
   curve?: number;
   noiseFloor?: number;
   lowBoost?: number;
   midBoost?: number;
-
-  // These are NO LONGER USED here (moved to component logic)
-  // but kept in type definition so your code doesn't break immediately
   fps?: number;
   attackMs?: number;
   releaseMs?: number;
@@ -37,11 +31,10 @@ export const processAudioBars = (
   const length = bars.length;
   const half = length / 2;
 
-  // 1. Perceptual Frequency Shaping (EQ)
   const normalized = bars.map((raw, index) => {
     const position = index < half ? index : length - 1 - index;
     const positionT = position / half;
-    
+
     const emphasis = Math.max(0.9, lowBoost - positionT * 0.35);
     const centerAtten = 0.85 + positionT * 0.2;
     const bassAtten = 0.7 + positionT * 0.6;
@@ -50,32 +43,29 @@ export const processAudioBars = (
 
     const adjusted = clamp01(raw * gain * emphasis * centerAtten * bandBoost * bassAtten);
     const curved = Math.pow(adjusted, curve);
-    
+
     return curved < noiseFloor ? 0 : curved;
   });
-  
-  // 2. Neighbor De-bleeding (Clean separation)
-  const separated = [...normalized];
-  const sensitivity = 0.2; 
 
-  for (let i = 0; i < length; i++) {
+  const separated = [...normalized];
+  const sensitivity = 0.2;
+
+  for (let i = 0; i < length; i += 1) {
     const currentValue = normalized[i];
-    if (currentValue > 0.1) { 
-        if (i > 0) {
-            const left = normalized[i - 1];
-            if (left > currentValue + 0.05) separated[i] = Math.max(0, separated[i] - left * sensitivity);
-        }
-        if (i < length - 1) {
-            const right = normalized[i + 1];
-            if (right > currentValue + 0.05) separated[i] = Math.max(0, separated[i] - right * sensitivity);
-        }
+    if (currentValue > 0.1) {
+      if (i > 0) {
+        const left = normalized[i - 1];
+        if (left > currentValue + 0.05) separated[i] = Math.max(0, separated[i] - left * sensitivity);
+      }
+      if (i < length - 1) {
+        const right = normalized[i + 1];
+        if (right > currentValue + 0.05) separated[i] = Math.max(0, separated[i] - right * sensitivity);
+      }
     }
   }
-  
-  // 3. Simple Output Scaling
+
   const outputScale = Math.max(1, maxOutput) / 100;
   const next = separated.map((value) => clamp01(value * outputScale));
 
-  // We return 'next' as the pure, raw shaped bars for this specific frame
   return { next, max: 0 };
 };

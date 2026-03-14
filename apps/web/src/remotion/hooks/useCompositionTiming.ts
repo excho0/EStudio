@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { interpolate } from "remotion";
-import { clamp } from "../utils";
+import { clamp } from "@estudio/utils";
 
 type UseCompositionTimingArgs = {
   frame: number;

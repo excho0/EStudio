@@ -6,6 +6,7 @@ import { Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
+import { hashString } from "@estudio/utils";
 
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { queryKeys } from "@/lib/http/query-keys";
@@ -41,13 +42,6 @@ const buildProviderState = (providers: ProviderDefinition[]) =>
     ])
   ) as Record<string, ProviderConnectionState>;
 
-const hashString = (value: string) => {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-};
 
 type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
 

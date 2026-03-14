@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import { lerp } from "../utils";
+import { lerp } from "@estudio/utils";
 
 type UseEdgeRaysMetricsArgs = {
   smoothedBands: number[] | null;

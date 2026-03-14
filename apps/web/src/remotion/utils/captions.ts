@@ -1,6 +1,5 @@
 import type { CaptionSegment } from "../../types/captions";
-import { hashString } from "./hash";
-import { clamp, lerp } from "./math";
+import { hashString, clamp, lerp } from "@estudio/utils";
 
 export type CaptionToken = {
   text: string;

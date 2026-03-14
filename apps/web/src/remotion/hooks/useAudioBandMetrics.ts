@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import type { MediaUtilsAudioData } from "@remotion/media-utils";
-import { getAudioSpectrum } from "../../lib/audio/fft";
-import { getLogBands } from "../../lib/audio/bands";
-import { processAudioBars } from "../../lib/audio/processing";
-import { clamp } from "../utils";
+import { getAudioSpectrum, getLogBands, processAudioBars } from "@estudio/audio-core";
+import { clamp } from "@estudio/utils";
 
 type UseAudioBandMetricsArgs = {
   audioData: MediaUtilsAudioData | null;

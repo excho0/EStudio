@@ -7,7 +7,7 @@ import {
   getContentRenderPath,
 } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
-import { getSlug } from "@/lib/shared/helpers";
+import { getSlug } from "@estudio/utils";
 import {
   clearRenderProgressSnapshot,
   emitContentUpdate,

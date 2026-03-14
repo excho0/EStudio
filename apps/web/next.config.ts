@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ["@estudio/audio-core", "@estudio/utils"],
 };
 
 export default nextConfig;
