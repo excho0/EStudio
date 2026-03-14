@@ -545,6 +545,20 @@ export default function ProfileSettingsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     type="button"
+                    variant="outline"
+                    disabled={loading || status !== "authenticated" || !isDirty}
+                    onClick={() =>
+                      setDraft({
+                        ...profile,
+                        email: profile.pendingEmail ?? profile.email,
+                      })
+                    }
+                    className="h-11 border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    type="button"
                     onClick={handleSave}
                     loading={saving}
                     loadingText="Saving..."
@@ -557,20 +571,6 @@ export default function ProfileSettingsPage() {
                     className="h-11"
                   >
                     Save changes
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={loading || status !== "authenticated" || !isDirty}
-                    onClick={() =>
-                      setDraft({
-                        ...profile,
-                        email: profile.pendingEmail ?? profile.email,
-                      })
-                    }
-                    className="h-11 border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                  >
-                    Reset
                   </Button>
                 </div>
 
@@ -640,7 +640,16 @@ export default function ProfileSettingsPage() {
           </form>
         </ResponsiveDrawerContent>
 
-        <ResponsiveDrawerFooter className="px-4 pb-4">
+        <ResponsiveDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setEmailDrawerOpen(false)}
+            disabled={saving}
+            className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+          >
+            Cancel
+          </Button>
           <Button
             type="submit"
             form="email-change-form"
@@ -653,15 +662,6 @@ export default function ProfileSettingsPage() {
             }
           >
             Send verification email
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setEmailDrawerOpen(false)}
-            disabled={saving}
-            className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-          >
-            Cancel
           </Button>
         </ResponsiveDrawerFooter>
       </ResponsiveDrawer>

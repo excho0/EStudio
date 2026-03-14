@@ -1,5 +1,6 @@
-import { useMemo, useRef } from "react";
-import { lerp } from "@estudio/utils";
+import { useMemo } from "react";
+
+import { clamp } from "@estudio/utils";
 
 type UseEdgeRaysMetricsArgs = {
   smoothedBands: number[] | null;
@@ -61,10 +62,12 @@ export const useEdgeRaysMetrics = ({
     }
     const overallAvg = overallSum / total;
 
-    const vocalPreference = Math.min(1, Math.max(0, edgeRaysVocalBalance));
+    const vocalPreference = clamp(edgeRaysVocalBalance, 0, 1);
     const lowBlend = lowAvg * 0.58 + lowMidAvg * 0.42;
     const presenceBlend = vocalAvg * 0.72 + highAvg * 0.28;
-    const balancedBlend = lowBlend * (0.68 - vocalPreference * 0.22) + presenceBlend * (0.22 + vocalPreference * 0.2);
+    const balancedBlend =
+      lowBlend * (0.68 - vocalPreference * 0.22) +
+      presenceBlend * (0.22 + vocalPreference * 0.2);
     const crest = Math.max(lowBlend, vocalAvg, highAvg * 0.84);
 
     const currentLowBlend = current
@@ -87,10 +90,7 @@ export const useEdgeRaysMetrics = ({
     const lowMotionLift = Math.max(0, currentLowBlend - smoothedLowBlend);
     const presenceMotionLift = Math.max(0, currentPresenceBlend - smoothedPresenceBlend);
     const globalMotionLift = current
-      ? Math.max(
-          0,
-          averageRange(current, 0, total, 1.0, 0.82) - overallAvg
-        )
+      ? Math.max(0, averageRange(current, 0, total, 1.0, 0.82) - overallAvg)
       : 0;
 
     const motionLift =
@@ -104,46 +104,19 @@ export const useEdgeRaysMetrics = ({
       crest * 0.12 +
       overallAvg * 0.06 +
       motionLift * 0.16;
-    const normalized = Math.max(0, Math.min(1, (mixed - 0.0035) / 0.46));
+    const normalized = clamp((mixed - 0.0035) / 0.46, 0, 1);
     return Math.pow(normalized, 0.7);
   }, [smoothedBands, currentBands, edgeRaysVocalBalance]);
 
-  const glowRef = useRef(0);
-  const glowOutputRef = useRef(0);
-  const lastEnergyRef = useRef(0);
-  const transientRef = useRef(0);
   const glowIntensity = useMemo(() => {
     const intensityScale = 0.4 + edgeRaysIntensity * 1.05;
     const target = 1 - Math.exp(-edgeEnergy * intensityScale * 1.85);
-    if (frame === 0) {
-      glowRef.current = target;
-      glowOutputRef.current = target;
-      lastEnergyRef.current = target;
-      return target;
-    }
-
-    const lastEnergy = lastEnergyRef.current;
-    const delta = target - lastEnergy;
-    const rise = Math.max(0, delta);
-    lastEnergyRef.current = target;
-
-    const transient = lerp(transientRef.current, rise, 0.14);
-    transientRef.current = transient;
-
-    const current = glowRef.current;
-    const attack = 0.6;
-    const release = 0.16;
-    const smoothed =
-      target > current
-        ? lerp(current, target, attack)
-        : lerp(current, target, release);
-    glowRef.current = smoothed;
-
-    const accent = transient * 0.9;
-    const combined = Math.min(1, smoothed + accent);
-    const output = lerp(glowOutputRef.current, combined, 0.5);
-    glowOutputRef.current = output;
-    return output;
+    const contour = Math.pow(target, 0.94);
+    const lift = edgeEnergy * (0.12 + edgeRaysIntensity * 0.16);
+    const pulse =
+      Math.sin(frame * 0.028) * edgeEnergy * 0.03 +
+      Math.cos(frame * 0.017) * edgeEnergy * 0.02;
+    return clamp(contour + lift + pulse, 0, 1);
   }, [edgeEnergy, edgeRaysIntensity, frame]);
 
   return {

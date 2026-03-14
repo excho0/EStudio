@@ -17,7 +17,7 @@ export const liveNotificationSnapshotSchema = notificationItemSchema.pick({
 });
 
 export type LiveNotificationSnapshot = z.infer<typeof liveNotificationSnapshotSchema>;
-const liveNotificationSnapshotInputSchema = liveNotificationSnapshotSchema
+export const liveNotificationSnapshotInputSchema = liveNotificationSnapshotSchema
   .omit({ id: true, updatedAt: true })
   .extend({ updatedAt: z.number().optional() });
 

@@ -87,7 +87,7 @@ export default function EditCaptionsPage() {
     } catch {
       return modeDefinition.defaults;
     }
-  }, [mode, modeDefinition.defaults, settingsMap]);
+  }, [mode, modeDefinition, settingsMap]);
 
   const captionsLanguage = useMemo(() => {
     return typeof resolvedSettings.captionsLanguage === "string"
@@ -233,7 +233,7 @@ export default function EditCaptionsPage() {
     return attachSocketSubscriptions(socket, [
       { event: SocketEvents.caption.update, handler: handleCaptionUpdate },
     ] as const);
-  }, [connected, generationWatch, queryClient, socket]);
+  }, [connected, contentQuery, generationWatch, queryClient, socket]);
 
   useEffect(() => {
     if (!item || canEditCaptions || hasRedirectedRef.current) return;

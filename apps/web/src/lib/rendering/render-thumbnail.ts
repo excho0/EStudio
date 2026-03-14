@@ -4,7 +4,6 @@ import {
   getStorage,
   createTempDir,
   removePath,
-  writeFilePath,
   readFilePath,
   writeStreamToPath,
   storageKey,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { useRouteTransition } from "@/components/navigation/route-transition";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -20,7 +20,7 @@ import {
   Save,
   AlertCircle,
   Subtitles,
-  Image,
+  Image as ImageIcon,
   Film,
 } from "lucide-react";
 
@@ -54,7 +54,6 @@ import { Switch } from "@/components/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  captionDocumentSchema,
   type ContentItem,
   type EditFormValues,
   type PaletteMode,
@@ -235,21 +234,15 @@ export default function EditContentPage() {
 
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
-  const [item, setItem] = useState<ContentItem | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
   const [paletteState, setPaletteState] = useState<string[]>([]);
   const [formValues, setFormValues] = useState<FormValues>(defaultFormValues);
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [videoVersion, setVideoVersion] = useState<number>(0);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
   const [mediaActionsOpen, setMediaActionsOpen] = useState(false);
-  const [fieldActionLoading, setFieldActionLoading] = useState<
-    Record<string, boolean>
-  >({});
-  const [error, setError] = useState<string | null>(null);
+  const fieldActionLoading: Record<string, boolean> = {};
   const [initialSnapshot, setInitialSnapshot] = useState<{
     formValues: FormValues;
     paletteMode: PaletteMode;
@@ -264,10 +257,15 @@ export default function EditContentPage() {
     },
   });
   const loading = contentQuery.isLoading || contentQuery.isFetching;
-  const resolvedItem = item ?? contentQuery.data ?? null;
+  const resolvedItem = contentQuery.data ?? null;
+  const loadError = contentQuery.error
+    ? contentQuery.error instanceof Error
+      ? contentQuery.error.message
+      : "Failed to load item."
+    : null;
   const pageState: "loading" | "error" | "notFound" | "ready" = loading
     ? "loading"
-    : error
+    : loadError
       ? "error"
       : resolvedItem
         ? "ready"
@@ -276,31 +274,23 @@ export default function EditContentPage() {
   useEffect(() => {
     if (!contentQuery.data) return;
     const data = contentQuery.data;
-    if (item?.id === data.id && initialSnapshot) {
+    if (initialSnapshot && initialSnapshot.formValues.title === buildFormValuesFromItem(data).title && resolvedItem?.id === data.id) {
       return;
     }
-    setItem(data);
-    setError(null);
-    setVideoVersion(Date.now());
-    setThumbnailVersion(Date.now());
     const nextFormValues = buildFormValuesFromItem(data);
-    setFormValues(nextFormValues);
-    setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
-    setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
-    setInitialSnapshot(buildSnapshotFromItem(data));
-  }, [contentQuery.data, initialSnapshot, item?.id]);
-
-  useEffect(() => {
-    if (!contentQuery.error) return;
-    setError(
-      contentQuery.error instanceof Error
-        ? contentQuery.error.message
-        : "Failed to load item."
-    );
-  }, [contentQuery.error]);
+    const nextSnapshot = buildSnapshotFromItem(data);
+    queueMicrotask(() => {
+      setVideoVersion(Date.now());
+      setThumbnailVersion(Date.now());
+      setFormValues(nextFormValues);
+      setPaletteMode(data.paletteMode === "manual" ? "manual" : "auto");
+      setPaletteState(Array.isArray(data.colorPalette) ? data.colorPalette : []);
+      setInitialSnapshot(nextSnapshot);
+    });
+  }, [contentQuery.data, initialSnapshot, resolvedItem?.id]);
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!item) {
+      if (!resolvedItem) {
         throw new Error("No content item loaded.");
       }
       const payload = buildPayloadFromForm(formValues, paletteMode, paletteState);
@@ -314,12 +304,12 @@ export default function EditContentPage() {
             if (videoFile) {
               formData.append("video", videoFile);
             }
-            return fetch(`/api/content/${item.id}`, {
+            return fetch(`/api/content/${resolvedItem.id}`, {
               method: "PATCH",
               body: formData,
             });
           })()
-        : fetch(`/api/content/${item.id}`, {
+        : fetch(`/api/content/${resolvedItem.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -338,14 +328,11 @@ export default function EditContentPage() {
         ? updated.colorPalette
         : [];
 
-      setItem(updated);
       setFormValues(nextFormValues);
       setPaletteMode(nextPaletteMode);
       setPaletteState(nextPaletteState);
       setVideoFile(null);
-      setVideoPreview(null);
       setThumbnailFile(null);
-      setThumbnailPreview(null);
       if (didUploadVideo) {
         setVideoVersion(Date.now());
       }
@@ -375,6 +362,31 @@ export default function EditContentPage() {
     useMediaBlobUrl(videoUrl);
   const { blobUrl: audioBlobUrl, loading: audioLoading } =
     useMediaBlobUrl(audioUrl);
+  const videoPreview = useMemo(
+    () => (videoFile ? URL.createObjectURL(videoFile) : null),
+    [videoFile]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (videoPreview) {
+        URL.revokeObjectURL(videoPreview);
+      }
+    };
+  }, [videoPreview]);
+
+  const thumbnailPreview = useMemo(
+    () => (thumbnailFile ? URL.createObjectURL(thumbnailFile) : null),
+    [thumbnailFile]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailPreview) {
+        URL.revokeObjectURL(thumbnailPreview);
+      }
+    };
+  }, [thumbnailPreview]);
   const modeOptions = useMemo(() => {
     return Object.keys(contentModeUiRegistry).map((id) => {
       const def = getContentModeDefinition(id);
@@ -388,34 +400,25 @@ export default function EditContentPage() {
   }, []);
   const resolvedSettings = useMemo(() => {
     try {
-      return resolveContentSettings(formValues.mode || item?.mode, formValues.settings)
+      return resolveContentSettings(formValues.mode || resolvedItem?.mode, formValues.settings)
         .settings as Record<string, unknown>;
     } catch {
-      const fallback = getContentModeDefinition(formValues.mode || item?.mode).defaults;
+      const fallback = getContentModeDefinition(formValues.mode || resolvedItem?.mode).defaults;
       return fallback as Record<string, unknown>;
     }
-  }, [formValues.mode, formValues.settings, item]);
+  }, [formValues.mode, formValues.settings, resolvedItem]);
   const settingsMap = useMemo(
-    () => normalizeSettingsMap(formValues.mode || item?.mode, formValues.settings),
-    [formValues.mode, formValues.settings, item]
+    () => normalizeSettingsMap(formValues.mode || resolvedItem?.mode, formValues.settings),
+    [formValues.mode, formValues.settings, resolvedItem]
   );
   const currentSettings = useMemo(
     () =>
       (settingsMap[
-        (formValues.mode || item?.mode || DEFAULT_CONTENT_MODE) as string
+        (formValues.mode || resolvedItem?.mode || DEFAULT_CONTENT_MODE) as string
       ] ?? {}) as Record<string, unknown>,
-    [settingsMap, formValues.mode, item]
+    [settingsMap, formValues.mode, resolvedItem]
   );
-  const sharedCaptionsData = useMemo(() => {
-    const shared = settingsMap.__shared;
-    if (!shared || typeof shared !== "object" || Array.isArray(shared)) {
-      return null;
-    }
-    const raw = (shared as Record<string, unknown>).captionsData ?? null;
-    const parsed = captionDocumentSchema.nullable().safeParse(raw);
-    return parsed.success ? parsed.data : null;
-  }, [settingsMap]);
-  const previewOutput = getOutputDefaultsForMode(formValues.mode || item?.mode, resolvedSettings);
+  const previewOutput = getOutputDefaultsForMode(formValues.mode || resolvedItem?.mode, resolvedSettings);
   const resolvedFps = previewOutput.fps;
   const resolvedWidth = previewOutput.width;
   const resolvedHeight = previewOutput.height;
@@ -427,7 +430,7 @@ export default function EditContentPage() {
   const segmentDurationSeconds = getSettingNumber("segmentDurationSeconds", 4);
   const songDurationSeconds = Math.max(
     0,
-    Number(formValues.songDurationSeconds || 0) || Number(item?.songDurationSeconds ?? 0)
+    Number(formValues.songDurationSeconds || 0) || Number(resolvedItem?.songDurationSeconds ?? 0)
   );
   const rangeStartSeconds = Math.max(0, Number(resolvedSettings.songRangeStartSeconds ?? 0));
   const rangeEndRaw = Number(
@@ -449,7 +452,7 @@ export default function EditContentPage() {
     Math.round(previewDurationSeconds * resolvedFps)
   );
   const canRenderPreview =
-    !!item &&
+    !!resolvedItem &&
     Number.isFinite(safeDurationInFrames) &&
     Number.isFinite(resolvedFps) &&
     Number.isFinite(resolvedWidth) &&
@@ -465,18 +468,18 @@ export default function EditContentPage() {
     previewAspect >= PREVIEW_CANVAS_ASPECT ? Math.max(1, previewScale * 100) : 100;
 
   const modeUi = useMemo(
-    () => getContentModeUi(formValues.mode || item?.mode, pathname),
-    [formValues.mode, item?.mode]
+    () => getContentModeUi(formValues.mode || resolvedItem?.mode, pathname),
+    [formValues.mode, resolvedItem?.mode, pathname]
   );
   const previewComponent = modeUi.previewComponent ?? ContentLoopComposition;
   const modeDefinition = useMemo(
-    () => getContentModeDefinition(formValues.mode || item?.mode),
-    [formValues.mode, item?.mode]
+    () => getContentModeDefinition(formValues.mode || resolvedItem?.mode),
+    [formValues.mode, resolvedItem?.mode]
   );
-  const previewProps = item
+  const previewProps = resolvedItem
     ? modeDefinition.buildProps({
         item: {
-          ...item,
+          ...resolvedItem,
           settings: formValues.settings as Record<string, unknown>,
         },
         settings: {
@@ -491,29 +494,6 @@ export default function EditContentPage() {
         },
       })
     : null;
-  const captionsEditorPreview = useMemo(
-    () =>
-      previewProps && canRenderPreview
-        ? {
-            component: previewComponent as ComponentType<Record<string, unknown>>,
-            inputProps: previewProps as Record<string, unknown>,
-            durationInFrames: safeDurationInFrames,
-            fps: resolvedFps,
-            compositionWidth: resolvedWidth,
-            compositionHeight: resolvedHeight,
-          }
-        : null,
-    [
-      canRenderPreview,
-      previewComponent,
-      previewProps,
-      resolvedFps,
-      resolvedHeight,
-      resolvedWidth,
-      safeDurationInFrames,
-    ]
-  );
-
   const fieldMap = useMemo(() => buildFieldMap(modeUi.sections), [modeUi.sections]);
 
   const getFieldValue = (key: string) =>
@@ -533,13 +513,6 @@ export default function EditContentPage() {
         },
       };
     });
-  };
-
-  const setModeActionLoading = (actionId: string, loading: boolean) => {
-    setFieldActionLoading((current) => ({
-      ...current,
-      [actionId]: loading,
-    }));
   };
 
 
@@ -565,7 +538,7 @@ export default function EditContentPage() {
     if (field.input === "action") {
       const actionState = resolveFieldActionState({
         field,
-        disabled: disabled || !item,
+        disabled: disabled || !resolvedItem,
         loadingMap: fieldActionLoading,
         handlers: fieldActionHandlers,
       });
@@ -613,7 +586,7 @@ export default function EditContentPage() {
       );
     }
     if (field.input === "select") {
-      const normalizedMode = (formValues.mode || item?.mode || "").toLowerCase();
+      const normalizedMode = (formValues.mode || resolvedItem?.mode || "").toLowerCase();
       const isShortMode =
         normalizedMode.includes("short") || normalizedMode.includes("portrait");
       const selectOptions =
@@ -724,31 +697,6 @@ export default function EditContentPage() {
   };
 
 
-  useEffect(() => {
-    if (!videoFile) {
-      setVideoPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(videoFile);
-    setVideoPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [videoFile]);
-
-  useEffect(() => {
-    if (!thumbnailFile) {
-      setThumbnailPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(thumbnailFile);
-    setThumbnailPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [thumbnailFile]);
-
-  useEffect(() => {
-    if (!item || paletteMode !== "auto") return;
-    setPaletteState(item.colorPalette ?? []);
-  }, [item, paletteMode]);
-
   const handleThumbnailChange = (file: File | null) => {
     setThumbnailFile(file);
   };
@@ -796,9 +744,7 @@ export default function EditContentPage() {
     setPaletteMode(initialSnapshot.paletteMode);
     setPaletteState(initialSnapshot.paletteState);
     setVideoFile(null);
-    setVideoPreview(null);
     setThumbnailFile(null);
-    setThumbnailPreview(null);
   };
 
   return (
@@ -809,7 +755,7 @@ export default function EditContentPage() {
           asChild
           variant="ghost"
         >
-          <Link href="/library">
+          <Link href="/library" aria-label="Back to library">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -896,7 +842,7 @@ export default function EditContentPage() {
               {...stateTransition}
               className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-200"
             >
-              {error}
+              {loadError}
             </motion.div>
           ) : isReady && resolvedItem ? (
             <motion.div key="ready" {...stateTransition} className="flex flex-col gap-6">
@@ -1304,7 +1250,7 @@ export default function EditContentPage() {
               className="justify-start"
               onClick={openThumbnailPicker}
             >
-              <Image className="h-4 w-4" />
+              <ImageIcon className="h-4 w-4" />
               Replace thumbnail
             </Button>
             <Button

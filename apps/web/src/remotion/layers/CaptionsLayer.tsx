@@ -8,7 +8,6 @@ const CAPTION_FONT_STACK =
 
 type CaptionsLayerProps = {
   captionsEnabled: boolean;
-  captionsStyle: "subtitle" | "tiktok";
   captionsPosition: "top" | "center" | "bottom" | "custom";
   captionsOffsetX: number;
   captionsOffsetY: number;
@@ -138,7 +137,6 @@ const getCaptionTokenStyle = ({
 
 export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsEnabled,
-  captionsStyle,
   captionsPosition,
   captionsOffsetX,
   captionsOffsetY,

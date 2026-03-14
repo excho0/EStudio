@@ -18,7 +18,6 @@ import { DebugOverlayLayer } from "./layers/DebugOverlayLayer";
 import { EdgeRaysShaderLayer } from "./layers/EdgeRaysShaderLayer";
 import { ThumbnailRevealLayer } from "./layers/ThumbnailRevealLayer";
 import { VisualizationBarsLayer } from "./layers/VisualizationBarsLayer";
-import { clamp } from "@estudio/utils";
 import { buildVideoSlices, resolveCaptionRuntime } from "./utils";
 import { useAudioBandMetrics } from "./hooks/useAudioBandMetrics";
 import { useAudioReactiveMetrics } from "./hooks/useAudioReactiveMetrics";
@@ -61,9 +60,6 @@ const SegmentLayer: React.FC<{
   sharpenContrastWeight?: number;
   sharpenSaturationWeight?: number;
   sharpenBrightnessWeight?: number;
-  glowEnabled?: boolean;
-  glowIntensity?: number;
-  glowColor?: string;
   scale: number;
 }> = ({
   duration,
@@ -79,12 +75,8 @@ const SegmentLayer: React.FC<{
   sharpenContrastWeight = 0.45,
   sharpenSaturationWeight = 0.2,
   sharpenBrightnessWeight = 0.03,
-  glowEnabled = false,
-  glowIntensity = 0,
-  glowColor,
   scale,
 }) => {
-  const { width, height, fps } = useVideoConfig();
   const slices = buildVideoSlices(startFrom, duration, playableVideoFrames);
   const masterStrength = Math.max(
     0,
@@ -328,6 +320,9 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       captionsEnabled,
       captionsWordsPerPage,
       captionsStyle,
+      fps,
+      rangeEndFrames,
+      rangeStartFrames,
       timelineMs,
     ]
   );
@@ -368,9 +363,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               sharpenContrastWeight={sharpenContrastWeight}
               sharpenSaturationWeight={sharpenSaturationWeight}
               sharpenBrightnessWeight={sharpenBrightnessWeight}
-              glowEnabled={edgeRaysEnabled}
-              glowIntensity={glowIntensity * contentLayerOpacity}
-              glowColor={glowColor}
               scale={scaleFactor}
             />
           </TransitionSeries.Sequence>,
@@ -399,7 +391,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoSrc,
       maxSegmentStartFrame,
       resolvedPlaybackRate,
-      glowIntensity,
       sharpenAmount,
       sharpenUseMaster,
       sharpenMaster,
@@ -407,9 +398,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       sharpenSaturationWeight,
       sharpenBrightnessWeight,
       sharpenEnabled,
-      contentLayerOpacity,
-      edgeRaysEnabled,
-      glowColor,
       scaleFactor,
     ]
   );

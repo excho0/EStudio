@@ -178,7 +178,7 @@ export default function RendersPage() {
       return sdk.content.renders(id, page, limit);
     },
   });
-  const items = rendersQuery.data?.items ?? [];
+  const items = useMemo(() => rendersQuery.data?.items ?? [], [rendersQuery.data]);
   const loading = rendersQuery.isLoading || rendersQuery.isFetching;
   const desktopScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);

@@ -394,21 +394,16 @@ const demoNotificationJobs: ActivityJob[] = [
 export function NotificationCenterDrawer() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [jobs, setJobs] = useState<Record<string, ActivityJob>>({});
+  const [jobs, setJobs] = useState<Record<string, ActivityJob>>(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return {};
+    }
+    return Object.fromEntries(
+      demoNotificationJobs.map((job) => [job.key, job])
+    ) as Record<string, ActivityJob>;
+  });
   const { socket } = useSocketIO();
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") {
-      return;
-    }
-    setJobs((current) => {
-      const next = { ...current };
-      demoNotificationJobs.forEach((job) => {
-        next[job.key] = job;
-      });
-      return next;
-    });
-  }, []);
 
   const bootstrapQuery = useQuery({
     queryKey: ["notification-center", "bootstrap"],

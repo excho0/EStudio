@@ -7,7 +7,7 @@ import { withNotificationsDb } from "./db";
 import { notificationItemSchema } from "./schemas";
 import type { NotificationsListQuery } from "./schemas";
 
-const upsertNotificationInputSchema = notificationItemSchema
+export const upsertNotificationInputSchema = notificationItemSchema
   .omit({
     id: true,
     readAt: true,

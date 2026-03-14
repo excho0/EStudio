@@ -18,7 +18,7 @@ export type NotificationPersistPayload = LiveNotificationSnapshotInput & {
   userId?: string | null;
 };
 
-const persistCheckpointSchema = z.object({
+export const persistCheckpointSchema = z.object({
   at: z.number(),
   status: notificationStatusSchema,
   bucket: z.number().int().nonnegative(),
