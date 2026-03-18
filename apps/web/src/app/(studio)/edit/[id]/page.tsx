@@ -6,6 +6,7 @@ import { useRouteTransition } from "@/components/navigation/route-transition";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowUp,
   Pencil,
   Palette,
   SlidersHorizontal,
@@ -20,6 +21,7 @@ import {
   Save,
   AlertCircle,
   Subtitles,
+  Undo2,
   Image as ImageIcon,
   Film,
 } from "lucide-react";
@@ -93,7 +95,6 @@ import {
   SettingRangeSliderRow,
   SettingToggleRow,
 } from "@/components/content-settings/fields";
-import StickyBox from "@/components/ui/sticky-box";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
 import { Alert, AlertContent, AlertIcon, AlertTitle } from "@/components/ui/alert";
@@ -234,6 +235,8 @@ export default function EditContentPage() {
 
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const previewAnchorRef = useRef<HTMLDivElement | null>(null);
+  const inlineActionsRef = useRef<HTMLDivElement | null>(null);
   const [paletteMode, setPaletteMode] = useState<"auto" | "manual">("auto");
   const [paletteState, setPaletteState] = useState<string[]>([]);
   const [formValues, setFormValues] = useState<FormValues>(defaultFormValues);
@@ -242,6 +245,9 @@ export default function EditContentPage() {
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailVersion, setThumbnailVersion] = useState<number>(0);
   const [mediaActionsOpen, setMediaActionsOpen] = useState(false);
+  const [showJumpDock, setShowJumpDock] = useState(false);
+  const [showDockActions, setShowDockActions] = useState(true);
+  const [returnScrollY, setReturnScrollY] = useState<number | null>(null);
   const fieldActionLoading: Record<string, boolean> = {};
   const [initialSnapshot, setInitialSnapshot] = useState<{
     formValues: FormValues;
@@ -271,6 +277,64 @@ export default function EditContentPage() {
         ? "ready"
         : "notFound";
   const isReady = pageState === "ready";
+
+  useEffect(() => {
+    let raf = 0;
+
+    const update = () => {
+      const next = window.scrollY > 480;
+      setShowJumpDock((current) => (current === next ? current : next));
+    };
+
+    const onScroll = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        update();
+      });
+    };
+
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", update);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  useEffect(() => {
+    let raf = 0;
+
+    const update = () => {
+      const target = inlineActionsRef.current;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+      setShowDockActions(!isVisible);
+    };
+
+    const onScroll = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        update();
+      });
+    };
+
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", update);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, []);
+
   useEffect(() => {
     if (!contentQuery.data) return;
     const data = contentQuery.data;
@@ -747,6 +811,105 @@ export default function EditContentPage() {
     setThumbnailFile(null);
   };
 
+  const handleJumpToPreview = () => {
+    const anchor = previewAnchorRef.current;
+    if (!anchor) return;
+
+    setReturnScrollY(window.scrollY);
+    const nextTop = Math.max(
+      0,
+      window.scrollY + anchor.getBoundingClientRect().top - 88
+    );
+    window.scrollTo({ top: nextTop, behavior: "smooth" });
+  };
+
+  const handleJumpBack = () => {
+    if (returnScrollY === null) return;
+    window.scrollTo({ top: returnScrollY, behavior: "smooth" });
+    setReturnScrollY(null);
+  };
+
+  const showDockSave = showDockActions && (isDirty || saving);
+  const showDockRevert = showDockActions && isDirty && !saving;
+  const dockItems: Array<{
+    key: string;
+    action: "save" | "revert" | "jump";
+    label: string;
+    tone: "default" | "primary" | "accent";
+    icon: React.ReactNode;
+  }> = [];
+
+  if (showDockRevert) {
+    dockItems.push({
+      key: "revert",
+      action: "revert",
+      label: "Revert changes",
+      tone: "default",
+      icon: <RotateCw className="h-4 w-4 shrink-0" />,
+    });
+  }
+
+  if (showDockSave) {
+    dockItems.push({
+      key: "save",
+      action: "save",
+      label: saving ? "Saving changes" : "Save changes",
+      tone: "primary",
+      icon: (
+        <motion.span
+          animate={saving ? { rotate: 360 } : { rotate: 0 }}
+          transition={
+            saving
+              ? { duration: 1, ease: "linear", repeat: Infinity }
+              : { duration: 0.18, ease: "easeOut" }
+          }
+          className="inline-flex"
+        >
+          <Save className="h-4 w-4 shrink-0" />
+        </motion.span>
+      ),
+    });
+  }
+
+  dockItems.push({
+    key: "jump",
+    action: "jump",
+    label:
+      returnScrollY !== null
+        ? "Return to previous scroll position"
+        : "Jump to preview",
+    tone: returnScrollY !== null ? "accent" : "default",
+    icon: (
+      <>
+        <motion.span
+          animate={{
+            opacity: returnScrollY !== null ? 0 : 1,
+            scale: returnScrollY !== null ? 0.8 : 1,
+            rotate: returnScrollY !== null ? -18 : 0,
+          }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="absolute inset-0 inline-flex items-center justify-center"
+        >
+          <ArrowUp className="h-4 w-4" />
+        </motion.span>
+        <motion.span
+          animate={{
+            opacity: returnScrollY !== null ? 1 : 0,
+            scale: returnScrollY !== null ? 1 : 0.8,
+            rotate: returnScrollY !== null ? 0 : 18,
+          }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="absolute inset-0 inline-flex items-center justify-center"
+        >
+          <Undo2 className="h-4 w-4" />
+        </motion.span>
+      </>
+    ),
+  });
+
+  const dockButtonCount = dockItems.length;
+  const dockWidth = 12 + dockButtonCount * 40 + (dockButtonCount - 1) * 6;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
@@ -766,14 +929,52 @@ export default function EditContentPage() {
           </p>
         </div>
       </div>
-      <StickyBox top={80} fullWidth={isCompactLayout}>
-        {(isSticky) => (
-          <div
-            className={cn(
-              "flex items-center gap-3",
-              isSticky && isCompactLayout ? "justify-center" : "justify-end"
+      <div ref={inlineActionsRef}>
+      {isCompactLayout ? (
+        <div className="flex items-center justify-end gap-3">
+          <AnimatePresence mode="wait" initial={false}>
+            {pageState === "loading" ? (
+              <motion.div
+                key="sticky-actions-loading"
+                {...stateTransition}
+                className="flex items-center gap-3"
+              >
+                <Skeleton className="h-10 w-28 rounded-xl" />
+                <Skeleton className="h-10 w-36 rounded-xl" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="sticky-actions-ready"
+                {...stateTransition}
+                className="flex items-center gap-2"
+              >
+                <Button
+                  onClick={handleSave}
+                  loading={saving}
+                  disabled={!isDirty || saving}
+                  className="gap-2"
+                  size="sm"
+                >
+                  <Save className="size-4" />
+                  <span className="hidden sm:inline">Save</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                  onClick={handleRevert}
+                  disabled={!isDirty}
+                >
+                  <RotateCw className="size-4" />
+                  <span className="hidden sm:inline">Revert</span>
+                </Button>
+              </motion.div>
             )}
-          >
+          </AnimatePresence>
+        </div>
+      ) : (
+        <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3">
             <AnimatePresence mode="wait" initial={false}>
               {pageState === "loading" ? (
                 <motion.div
@@ -812,8 +1013,9 @@ export default function EditContentPage() {
               )}
             </AnimatePresence>
           </div>
-        )}
-      </StickyBox>
+        </div>
+      )}
+      </div>
     </div>
 
       <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)]">
@@ -1162,12 +1364,8 @@ export default function EditContentPage() {
           </motion.div>
         ) : null}
           </AnimatePresence>
-        <div>
-          <StickyBox
-            top={isCompactLayout ? 120 : 140}
-            fullWidth={isCompactLayout}
-            className="self-start"
-          >
+        <div ref={previewAnchorRef}>
+          {isCompactLayout ? (
             <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
               <AnimatePresence mode="wait" initial={false}>
                 {pageState === "loading" ||
@@ -1205,19 +1403,58 @@ export default function EditContentPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
-              
-              {isCompactLayout ? (
-                <button
-                  type="button"
-                  onClick={() => setMediaActionsOpen(true)}
-                  className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
-                  aria-label="Edit media"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              ) : null}
+
+              <button
+                type="button"
+                onClick={() => setMediaActionsOpen(true)}
+                className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-black/60 text-white shadow-lg transition hover:bg-black/80"
+                aria-label="Edit media"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
             </div>
-          </StickyBox>
+          ) : (
+          <div className="self-start">
+            <div className="mt-2 relative overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 lg:border-0 lg:bg-transparent lg:mt-0">
+              <AnimatePresence mode="wait" initial={false}>
+                {pageState === "loading" ||
+                videoLoading ||
+                audioLoading ||
+                !previewProps ||
+                !canRenderPreview ? (
+                  <motion.div key="preview-loading" {...stateTransition}>
+                    <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+                  </motion.div>
+                ) : isReady && resolvedItem ? (
+                  <motion.div key="preview-ready" {...stateTransition}>
+                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Player
+                          acknowledgeRemotionLicense
+                          component={previewComponent}
+                          inputProps={previewProps ?? {}}
+                          durationInFrames={safeDurationInFrames}
+                          fps={resolvedFps}
+                          compositionWidth={resolvedWidth}
+                          compositionHeight={resolvedHeight}
+                          controls
+                          style={{
+                            width: `${previewWidthPercent}%`,
+                            height: `${previewHeightPercent}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div key="preview-empty" {...stateTransition}>
+                    <Skeleton className="aspect-video w-full rounded-lg bg-slate-100 dark:bg-white/10" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+          )}
           <div className="p-2 py-4">
             <AnimatePresence mode="wait" initial={false}>
               {pageState === "loading" ? (
@@ -1265,6 +1502,68 @@ export default function EditContentPage() {
           </div>
         </DrawerContent>
       </Drawer>
+
+      <AnimatePresence>
+        {(showJumpDock || returnScrollY !== null) ? (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4"
+          >
+            <motion.div
+              animate={{ width: dockWidth }}
+              transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+              className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(241,245,249,0.82))] p-1.5 shadow-[0_18px_38px_rgba(15,23,42,0.14)] ring-1 ring-slate-300/70 backdrop-blur-2xl dark:bg-[linear-gradient(180deg,rgba(39,39,42,0.78),rgba(24,24,27,0.68))] dark:ring-white/10 dark:shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
+            >
+              <AnimatePresence initial={false} mode="popLayout">
+                {dockItems.map((item) => (
+                  <Button
+                    key={item.key}
+                    asChild
+                    variant={item.tone === "primary" ? "default" : "outline"}
+                    size="icon-lg"
+                    className={cn(
+                      "shrink-0 rounded-full shadow-none",
+                      item.tone === "primary" &&
+                        "bg-slate-950 text-white hover:bg-slate-900 dark:bg-white/12 dark:text-white dark:hover:bg-white/16",
+                      item.tone === "accent" &&
+                        "bg-emerald-50/90 text-emerald-950 ring-1 ring-emerald-200/80 hover:bg-emerald-100 dark:bg-emerald-400/14 dark:text-emerald-100 dark:ring-emerald-300/20 dark:hover:bg-emerald-400/18",
+                      item.tone === "default" &&
+                        "bg-slate-50/88 text-slate-900 ring-1 ring-slate-200/90 hover:bg-slate-100 dark:bg-white/6 dark:text-zinc-100 dark:ring-white/10 dark:hover:bg-white/10"
+                    )}
+                  >
+                    <motion.button
+                      type="button"
+                      onClick={
+                        item.action === "save"
+                          ? handleSave
+                          : item.action === "revert"
+                            ? handleRevert
+                            : returnScrollY !== null
+                              ? handleJumpBack
+                              : handleJumpToPreview
+                      }
+                      layout
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6, x: 6 }}
+                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: item.key === "save" && saving ? 1 : 0.98 }}
+                      className="relative"
+                      aria-label={item.label}
+                    >
+                      {item.icon}
+                    </motion.button>
+                  </Button>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
