@@ -20,13 +20,16 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn(
+        "relative min-w-0 [&>div>div[style]]:block! [&>div>div[style]]:min-w-0! [&>div>div[style]]:w-full!",
+        className
+      )}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
         className={cn(
-          "focus-visible:ring-ring/50 size-full rounded-[inherit] pr-(--scroll-area-content-gap) [&>div]:pr-(--scroll-area-content-gap) transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1",
+          "focus-visible:ring-ring/50 size-full min-w-0 w-full overflow-x-hidden rounded-[inherit] pr-(--scroll-area-content-gap) [&>div]:min-w-0 [&>div]:w-full [&>div]:pr-(--scroll-area-content-gap) transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1",
           viewportClassName
         )}
         style={{ "--scroll-area-content-gap": contentGap } as React.CSSProperties}
