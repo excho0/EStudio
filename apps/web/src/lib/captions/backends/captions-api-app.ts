@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { captionDocumentSchema, type CaptionDocument, type CaptionSegment } from "@/types";
+import {
+  buildSegmentsFromWords,
+  buildWordsFromSegments,
+  captionDocumentSchema,
+  type CaptionDocument,
+} from "@/types";
 
 const remoteCaptionSchema = z.object({
   text: z.string(),
@@ -93,20 +98,25 @@ export const transcribeWithCaptionsApiApp = async ({
       throw new Error(parsed.error);
     }
 
-    const segments: CaptionSegment[] = parsed.captions
+    const segments = parsed.captions
       .map((caption) => ({
         text: caption.text.trim(),
         startMs: caption.fromMs,
         endMs: Math.max(caption.toMs, caption.fromMs + 1),
       }))
       .filter((segment) => segment.text.length > 0);
+    const words = buildWordsFromSegments(segments);
 
     onProgress?.(1);
     return captionDocumentSchema.parse({
       backend: "captions-api-app",
       language: parsed.language || language || "en",
       generatedAt: new Date().toISOString(),
-      segments,
+      words,
+      segments: buildSegmentsFromWords(words, {
+        maxWordsPerSegment: 1,
+        maxGapMs: 900,
+      }),
     });
   } finally {
     clearTimeout(timeout);

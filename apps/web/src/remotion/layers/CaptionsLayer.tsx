@@ -219,7 +219,10 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
         captionHighlightColor,
       });
       return (
-        <span key={`${token.fromMs}-${token.toMs}-${token.text}`} style={tokenStyle}>
+        <span
+          key={`${page.startMs}-${tokenIndex}-${token.fromMs}-${token.toMs}-${token.text}`}
+          style={tokenStyle}
+        >
           {token.text}
           {tokenIndex < page.tokens.length - 1 ? " " : ""}
         </span>

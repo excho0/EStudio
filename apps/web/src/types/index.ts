@@ -1,10 +1,13 @@
 export type { ContentItem, ContentListResponse } from "./content";
 export type { VideoLoopSettings } from "./content/modes";
 export {
+  captionWordSchema,
   captionSegmentSchema,
   captionDocumentSchema,
+  buildWordsFromSegments,
+  buildSegmentsFromWords,
 } from "./captions";
-export type { CaptionSegment, CaptionDocument } from "./captions";
+export type { CaptionWord, CaptionSegment, CaptionDocument } from "./captions";
 export type { MetricsPayload } from "./metrics";
 export type {
   NotificationKind,

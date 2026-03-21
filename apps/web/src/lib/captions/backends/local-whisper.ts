@@ -4,12 +4,17 @@ import path from "path";
 import {
   downloadWhisperModel,
   installWhisperCpp,
-  toCaptions,
   transcribe,
   type Language,
   type WhisperModel,
+  type TranscriptionJson,
 } from "@remotion/install-whisper-cpp";
-import { captionDocumentSchema, type CaptionDocument, type CaptionSegment } from "@/types";
+import {
+  buildSegmentsFromWords,
+  captionDocumentSchema,
+  type CaptionDocument,
+  type CaptionWord,
+} from "@/types";
 import { getStorage, storageKey } from "@/lib/storage";
 
 const DEFAULT_WHISPER_CPP_VERSION = "1.7.6";
@@ -240,6 +245,130 @@ const convertToWhisperWav = async (inputPath: string, outputPath: string) => {
   });
 };
 
+type WhisperTimedToken = {
+  rawText: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  confidence: number | null;
+};
+
+const normalizeInlineWhitespace = (value: string) => value.replace(/\s+/g, " ");
+
+const isWhisperControlToken = (value: string) =>
+  /^\[\s*_[^\]]+\]$/i.test(value.trim()) ||
+  /^\[[^\]]*tt[_-]?\d+[^\]]*\]$/i.test(value.trim()) ||
+  /^\[[^\]]*beg[^\]]*\]$/i.test(value.trim()) ||
+  /^\[[^\]]*end[^\]]*\]$/i.test(value.trim());
+
+const hasLeadingWhitespace = (value: string) => /^\s/.test(value);
+
+const startsWithJoiner = (value: string) => /^['’\-.,!?;:%)\]]/.test(value);
+
+const endsWithOpenJoiner = (value: string) => /[(\["'’\-]$/.test(value);
+
+const isLowercaseFragment = (value: string) => /^[a-z]{1,4}$/.test(value);
+
+const shouldMergeWhisperTokens = (
+  current: WhisperTimedToken,
+  next: WhisperTimedToken
+) => {
+  const gapMs = Math.max(0, next.startMs - current.endMs);
+  if (gapMs > 160) return false;
+  if (!hasLeadingWhitespace(next.rawText)) return true;
+  if (startsWithJoiner(next.text) || endsWithOpenJoiner(current.text)) return true;
+  if (
+    isLowercaseFragment(next.text) &&
+    /[A-Za-z]$/.test(current.text) &&
+    next.text.length <= 3
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const shouldJoinWithoutSpace = (
+  current: WhisperTimedToken,
+  next: WhisperTimedToken
+) => {
+  if (!hasLeadingWhitespace(next.rawText)) return true;
+  if (startsWithJoiner(next.text) || endsWithOpenJoiner(current.text)) return true;
+  if (
+    isLowercaseFragment(next.text) &&
+    /[A-Za-z]$/.test(current.text) &&
+    next.text.length <= 3
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const buildWordsFromWhisperOutput = (whisperOutput: TranscriptionJson<true>): CaptionWord[] => {
+  const tokens: WhisperTimedToken[] = whisperOutput.transcription
+    .flatMap((item) =>
+      item.tokens.map((token) => {
+        const rawText = normalizeInlineWhitespace(token.text);
+        const text = rawText.trim();
+        const startMs = Math.max(0, Math.round(token.offsets.from));
+        const endMs = Math.max(startMs + 1, Math.round(token.offsets.to));
+        return {
+          rawText,
+          text,
+          startMs,
+          endMs,
+          confidence: Number.isFinite(token.p) ? token.p : null,
+        } satisfies WhisperTimedToken;
+      })
+    )
+    .filter((token) => token.text.length > 0 && !isWhisperControlToken(token.text))
+    .sort((a, b) => a.startMs - b.startMs);
+
+  const words: CaptionWord[] = [];
+  let current: WhisperTimedToken | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    const cleanedText = normalizeInlineWhitespace(current.text).trim();
+    if (cleanedText.length > 0) {
+      words.push({
+        text: cleanedText,
+        startMs: current.startMs,
+        endMs: Math.max(current.startMs + 1, current.endMs),
+        confidence: current.confidence,
+      });
+    }
+    current = null;
+  };
+
+  for (const token of tokens) {
+    if (!current) {
+      current = { ...token };
+      continue;
+    }
+    if (shouldMergeWhisperTokens(current, token)) {
+      const joinWithoutSpace = shouldJoinWithoutSpace(current, token);
+      current = {
+        rawText: `${current.rawText}${token.rawText}`,
+        text: joinWithoutSpace ? `${current.text}${token.text}` : `${current.text} ${token.text}`,
+        startMs: current.startMs,
+        endMs: Math.max(current.endMs, token.endMs),
+        confidence:
+          current.confidence === null
+            ? token.confidence
+            : token.confidence === null
+              ? current.confidence
+              : Math.min(current.confidence, token.confidence),
+      };
+      continue;
+    }
+    flush();
+    current = { ...token };
+  }
+
+  flush();
+  return words;
+};
+
 const ensureWhisperInstallation = async ({
   whisperPathKey,
   whisperPath,
@@ -402,22 +531,17 @@ export const transcribeWithLocalWhisper = async ({
       whisperOutput = await runTranscribe();
     }
 
-    const captions = toCaptions({ whisperCppOutput: whisperOutput }).captions;
-    const segments: CaptionSegment[] = captions
-      .map((caption) => ({
-        text: caption.text.trim(),
-        startMs: Math.max(0, Math.round(caption.startMs)),
-        endMs: Math.max(
-          Math.max(0, Math.round(caption.startMs)) + 1,
-          Math.round(caption.endMs)
-        ),
-      }))
-      .filter((segment) => segment.text.length > 0);
+    const words = buildWordsFromWhisperOutput(whisperOutput);
+    const segments = buildSegmentsFromWords(words, {
+      maxWordsPerSegment: 1,
+      maxGapMs: 900,
+    });
 
     return captionDocumentSchema.parse({
       backend: "local",
       language: whisperOutput.result.language || language || "en",
       generatedAt: new Date().toISOString(),
+      words,
       segments,
     });
   } finally {

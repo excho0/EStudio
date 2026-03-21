@@ -126,7 +126,13 @@ export const processCaptionJob = async ({
     });
 
     logger.info(
-      { id, userId, mode: activeMode, segments: captionDocument.segments.length },
+      {
+        id,
+        userId,
+        mode: activeMode,
+        words: captionDocument.words.length,
+        segments: captionDocument.segments.length,
+      },
       "Caption generation completed."
     );
   } catch (error) {

@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Info, RotateCw, Save } from "lucide-react";
 import type { PlayerRef } from "@remotion/player";
-import type { CaptionDocument, CaptionSegment } from "@/types";
+import {
+  buildSegmentsFromWords,
+  buildWordsFromSegments,
+  type CaptionDocument,
+  type CaptionSegment,
+} from "@/types";
 import { captionDocumentSchema } from "@/types";
 import {
   Dialog,
@@ -173,6 +178,7 @@ const buildDefaultDocument = (_mode: string, language: string): CaptionDocument 
   language: (language || "en").trim() || "en",
   generatedAt: new Date().toISOString(),
   globalOffsetMs: 0,
+  words: [],
   segments: [],
 });
 
@@ -182,7 +188,17 @@ const normalizeCaptionDocument = (
   language: string
 ): CaptionDocument => {
   const parsed = captionDocumentSchema.safeParse(value ?? buildDefaultDocument(mode, language));
-  if (parsed.success) return parsed.data;
+  if (parsed.success) {
+    const words =
+      parsed.data.words.length > 0
+        ? parsed.data.words
+        : buildWordsFromSegments(parsed.data.segments);
+    const segments = buildSegmentsFromWords(words, {
+      maxWordsPerSegment: 1,
+      maxGapMs: 900,
+    });
+    return { ...parsed.data, words, segments };
+  }
   return buildDefaultDocument(mode, language);
 };
 
@@ -390,6 +406,11 @@ export function CaptionEditor({
       rangeStartMs > 0
         ? {
             ...draft,
+            words: draft.words.map((word) => ({
+              ...word,
+              startMs: Math.max(0, word.startMs + rangeStartMs),
+              endMs: Math.max(word.startMs + rangeStartMs + 1, word.endMs + rangeStartMs),
+            })),
             segments: draft.segments.map((segment) => ({
               ...segment,
               startMs: Math.max(0, segment.startMs + rangeStartMs),
@@ -1468,19 +1489,27 @@ export function CaptionEditor({
     };
   }, [active, setZoomAnchored]);
 
-  const buildNormalizedDraft = useCallback((source: CaptionDocument): CaptionDocument => ({
-    ...source,
-    generatedAt: new Date().toISOString(),
-    globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
-    segments: [...source.segments]
+  const buildNormalizedDraft = useCallback((source: CaptionDocument): CaptionDocument => {
+    const normalizedSegments = [...source.segments]
       .map((segment) => {
         const startMs = Math.max(0, Math.round(segment.startMs));
         const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
         return { ...segment, startMs, endMs, text: segment.text.trim() };
       })
       .filter((segment) => segment.text.length > 0)
-      .sort((a, b) => a.startMs - b.startMs),
-  }), []);
+      .sort((a, b) => a.startMs - b.startMs);
+    const words = buildWordsFromSegments(normalizedSegments);
+    return {
+      ...source,
+      generatedAt: new Date().toISOString(),
+      globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
+      words,
+      segments: buildSegmentsFromWords(words, {
+        maxWordsPerSegment: 1,
+        maxGapMs: 900,
+      }),
+    };
+  }, []);
 
   const persistDraft = useCallback(async (
     source: CaptionDocument,

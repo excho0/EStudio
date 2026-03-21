@@ -4,7 +4,12 @@ import {
   type WhisperWebLanguage,
   type WhisperWebModel,
 } from "@remotion/whisper-web";
-import { captionDocumentSchema, type CaptionDocument } from "@/types";
+import {
+  buildSegmentsFromWords,
+  captionDocumentSchema,
+  type CaptionDocument,
+  type CaptionWord,
+} from "@/types";
 
 export type BrowserWhisperOptions = {
   file: Blob;
@@ -61,20 +66,27 @@ export const transcribeWithBrowserWhisper = async ({
     },
   });
   const captions = whisperWeb.toCaptions({ whisperWebOutput: output }).captions;
+  const words: CaptionWord[] = captions
+    .map((caption) => {
+      const startMs = Math.max(0, Math.round(caption.startMs));
+      const endMs = Math.max(startMs + 1, Math.round(caption.endMs));
+      return {
+        text: caption.text.trim(),
+        startMs,
+        endMs,
+        confidence: null,
+      };
+    })
+    .filter((word) => word.text.length > 0);
 
   return captionDocumentSchema.parse({
     backend: "browser",
     language: output.result.language || language || "en",
     generatedAt: new Date().toISOString(),
-    segments: captions
-      .map((caption) => ({
-        text: caption.text.trim(),
-        startMs: Math.max(0, Math.round(caption.startMs)),
-        endMs: Math.max(
-          Math.max(0, Math.round(caption.startMs)) + 1,
-          Math.round(caption.endMs)
-        ),
-      }))
-      .filter((segment) => segment.text.length > 0),
+    words,
+    segments: buildSegmentsFromWords(words, {
+      maxWordsPerSegment: 1,
+      maxGapMs: 900,
+    }),
   });
 };

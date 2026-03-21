@@ -1,9 +1,13 @@
 import OpenAI, { toFile } from "openai";
 import {
-  openAiWhisperApiToCaptions,
   type OpenAiVerboseTranscription,
 } from "@remotion/openai-whisper";
-import { captionDocumentSchema, type CaptionDocument, type CaptionSegment } from "@/types";
+import {
+  buildSegmentsFromWords,
+  captionDocumentSchema,
+  type CaptionDocument,
+  type CaptionWord,
+} from "@/types";
 
 export const transcribeWithOpenAiWhisper = async ({
   audio,
@@ -36,18 +40,27 @@ export const transcribeWithOpenAiWhisper = async ({
     timestamp_granularities: ["word"],
     language: language?.trim() || undefined,
   })) as OpenAiVerboseTranscription;
-  const { captions } = openAiWhisperApiToCaptions({ transcription });
-  const segments: CaptionSegment[] = captions
-    .map((caption) => ({
-      text: caption.text.trim(),
-      startMs: Math.max(0, Math.round(caption.startMs)),
-      endMs: Math.max(Math.round(caption.endMs), Math.round(caption.startMs) + 1),
-    }))
-    .filter((segment) => segment.text.length > 0);
+  const words: CaptionWord[] = (transcription.words ?? [])
+    .map((word) => {
+      const startMs = Math.max(0, Math.round(word.start * 1000));
+      const endMs = Math.max(startMs + 1, Math.round(word.end * 1000));
+      return {
+        text: word.word.trim(),
+        startMs,
+        endMs,
+        confidence: null,
+      };
+    })
+    .filter((word) => word.text.length > 0);
+  const segments = buildSegmentsFromWords(words, {
+    maxWordsPerSegment: 1,
+    maxGapMs: 900,
+  });
   const normalized = captionDocumentSchema.parse({
     backend: "openai",
     language: transcription.language || language || "en",
     generatedAt: new Date().toISOString(),
+    words,
     segments,
   });
   return normalized;

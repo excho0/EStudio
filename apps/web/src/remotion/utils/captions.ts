@@ -1,4 +1,4 @@
-import type { CaptionSegment } from "../../types/captions";
+import type { CaptionSegment, CaptionWord } from "../../types/captions";
 import { hashString, clamp, lerp } from "@estudio/utils";
 
 export type CaptionToken = {
@@ -12,6 +12,10 @@ export type CaptionPage = {
   startMs: number;
   durationMs: number;
   tokens: CaptionToken[];
+};
+
+type RuntimeCaptionSegment = CaptionSegment & {
+  words: CaptionWord[];
 };
 
 const PAGE_SPLIT_GAP_MS = 5000;
@@ -30,30 +34,23 @@ type CaptionMotionPreset = {
 };
 
 export const buildCaptionPages = (
-  segments: CaptionSegment[],
+  segments: RuntimeCaptionSegment[],
   wordsPerPage: number
 ) => {
   const tokens: Array<CaptionToken & { segmentIndex: number }> = [];
 
   for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
     const segment = segments[segmentIndex];
-    const rawWords = segment.text
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-    if (rawWords.length === 0) continue;
-    const span = Math.max(1, segment.endMs - segment.startMs);
-    const tokenDuration = span / rawWords.length;
-    for (let i = 0; i < rawWords.length; i += 1) {
-      const fromMs = Math.round(segment.startMs + i * tokenDuration);
-      const toMs =
-        i === rawWords.length - 1
-          ? segment.endMs
-          : Math.round(segment.startMs + (i + 1) * tokenDuration);
+    const runtimeWords = segment.words;
+    if (runtimeWords.length === 0) continue;
+    for (let i = 0; i < runtimeWords.length; i += 1) {
+      const word = runtimeWords[i]!;
+      const fromMs = Math.max(0, Math.round(word.startMs));
+      const toMs = Math.max(fromMs + 1, Math.round(word.endMs));
       tokens.push({
-        text: rawWords[i],
+        text: word.text,
         fromMs,
-        toMs: Math.max(fromMs + 1, toMs),
+        toMs,
         segmentIndex,
       });
     }
@@ -212,6 +209,7 @@ export const resolveCaptionRuntime = ({
   captionsStyle,
   captionsAnimationPreset,
   captionsWordsPerPage,
+  captionsWords,
   captionsSegments,
   captionsGlobalOffsetMs,
   timelineMs,
@@ -222,6 +220,7 @@ export const resolveCaptionRuntime = ({
   captionsStyle: CaptionStyle;
   captionsAnimationPreset: CaptionAnimationPreset;
   captionsWordsPerPage?: number;
+  captionsWords: CaptionWord[];
   captionsSegments: CaptionSegment[];
   captionsGlobalOffsetMs?: number;
   timelineMs: number;
@@ -230,13 +229,29 @@ export const resolveCaptionRuntime = ({
 }) => {
   const effectiveCaptionsStyle: CaptionStyle = captionsStyle;
   const globalOffsetMs = Math.round(captionsGlobalOffsetMs ?? 0);
+  const offsetWords =
+    globalOffsetMs === 0
+      ? captionsWords
+      : captionsWords.map((word) => {
+          const startMs = Math.max(0, word.startMs + globalOffsetMs);
+          const endMs = Math.max(startMs + 1, word.endMs + globalOffsetMs);
+          return { ...word, startMs, endMs };
+        });
   const offsetSegments =
     globalOffsetMs === 0
       ? captionsSegments
       : captionsSegments.map((segment) => {
           const startMs = Math.max(0, segment.startMs + globalOffsetMs);
           const endMs = Math.max(startMs + 1, segment.endMs + globalOffsetMs);
-          return { ...segment, startMs, endMs };
+          const words = (segment.words ?? []).map((word) => ({
+            ...word,
+            startMs: Math.max(0, word.startMs + globalOffsetMs),
+            endMs: Math.max(
+              Math.max(0, word.startMs + globalOffsetMs) + 1,
+              word.endMs + globalOffsetMs
+            ),
+          }));
+          return { ...segment, startMs, endMs, words };
         });
 
   const hasRangeBounds =
@@ -249,8 +264,8 @@ export const resolveCaptionRuntime = ({
       ? Math.max(clippedRangeStartMs + 1, Math.round(rangeEndMs as number))
       : null;
 
-  const runtimeSegments = hasRangeBounds
-    ? offsetSegments
+  const runtimeWords = hasRangeBounds
+    ? offsetWords
         .map((segment) => {
           const startMs = Math.max(segment.startMs, clippedRangeStartMs);
           const boundedEnd = clippedRangeEndMs ?? segment.endMs;
@@ -262,15 +277,42 @@ export const resolveCaptionRuntime = ({
             endMs: Math.max(startMs + 1, endMs) - clippedRangeStartMs,
           };
         })
-        .filter((segment): segment is CaptionSegment => segment !== null)
-    : offsetSegments;
+        .filter((segment): segment is CaptionWord => segment !== null)
+    : offsetWords;
+  const runtimeSegments = hasRangeBounds
+    ? offsetSegments
+        .map((segment) => {
+          const startMs = Math.max(segment.startMs, clippedRangeStartMs);
+          const boundedEnd = clippedRangeEndMs ?? segment.endMs;
+          const endMs = Math.min(segment.endMs, boundedEnd);
+          if (endMs <= startMs) return null;
+          const words = runtimeWords.filter(
+            (word) => word.startMs >= startMs - clippedRangeStartMs && word.endMs <= endMs - clippedRangeStartMs
+          );
+          return {
+            ...segment,
+            startMs: startMs - clippedRangeStartMs,
+            endMs: Math.max(startMs + 1, endMs) - clippedRangeStartMs,
+            words,
+          };
+        })
+        .filter((segment): segment is RuntimeCaptionSegment => segment !== null)
+    : offsetSegments.map((segment) => ({
+        ...segment,
+        words:
+          segment.words?.length && segment.words.length > 0
+            ? segment.words
+            : runtimeWords.filter(
+                (word) => word.startMs >= segment.startMs && word.endMs <= segment.endMs
+              ),
+      }));
 
-  if (!captionsEnabled || runtimeSegments.length === 0) {
+  if (!captionsEnabled || runtimeWords.length === 0) {
     return {
       effectiveCaptionsStyle,
-      captionSegments: [] as CaptionSegment[],
+      captionSegments: [] as RuntimeCaptionSegment[],
       captionPages: [] as CaptionPage[],
-      activeCaptionSegment: null as CaptionSegment | null,
+      activeCaptionSegment: null as RuntimeCaptionSegment | null,
       activeCaptionPage: null as CaptionPage | null,
       activeCaption: null as string | null,
       hasActiveCaption: false,
@@ -289,6 +331,8 @@ export const resolveCaptionRuntime = ({
   const activeCaptionSegment =
     runtimeSegments.find(
       (item) => timelineMs >= item.startMs && timelineMs < item.endMs
+    ) ?? runtimeSegments.find((item) =>
+      item.words.some((word) => timelineMs >= word.startMs && timelineMs < word.endMs)
     ) ?? null;
 
   const captionPages = buildCaptionPages(runtimeSegments, safeWordsPerPage);

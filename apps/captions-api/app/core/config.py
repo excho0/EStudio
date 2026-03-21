@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     music_whisper_parity_beam_size: int = 10
     music_whisper_parity_best_of: int = 10
     music_whisper_language: str | None = None
+    ace_step_model: str = "ACE-Step/acestep-transcriber"
+    ace_step_device_map: str = "auto"
+    ace_step_dtype: str = "auto"
+    ace_step_max_new_tokens: int = 768
+    ace_step_prompt: str = "*Task* Transcribe this audio in detail"
+    ace_step_fallback_backend: str = "music-faster-whisper"
     transcription_max_upload_mb: int = 100
     CAPTION_REMOTE_TOKEN: str | None = None
     hf_token: str | None = None
@@ -41,6 +47,10 @@ class Settings(BaseSettings):
     @field_validator(
         "whisperx_language",
         "music_whisper_language",
+        "ace_step_device_map",
+        "ace_step_dtype",
+        "ace_step_prompt",
+        "ace_step_fallback_backend",
         "whisperx_cache_dir",
         "CAPTION_REMOTE_TOKEN",
         "hf_token",
