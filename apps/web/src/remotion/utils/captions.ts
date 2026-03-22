@@ -1,4 +1,4 @@
-import type { CaptionSegment, CaptionWord } from "../../types/captions";
+import { buildCaptionBlocksFromWords, type CaptionBlock, type CaptionWord } from "../../types/captions";
 import { hashString, clamp, lerp } from "@estudio/utils";
 
 export type CaptionToken = {
@@ -14,7 +14,7 @@ export type CaptionPage = {
   tokens: CaptionToken[];
 };
 
-type RuntimeCaptionSegment = CaptionSegment & {
+type RuntimeCaptionBlock = CaptionBlock & {
   words: CaptionWord[];
 };
 
@@ -34,14 +34,14 @@ type CaptionMotionPreset = {
 };
 
 export const buildCaptionPages = (
-  segments: RuntimeCaptionSegment[],
+  captionBlocks: RuntimeCaptionBlock[],
   wordsPerPage: number
 ) => {
   const tokens: Array<CaptionToken & { segmentIndex: number }> = [];
 
-  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-    const segment = segments[segmentIndex];
-    const runtimeWords = segment.words;
+  for (let segmentIndex = 0; segmentIndex < captionBlocks.length; segmentIndex += 1) {
+    const captionBlock = captionBlocks[segmentIndex];
+    const runtimeWords = captionBlock.words;
     if (runtimeWords.length === 0) continue;
     for (let i = 0; i < runtimeWords.length; i += 1) {
       const word = runtimeWords[i]!;
@@ -127,11 +127,11 @@ const getCaptionEnterExitMs = (
 
 const getCaptionVariant = ({
   style,
-  activeSegment,
+  activeBlock,
   activePage,
 }: {
   style: CaptionStyle;
-  activeSegment: CaptionSegment | null;
+  activeBlock: CaptionBlock | null;
   activePage: CaptionPage | null;
 }) => {
   const token =
@@ -139,8 +139,8 @@ const getCaptionVariant = ({
       ? activePage
         ? `${activePage.startMs}:${activePage.durationMs}:${activePage.text}`
         : null
-      : activeSegment
-        ? `${activeSegment.startMs}:${activeSegment.endMs}:${activeSegment.text}`
+      : activeBlock
+        ? `${activeBlock.startMs}:${activeBlock.endMs}:${activeBlock.text}`
         : null;
   if (!token) return 0;
   return hashString(token) % 4;
@@ -210,7 +210,6 @@ export const resolveCaptionRuntime = ({
   captionsAnimationPreset,
   captionsWordsPerPage,
   captionsWords,
-  captionsSegments,
   captionsGlobalOffsetMs,
   timelineMs,
   rangeStartMs,
@@ -221,7 +220,6 @@ export const resolveCaptionRuntime = ({
   captionsAnimationPreset: CaptionAnimationPreset;
   captionsWordsPerPage?: number;
   captionsWords: CaptionWord[];
-  captionsSegments: CaptionSegment[];
   captionsGlobalOffsetMs?: number;
   timelineMs: number;
   rangeStartMs?: number;
@@ -237,22 +235,10 @@ export const resolveCaptionRuntime = ({
           const endMs = Math.max(startMs + 1, word.endMs + globalOffsetMs);
           return { ...word, startMs, endMs };
         });
-  const offsetSegments =
-    globalOffsetMs === 0
-      ? captionsSegments
-      : captionsSegments.map((segment) => {
-          const startMs = Math.max(0, segment.startMs + globalOffsetMs);
-          const endMs = Math.max(startMs + 1, segment.endMs + globalOffsetMs);
-          const words = (segment.words ?? []).map((word) => ({
-            ...word,
-            startMs: Math.max(0, word.startMs + globalOffsetMs),
-            endMs: Math.max(
-              Math.max(0, word.startMs + globalOffsetMs) + 1,
-              word.endMs + globalOffsetMs
-            ),
-          }));
-          return { ...segment, startMs, endMs, words };
-        });
+  const offsetBlocks = buildCaptionBlocksFromWords(offsetWords, {
+    maxWordsPerSegment: 1,
+    maxGapMs: 900,
+  });
 
   const hasRangeBounds =
     Number.isFinite(rangeStartMs ?? NaN) || Number.isFinite(rangeEndMs ?? NaN);
@@ -279,40 +265,40 @@ export const resolveCaptionRuntime = ({
         })
         .filter((segment): segment is CaptionWord => segment !== null)
     : offsetWords;
-  const runtimeSegments = hasRangeBounds
-    ? offsetSegments
-        .map((segment) => {
-          const startMs = Math.max(segment.startMs, clippedRangeStartMs);
-          const boundedEnd = clippedRangeEndMs ?? segment.endMs;
-          const endMs = Math.min(segment.endMs, boundedEnd);
+  const runtimeBlocks = hasRangeBounds
+    ? offsetBlocks
+        .map((block) => {
+          const startMs = Math.max(block.startMs, clippedRangeStartMs);
+          const boundedEnd = clippedRangeEndMs ?? block.endMs;
+          const endMs = Math.min(block.endMs, boundedEnd);
           if (endMs <= startMs) return null;
           const words = runtimeWords.filter(
             (word) => word.startMs >= startMs - clippedRangeStartMs && word.endMs <= endMs - clippedRangeStartMs
           );
           return {
-            ...segment,
+            ...block,
             startMs: startMs - clippedRangeStartMs,
             endMs: Math.max(startMs + 1, endMs) - clippedRangeStartMs,
             words,
           };
         })
-        .filter((segment): segment is RuntimeCaptionSegment => segment !== null)
-    : offsetSegments.map((segment) => ({
-        ...segment,
+        .filter((block): block is RuntimeCaptionBlock => block !== null)
+    : offsetBlocks.map((block) => ({
+        ...block,
         words:
-          segment.words?.length && segment.words.length > 0
-            ? segment.words
+          block.words?.length && block.words.length > 0
+            ? block.words
             : runtimeWords.filter(
-                (word) => word.startMs >= segment.startMs && word.endMs <= segment.endMs
+                (word) => word.startMs >= block.startMs && word.endMs <= block.endMs
               ),
       }));
 
   if (!captionsEnabled || runtimeWords.length === 0) {
     return {
       effectiveCaptionsStyle,
-      captionSegments: [] as RuntimeCaptionSegment[],
+      captionBlocks: [] as RuntimeCaptionBlock[],
       captionPages: [] as CaptionPage[],
-      activeCaptionSegment: null as RuntimeCaptionSegment | null,
+      activeCaptionBlock: null as RuntimeCaptionBlock | null,
       activeCaptionPage: null as CaptionPage | null,
       activeCaption: null as string | null,
       hasActiveCaption: false,
@@ -328,14 +314,14 @@ export const resolveCaptionRuntime = ({
     12
   );
 
-  const activeCaptionSegment =
-    runtimeSegments.find(
+  const activeCaptionBlock =
+    runtimeBlocks.find(
       (item) => timelineMs >= item.startMs && timelineMs < item.endMs
-    ) ?? runtimeSegments.find((item) =>
+    ) ?? runtimeBlocks.find((item) =>
       item.words.some((word) => timelineMs >= word.startMs && timelineMs < word.endMs)
     ) ?? null;
 
-  const captionPages = buildCaptionPages(runtimeSegments, safeWordsPerPage);
+  const captionPages = buildCaptionPages(runtimeBlocks, safeWordsPerPage);
 
   const activeCaptionPage =
     captionPages.find(
@@ -344,7 +330,7 @@ export const resolveCaptionRuntime = ({
   const activeCaption =
     effectiveCaptionsStyle === "tiktok"
       ? activeCaptionPage?.text ?? null
-      : activeCaptionPage?.text ?? activeCaptionSegment?.text?.trim() ?? null;
+      : activeCaptionPage?.text ?? activeCaptionBlock?.text?.trim() ?? null;
   const hasActiveCaption = Boolean(activeCaption && activeCaption.trim().length > 0);
 
   const { enterMs, exitMs } = getCaptionEnterExitMs(
@@ -366,7 +352,7 @@ export const resolveCaptionRuntime = ({
   const presence = Math.min(enterProgress, exitProgress);
   const captionVariant = getCaptionVariant({
     style: effectiveCaptionsStyle,
-    activeSegment: activeCaptionSegment,
+    activeBlock: activeCaptionBlock,
     activePage: activeCaptionPage,
   });
   const motionPreset = getMotionPreset(captionsAnimationPreset, captionVariant);
@@ -404,9 +390,9 @@ export const resolveCaptionRuntime = ({
 
   return {
     effectiveCaptionsStyle,
-    captionSegments: runtimeSegments,
+    captionBlocks: runtimeBlocks,
     captionPages,
-    activeCaptionSegment,
+    activeCaptionBlock,
     activeCaptionPage,
     activeCaption,
     hasActiveCaption,

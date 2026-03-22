@@ -292,7 +292,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
 
   const {
     effectiveCaptionsStyle,
-    captionSegments,
+    captionBlocks,
     captionPages,
     hasActiveCaption,
     captionOpacity,
@@ -306,7 +306,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         captionsAnimationPreset,
         captionsWordsPerPage,
         captionsWords: captionsData?.words ?? [],
-        captionsSegments: captionsData?.segments ?? [],
         captionsGlobalOffsetMs: captionsData?.globalOffsetMs ?? 0,
         timelineMs,
         rangeStartMs: (rangeStartFrames / fps) * 1000,
@@ -315,7 +314,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     [
       captionsAnimationPreset,
       captionsData?.words,
-      captionsData?.segments,
       captionsData?.globalOffsetMs,
       captionsEnabled,
       captionsWordsPerPage,
@@ -409,7 +407,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     captionsOffsetY,
     captionsScalePercent,
     effectiveCaptionsStyle,
-    captionSegments,
+    captionBlocks,
     captionPages,
     hasActiveCaption,
     fps,

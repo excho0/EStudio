@@ -3,7 +3,6 @@ import {
   type OpenAiVerboseTranscription,
 } from "@remotion/openai-whisper";
 import {
-  buildSegmentsFromWords,
   captionDocumentSchema,
   type CaptionDocument,
   type CaptionWord,
@@ -48,20 +47,14 @@ export const transcribeWithOpenAiWhisper = async ({
         text: word.word.trim(),
         startMs,
         endMs,
-        confidence: null,
       };
     })
     .filter((word) => word.text.length > 0);
-  const segments = buildSegmentsFromWords(words, {
-    maxWordsPerSegment: 1,
-    maxGapMs: 900,
-  });
   const normalized = captionDocumentSchema.parse({
     backend: "openai",
     language: transcription.language || language || "en",
     generatedAt: new Date().toISOString(),
     words,
-    segments,
   });
   return normalized;
 };

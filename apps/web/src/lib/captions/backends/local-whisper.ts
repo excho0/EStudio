@@ -10,7 +10,6 @@ import {
   type TranscriptionJson,
 } from "@remotion/install-whisper-cpp";
 import {
-  buildSegmentsFromWords,
   captionDocumentSchema,
   type CaptionDocument,
   type CaptionWord,
@@ -334,7 +333,6 @@ const buildWordsFromWhisperOutput = (whisperOutput: TranscriptionJson<true>): Ca
         text: cleanedText,
         startMs: current.startMs,
         endMs: Math.max(current.startMs + 1, current.endMs),
-        confidence: current.confidence,
       });
     }
     current = null;
@@ -532,17 +530,11 @@ export const transcribeWithLocalWhisper = async ({
     }
 
     const words = buildWordsFromWhisperOutput(whisperOutput);
-    const segments = buildSegmentsFromWords(words, {
-      maxWordsPerSegment: 1,
-      maxGapMs: 900,
-    });
-
     return captionDocumentSchema.parse({
       backend: "local",
       language: whisperOutput.result.language || language || "en",
       generatedAt: new Date().toISOString(),
       words,
-      segments,
     });
   } finally {
     await storage.deleteDir(tempRootKey);

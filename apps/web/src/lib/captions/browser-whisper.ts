@@ -5,7 +5,6 @@ import {
   type WhisperWebModel,
 } from "@remotion/whisper-web";
 import {
-  buildSegmentsFromWords,
   captionDocumentSchema,
   type CaptionDocument,
   type CaptionWord,
@@ -74,7 +73,6 @@ export const transcribeWithBrowserWhisper = async ({
         text: caption.text.trim(),
         startMs,
         endMs,
-        confidence: null,
       };
     })
     .filter((word) => word.text.length > 0);
@@ -84,9 +82,5 @@ export const transcribeWithBrowserWhisper = async ({
     language: output.result.language || language || "en",
     generatedAt: new Date().toISOString(),
     words,
-    segments: buildSegmentsFromWords(words, {
-      maxWordsPerSegment: 1,
-      maxGapMs: 900,
-    }),
   });
 };

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
-  buildSegmentsFromWords,
-  buildWordsFromSegments,
+  buildWordsFromBlocks,
   captionDocumentSchema,
   type CaptionDocument,
 } from "@/types";
@@ -105,7 +104,7 @@ export const transcribeWithCaptionsApiApp = async ({
         endMs: Math.max(caption.toMs, caption.fromMs + 1),
       }))
       .filter((segment) => segment.text.length > 0);
-    const words = buildWordsFromSegments(segments);
+    const words = buildWordsFromBlocks(segments);
 
     onProgress?.(1);
     return captionDocumentSchema.parse({
@@ -113,10 +112,6 @@ export const transcribeWithCaptionsApiApp = async ({
       language: parsed.language || language || "en",
       generatedAt: new Date().toISOString(),
       words,
-      segments: buildSegmentsFromWords(words, {
-        maxWordsPerSegment: 1,
-        maxGapMs: 900,
-      }),
     });
   } finally {
     clearTimeout(timeout);

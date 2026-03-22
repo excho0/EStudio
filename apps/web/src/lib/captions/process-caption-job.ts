@@ -131,7 +131,6 @@ export const processCaptionJob = async ({
         userId,
         mode: activeMode,
         words: captionDocument.words.length,
-        segments: captionDocument.segments.length,
       },
       "Caption generation completed."
     );

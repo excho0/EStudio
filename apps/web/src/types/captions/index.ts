@@ -1,18 +1,12 @@
 import { z } from "zod";
 
-export const captionWordSchema = z.object({
+const timedCaptionTextSchema = z.object({
   text: z.string(),
   startMs: z.number().int().nonnegative(),
   endMs: z.number().int().nonnegative(),
-  confidence: z.number().min(0).max(1).nullable().optional(),
 });
 
-export const captionSegmentSchema = z.object({
-  text: z.string(),
-  startMs: z.number().int().nonnegative(),
-  endMs: z.number().int().nonnegative(),
-  words: z.array(captionWordSchema).optional(),
-});
+const captionWordSchema = timedCaptionTextSchema;
 
 export const captionDocumentSchema = z.object({
   backend: z.string(),
@@ -20,20 +14,21 @@ export const captionDocumentSchema = z.object({
   generatedAt: z.string(),
   globalOffsetMs: z.number().int().default(0),
   words: z.array(captionWordSchema).default([]),
-  segments: z.array(captionSegmentSchema).default([]),
 });
 
-export type CaptionWord = z.infer<typeof captionWordSchema>;
-export type CaptionSegment = z.infer<typeof captionSegmentSchema>;
+export type CaptionWord = z.infer<typeof timedCaptionTextSchema>;
+export type CaptionBlock = CaptionWord & {
+  words?: CaptionWord[];
+};
 export type CaptionDocument = z.infer<typeof captionDocumentSchema>;
 
 const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
 
-export const buildWordsFromSegments = (segments: CaptionSegment[]): CaptionWord[] =>
-  segments
-    .flatMap((segment) => {
+export const buildWordsFromBlocks = (blocks: CaptionBlock[]): CaptionWord[] =>
+  blocks
+    .flatMap((block) => {
       const explicitWords =
-        segment.words
+        block.words
           ?.map((word) => {
             const startMs = Math.max(0, Math.round(word.startMs));
             const endMs = Math.max(startMs + 1, Math.round(word.endMs));
@@ -48,10 +43,10 @@ export const buildWordsFromSegments = (segments: CaptionSegment[]): CaptionWord[
       if (explicitWords.length > 0) {
         return explicitWords;
       }
-      const rawWords = normalizeText(segment.text).split(/\s+/).filter(Boolean);
+      const rawWords = normalizeText(block.text).split(/\s+/).filter(Boolean);
       if (rawWords.length === 0) return [];
-      const startMs = Math.max(0, Math.round(segment.startMs));
-      const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
+      const startMs = Math.max(0, Math.round(block.startMs));
+      const endMs = Math.max(startMs + 1, Math.round(block.endMs));
       const span = Math.max(1, endMs - startMs);
       const perWordMs = span / rawWords.length;
       return rawWords.map((text, index) => {
@@ -64,16 +59,15 @@ export const buildWordsFromSegments = (segments: CaptionSegment[]): CaptionWord[
           text,
           startMs: wordStartMs,
           endMs: Math.max(wordStartMs + 1, wordEndMs),
-          confidence: null,
         };
       });
     })
     .sort((a, b) => a.startMs - b.startMs);
 
-export const buildSegmentsFromWords = (
+export const buildCaptionBlocksFromWords = (
   words: CaptionWord[],
   options?: { maxWordsPerSegment?: number; maxGapMs?: number }
-): CaptionSegment[] => {
+): CaptionBlock[] => {
   const maxWordsPerSegment = Math.max(1, Math.round(options?.maxWordsPerSegment ?? 1));
   const maxGapMs = Math.max(0, Math.round(options?.maxGapMs ?? 900));
   const normalizedWords = words
@@ -92,12 +86,12 @@ export const buildSegmentsFromWords = (
 
   if (normalizedWords.length === 0) return [];
 
-  const segments: CaptionSegment[] = [];
+  const blocks: CaptionBlock[] = [];
   let currentWords: CaptionWord[] = [];
 
   const flush = () => {
     if (currentWords.length === 0) return;
-    segments.push({
+    blocks.push({
       text: currentWords.map((word) => word.text).join(" "),
       startMs: currentWords[0]!.startMs,
       endMs: currentWords[currentWords.length - 1]!.endMs,
@@ -119,5 +113,10 @@ export const buildSegmentsFromWords = (
   }
 
   flush();
-  return segments;
+  return blocks;
 };
+
+export const deriveCaptionBlocks = (
+  document: Pick<CaptionDocument, "words">,
+  options?: { maxWordsPerSegment?: number; maxGapMs?: number }
+) => buildCaptionBlocksFromWords(document.words, options);

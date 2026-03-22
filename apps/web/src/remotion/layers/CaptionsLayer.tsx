@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Sequence } from "remotion";
 import { hexToRgba, mixHex, type CaptionPage } from "../utils";
-import type { CaptionSegment } from "../../types/captions";
+import type { CaptionBlock } from "../../types/captions";
 
 const CAPTION_FONT_STACK =
   "Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -13,7 +13,7 @@ type CaptionsLayerProps = {
   captionsOffsetY: number;
   captionsScalePercent: number;
   effectiveCaptionsStyle: "subtitle" | "tiktok";
-  captionSegments: CaptionSegment[];
+  captionBlocks: CaptionBlock[];
   captionPages: CaptionPage[];
   hasActiveCaption: boolean;
   fps: number;
@@ -64,17 +64,17 @@ const getCaptionPageWindow = (
   page: CaptionPage,
   nextPage: CaptionPage | null,
   fps: number,
-  captionSegments: CaptionSegment[]
+  captionBlocks: CaptionBlock[]
 ) => {
   const naturalEndMs =
     page.tokens.length > 0
       ? page.tokens[page.tokens.length - 1].toMs
       : page.startMs + page.durationMs;
-  const prevSegment = [...captionSegments]
+  const prevSegment = [...captionBlocks]
     .reverse()
     .find((segment) => segment.endMs <= naturalEndMs + 1);
   const nextSegment = prevSegment
-    ? captionSegments.find((segment) => segment.startMs >= prevSegment.endMs)
+    ? captionBlocks.find((segment) => segment.startMs >= prevSegment.endMs)
     : null;
   const segmentGapMs =
     prevSegment && nextSegment ? nextSegment.startMs - prevSegment.endMs : null;
@@ -142,7 +142,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
   captionsOffsetY,
   captionsScalePercent,
   effectiveCaptionsStyle,
-  captionSegments,
+  captionBlocks,
   captionPages,
   hasActiveCaption,
   fps,
@@ -238,7 +238,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
             page,
             nextPage,
             fps,
-            captionSegments
+            captionBlocks
           );
           if (durationInFrames <= 0) return null;
           const pageOutT = Math.max(
@@ -301,7 +301,7 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
             page,
             nextPage,
             fps,
-            captionSegments
+            captionBlocks
           );
           if (durationInFrames <= 0) return null;
           const pageOutT = Math.max(
