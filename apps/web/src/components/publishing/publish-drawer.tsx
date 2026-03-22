@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectableCard } from "@/components/ui/selectable-card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import DatePickerStandard2 from "@/components/controls/date-picker-standard-2";
 import { IconSelect, type IconSelectOption } from "@/components/ui/icon-select";
 import {
@@ -65,6 +66,7 @@ type RenderItem = {
   assetUrl: string;
   size: number;
   mtimeMs: number;
+  thumbnailUrl?: string | null;
 };
 
 type ProviderState = {
@@ -113,6 +115,60 @@ const formatBytes = (value: number) => {
     unitIndex += 1;
   }
   return `${size.toFixed(size < 10 && unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
+};
+
+const formatDateTime = (value: number) =>
+  new Date(value).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const PublishRenderThumbnail = ({
+  item,
+  className,
+  iconClassName,
+}: {
+  item: RenderItem;
+  className: string;
+  iconClassName: string;
+}) => {
+  if (item.thumbnailUrl) {
+    return (
+      <ImageWithSkeleton
+        src={item.thumbnailUrl}
+        alt={`Preview thumbnail for ${item.name}`}
+        className={className}
+        wrapperClassName="rounded-md shrink-0"
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className={`${className} flex items-center justify-center`}>
+      <Film className={iconClassName} />
+    </div>
+  );
+};
+
+const hexToRgba = (hex: string, alpha: number) => {
+  const cleanHex = hex.trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}$/.test(cleanHex)) {
+    return `rgba(148, 163, 184, ${alpha})`;
+  }
+  const r = Number.parseInt(cleanHex.slice(0, 2), 16);
+  const g = Number.parseInt(cleanHex.slice(2, 4), 16);
+  const b = Number.parseInt(cleanHex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const roundedSurfaceMask = {
+  WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+  transform: "translateZ(0)",
+  backfaceVisibility: "hidden" as const,
 };
 
 const SelectableCardSkeletons = ({
@@ -257,7 +313,11 @@ export function PublishDrawer({
     [connectedTargets, selectedProvider]
   );
 
-  const contentSummaryQuery = useQuery<{ title?: string; thumbnailUrl: string }>({
+  const contentSummaryQuery = useQuery<{
+    title?: string;
+    thumbnailUrl: string;
+    colorPalette?: string[] | null;
+  }>({
     queryKey: queryKeys.contentSummary(contentId),
     enabled: canLoadData,
     staleTime: 30_000,
@@ -266,6 +326,7 @@ export function PublishDrawer({
       return {
         title: payload.title,
         thumbnailUrl: sdk.content.assetUrl(contentId, "thumbnail"),
+        colorPalette: payload.colorPalette ?? null,
       };
     },
   });
@@ -290,7 +351,7 @@ export function PublishDrawer({
   const renderVirtualizer = useVirtualizer({
     count: renders.length,
     getScrollElement: () => renderScrollRef.current,
-    estimateSize: () => (isMobile ? 120 : 88),
+    estimateSize: () => (isMobile ? 132 : 104),
     overscan: 8,
     getItemKey: (index) => renders[index]?.name ?? index,
   });
@@ -310,6 +371,46 @@ export function PublishDrawer({
     );
 
   const activeStepIndex = steps.findIndex((step) => step.id === stepId);
+  const providerName = selectedProviderData?.label ?? "Provider";
+  const visibilityLabel = selectedProviderData?.capabilities?.supportsPrivacy
+    ? visibility[0]?.toUpperCase() + visibility.slice(1)
+    : "Default";
+  const scheduleLabel =
+    selectedProviderData?.capabilities?.supportsSchedule && visibility === "scheduled"
+      ? scheduleAt
+        ? scheduleAt.toLocaleString()
+        : "Pick a publish time"
+      : null;
+  const reviewDescription = description.trim();
+  const reviewPalette = useMemo(
+    () => contentSummaryQuery.data?.colorPalette?.filter(Boolean) ?? [],
+    [contentSummaryQuery.data?.colorPalette]
+  );
+  const reviewGradient = useMemo(() => {
+    const accent = reviewPalette[0] ?? "#cbd5e1";
+    const secondary = reviewPalette[1] ?? reviewPalette[0] ?? "#94a3b8";
+    const tertiary = reviewPalette[2] ?? reviewPalette[1] ?? "#0f172a";
+
+    return {
+      backgroundImage: [
+        `radial-gradient(circle at 12% 12%, ${hexToRgba(accent, 0.16)}, transparent 34%)`,
+        `radial-gradient(circle at 88% 18%, ${hexToRgba(secondary, 0.12)}, transparent 28%)`,
+        `linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.84) 36%, ${hexToRgba(tertiary, 0.18)} 100%)`,
+      ].join(", "),
+    } satisfies React.CSSProperties;
+  }, [reviewPalette]);
+  const reviewDarkGradient = useMemo(() => {
+    const accent = reviewPalette[0] ?? "#64748b";
+    const secondary = reviewPalette[1] ?? reviewPalette[0] ?? "#334155";
+
+    return {
+      backgroundImage: [
+        `radial-gradient(circle at 14% 16%, ${hexToRgba(accent, 0.18)}, transparent 30%)`,
+        `radial-gradient(circle at 86% 14%, ${hexToRgba(secondary, 0.14)}, transparent 26%)`,
+        "linear-gradient(160deg, rgba(12,18,30,0.96) 0%, rgba(10,14,24,0.94) 48%, rgba(7,10,18,0.98) 100%)",
+      ].join(", "),
+    } satisfies React.CSSProperties;
+  }, [reviewPalette]);
 
   const resetState = () => {
     setStepId(steps[0].id);
@@ -499,7 +600,7 @@ export function PublishDrawer({
     <ResponsiveDrawer
       open={open}
       onOpenChange={openDrawer}
-      className="w-full sm:max-w-4xl overflow-hidden"
+      className="flex w-screen max-w-none flex-col overflow-hidden border-0 bg-background p-0 shadow-2xl sm:max-h-[min(92dvh,980px)] sm:border md:w-[min(90vw,1320px)] md:max-w-[min(90vw,1320px)] lg:w-[min(86vw,1040px)] lg:max-w-[min(86vw,1440px)]"
       closeOnOutsideClick={false}
       data-publish-status={publishStatus ?? undefined}
       data-publish-stage={publishStage ?? undefined}
@@ -517,7 +618,7 @@ export function PublishDrawer({
       {trigger ? (
         <ResponsiveDrawerTrigger asChild>{trigger}</ResponsiveDrawerTrigger>
       ) : null}
-      <ResponsiveDrawerHeader>
+      <ResponsiveDrawerHeader className="shrink-0 border-b border-slate-200 px-4 py-4 text-left dark:border-white/10 sm:px-5">
         <ResponsiveDrawerTitle className="text-xl">
           Publish
         </ResponsiveDrawerTitle>
@@ -706,9 +807,10 @@ export function PublishDrawer({
                                 No renders available yet.
                               </Card>
                             ) : (
-                              <div
-                                ref={renderScrollRef}
-                                className="h-[20svh] overflow-y-auto pr-2"
+                              <ScrollArea
+                                className="h-[clamp(18rem,42svh,30rem)]"
+                                viewportRef={renderScrollRef}
+                                contentGap="0.45rem"
                               >
                                 <div
                                   className="relative w-full"
@@ -724,33 +826,40 @@ export function PublishDrawer({
                                     return (
                                       <div
                                         key={row.key}
+                                        ref={renderVirtualizer.measureElement}
                                         className="absolute left-0 top-0 w-full"
                                         style={{
                                           transform: `translateY(${row.start}px)`,
                                         }}
                                       >
-                                        <div className="pb-4">
-                                          <SelectableCard
-                                            selected={isSelected}
-                                            onClick={() =>
-                                              setSelectedRender(render.name)
-                                            }
-                                          >
-                                            <div>
-                                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                        <SelectableCard
+                                          selected={isSelected}
+                                          onClick={() =>
+                                            setSelectedRender(render.name)
+                                          }
+                                          className="rounded-[1.35rem]"
+                                        >
+                                          <div className="flex min-w-0 items-center gap-3">
+                                            <PublishRenderThumbnail
+                                              item={render}
+                                              className="h-16 w-20 rounded-md border border-slate-200 bg-slate-50 object-cover text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300"
+                                              iconClassName="h-5 w-5"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                                                 {render.name}
                                               </p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {formatBytes(render.size)}
+                                              <p className="truncate text-xs text-muted-foreground">
+                                                {formatBytes(render.size)} · {formatDateTime(render.mtimeMs)}
                                               </p>
                                             </div>
-                                          </SelectableCard>
-                                        </div>
+                                          </div>
+                                        </SelectableCard>
                                       </div>
                                     );
                                   })}
                                 </div>
-                              </div>
+                              </ScrollArea>
                             )}
                           </motion.div>
                         </AnimatePresence>
@@ -896,86 +1005,148 @@ export function PublishDrawer({
 
                     {stepId === "review" && (
                       <div className="space-y-4">
-                        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-                          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:gap-6">
-                            <div className="relative w-full shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-white/5 sm:w-48">
-                              {thumbnailUrl ? (
-                                <ImageWithSkeleton
-                                  src={`${thumbnailUrl}${thumbnailCacheBust ? `&v=${thumbnailCacheBust}` : ""}`}
-                                  alt={contentTitle ?? title}
-                                  className="h-full w-full object-cover"
-                                  wrapperClassName="aspect-video w-full"
-                                />
-                              ) : (
-                                <div className="aspect-video w-full bg-slate-100 dark:bg-white/5" />
-                              )}
-                            </div>
-                            <div className="flex-1 space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                                    Review & Publish
-                                  </p>
-                                  <p className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">
+                        <div
+                          className="relative isolate w-full overflow-hidden rounded-[1.6rem] p-2 shadow-inner sm:p-2.5 border dark:border-primary-foreground"
+                          style={{ ...reviewGradient, ...roundedSurfaceMask }}
+                        >
+                          <div
+                            className="pointer-events-none absolute inset-0 hidden dark:block"
+                            style={reviewDarkGradient}
+                          />
+                          <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-linear-to-b from-white/28 to-transparent dark:from-white/4 dark:to-transparent" />
+                          <div className="relative space-y-2">
+
+                            <div className="grid gap-2.5 min-[720px]:grid-cols-[minmax(0,1fr)_minmax(12rem,0.34fr)]">
+                              <div className="relative aspect-[16/10] min-h-[12rem] w-full overflow-hidden rounded-[1.4rem] shadow-[0_24px_48px_-30px_rgba(0,0,0,0.56)] min-[480px]:aspect-[1.5] min-[480px]:min-h-[14rem] min-[720px]:aspect-[1.65] min-[720px]:min-h-[16rem]">
+                                {thumbnailUrl ? (
+                                  <ImageWithSkeleton
+                                    src={`${thumbnailUrl}${thumbnailCacheBust ? `&v=${thumbnailCacheBust}` : ""}`}
+                                    alt={contentTitle ?? title}
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    wrapperClassName="absolute inset-0 h-full w-full"
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 h-full w-full bg-black" />
+                                )}
+                                <div className="pointer-events-none absolute inset-0 bg-white/6 dark:bg-black/16" />
+                                <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/72 via-black/10 to-transparent" />
+                                <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4">
+                                  <p className="line-clamp-2 text-[clamp(1rem,1.6vw,1.2rem)] font-semibold text-white">
                                     {title.trim() || contentTitle || "Untitled video"}
                                   </p>
-                                </div>
-                                <Badge
-                                  variant="outline"
-                                  className="flex items-center gap-1.5 border-slate-200 text-xs text-slate-700 dark:border-white/10 dark:text-slate-200"
-                                >
-                                  <ShieldCheck className="h-3.5 w-3.5" />
-                                  Ready
-                                </Badge>
-                              </div>
-                              <div className="grid gap-2 sm:gap-3 sm:grid-cols-2">
-                                <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                    <Link2 className="h-3.5 w-3.5" />
-                                    Provider
-                                  </div>
-                                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                                    {selectedProviderData?.label ?? "Provider"}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                    <Film className="h-3.5 w-3.5" />
-                                    Render
-                                  </div>
-                                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                                    {selectedRender ?? "—"}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                    <Globe className="h-3.5 w-3.5" />
-                                    Visibility
-                                  </div>
-                                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                                    {selectedProviderData?.capabilities?.supportsPrivacy
-                                      ? visibility
-                                      : "N/A"}
-                                  </p>
-                                </div>
-                                {selectedProviderData?.capabilities?.supportsSchedule &&
-                                visibility === "scheduled" ? (
-                                  <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                      <CalendarClock className="h-3.5 w-3.5" />
-                                      Schedule
-                                    </div>
-                                    <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
-                                      {scheduleAt
-                                        ? scheduleAt.toLocaleString()
-                                        : "Pick a publish time"}
+                                  {reviewDescription ? (
+                                    <p className="mt-1 line-clamp-2 max-w-[52ch] text-sm text-white/72">
+                                      {reviewDescription}
                                     </p>
+                                  ) : (
+                                    <p className="mt-1 text-sm text-white/58">
+                                      No description added.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="rounded-[1.4rem] bg-white/20 dark:bg-white/6">
+                                <div className="grid gap-2.5 p-2 min-[720px]:grid-cols-1">
+                                  <div className="rounded-[1.05rem] bg-black/8 px-3 py-2.5 dark:bg-white/4">
+                                    <div className="flex items-start gap-2.5">
+                                      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-700 dark:bg-white/8 dark:text-slate-200">
+                                        <Film className="h-4 w-4" />
+                                      </span>
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                                          Render
+                                        </p>
+                                        <p className="mt-1 break-all text-[0.98rem] font-semibold tracking-[-0.015em] text-slate-950 dark:text-white min-[420px]:break-normal min-[420px]:truncate">
+                                          {selectedRender ?? "No render selected"}
+                                        </p>
+                                      </div>
+                                    </div>
                                   </div>
-                                ) : null}
+                                  <div className="rounded-[1.05rem] bg-black/8 px-3 py-2.5 dark:bg-white/4">
+                                    <div className="flex items-start gap-2.5">
+                                      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-700 dark:bg-white/8 dark:text-slate-200">
+                                        {visibility === "scheduled" ? (
+                                          <CalendarClock className="h-4 w-4" />
+                                        ) : visibility === "private" ? (
+                                          <Lock className="h-4 w-4" />
+                                        ) : visibility === "unlisted" ? (
+                                          <Link2 className="h-4 w-4" />
+                                        ) : (
+                                          <Globe className="h-4 w-4" />
+                                        )}
+                                      </span>
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                                          Visibility
+                                        </p>
+                                        <p className="mt-1 text-[0.98rem] font-semibold tracking-[-0.015em] text-slate-950 dark:text-white">
+                                          {visibilityLabel}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {scheduleLabel ? (
+                                    <div className="rounded-[1.05rem] bg-black/8 px-3 py-2.5 dark:bg-white/4">
+                                      <div className="flex items-start gap-2.5">
+                                        <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-700 dark:bg-white/8 dark:text-slate-200">
+                                          <CalendarClock className="h-4 w-4" />
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                                            Schedule
+                                          </p>
+                                          <p className="mt-1 text-[0.98rem] font-semibold tracking-[-0.015em] text-slate-950 dark:text-white">
+                                            {scheduleLabel}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <div className="rounded-[1.05rem] bg-black/8 px-3 py-2.5 dark:bg-white/4">
+                                    <div className="flex items-start gap-2.5">
+                                      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-700 dark:bg-white/8 dark:text-slate-200">
+                                        <Link2 className="h-4 w-4" />
+                                      </span>
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                                          Destination
+                                        </p>
+                                        <p className="mt-1 break-words text-[0.98rem] font-semibold tracking-[-0.015em] text-slate-950 dark:text-white">
+                                          {providerName}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {/* <div className="pt-1.5">
+                                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                      Palette Debug
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {reviewPalette.length > 0 ? (
+                                        reviewPalette.map((color) => (
+                                          <div
+                                            key={color}
+                                            className="inline-flex items-center gap-1.5 rounded-full bg-white/65 px-2 py-1 text-[10px] font-medium text-slate-700 dark:bg-white/8 dark:text-slate-200"
+                                          >
+                                            <span
+                                              className="h-2.5 w-2.5 rounded-full"
+                                              style={{ backgroundColor: color }}
+                                            />
+                                            {color}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                                          No palette detected
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div> */}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </Card>
+                        </div>
                       </div>
                     )}
                   </StepperMotion>
@@ -986,7 +1157,7 @@ export function PublishDrawer({
         </div>
       </ResponsiveDrawerContent>
 
-      <ResponsiveDrawerFooter className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur supports-backdrop-filter:bg-background">
+      <ResponsiveDrawerFooter className="sticky bottom-0 z-20 w-full shrink-0 border-t border-slate-200 bg-background/95 px-4 py-4 dark:border-white/10 sm:flex-row sm:px-5 supports-backdrop-filter:bg-background/95">
         <StepperFooter>
           <div className="flex items-center justify-between gap-2">
             <Button
