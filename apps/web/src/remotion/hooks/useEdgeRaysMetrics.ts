@@ -109,14 +109,18 @@ export const useEdgeRaysMetrics = ({
   }, [smoothedBands, currentBands, edgeRaysVocalBalance]);
 
   const glowIntensity = useMemo(() => {
-    const intensityScale = 0.4 + edgeRaysIntensity * 1.05;
+    const intensityLevel = clamp(edgeRaysIntensity, 0, 1);
+    const intensityResponse = Math.pow(intensityLevel, 0.42);
+    const intensityScale = 0.24 + intensityResponse * 1.18;
     const target = 1 - Math.exp(-edgeEnergy * intensityScale * 1.85);
     const contour = Math.pow(target, 0.94);
-    const lift = edgeEnergy * (0.12 + edgeRaysIntensity * 0.16);
+    const lift = edgeEnergy * (0.04 + intensityResponse * 0.18);
     const pulse =
-      Math.sin(frame * 0.028) * edgeEnergy * 0.03 +
-      Math.cos(frame * 0.017) * edgeEnergy * 0.02;
-    return clamp(contour + lift + pulse, 0, 1);
+      (Math.sin(frame * 0.028) * edgeEnergy * 0.03 +
+        Math.cos(frame * 0.017) * edgeEnergy * 0.02) *
+      intensityResponse;
+    const gated = contour + lift + pulse;
+    return clamp(gated * (0.1 + intensityResponse * 0.9), 0, 1);
   }, [edgeEnergy, edgeRaysIntensity, frame]);
 
   return {
