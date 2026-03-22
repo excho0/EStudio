@@ -113,8 +113,6 @@ export const contentModeRegistry = {
           videoDurationSeconds:
             (settings as z.infer<typeof videoLoopSettingsSchema>).videoDurationSeconds ??
             undefined,
-          overlapRatio:
-            (settings as z.infer<typeof videoLoopSettingsSchema>).overlapRatio ?? null,
           playbackRate:
             (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
           scalePercent:
@@ -155,8 +153,6 @@ export const contentModeRegistry = {
           videoDurationSeconds:
             (settings as z.infer<typeof videoLoopSettingsSchema>).videoDurationSeconds ??
             undefined,
-          overlapRatio:
-            (settings as z.infer<typeof videoLoopSettingsSchema>).overlapRatio ?? null,
           playbackRate:
             (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
           scalePercent:

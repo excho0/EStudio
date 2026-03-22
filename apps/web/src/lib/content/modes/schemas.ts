@@ -50,7 +50,6 @@ export const videoLoopSettingsSchema = z
     sharpenContrastWeight: z.number().min(0).max(1).default(0.45),
     sharpenSaturationWeight: z.number().min(0).max(1).default(0.2),
     sharpenBrightnessWeight: z.number().min(0).max(0.5).default(0.03),
-    overlapRatio: z.number().min(0).max(0.9).default(0.25),
     playbackRate: z.number().positive().default(1),
     outputConfig: outputConfigSchema,
     captionsEnabled: z.boolean().default(false),

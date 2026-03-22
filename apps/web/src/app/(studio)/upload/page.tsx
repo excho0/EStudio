@@ -11,7 +11,6 @@ import {
   Music,
   Sparkles,
   Monitor,
-  Repeat2,
   ZoomIn,
   SlidersHorizontal,
   Timer,
@@ -219,7 +218,6 @@ export default function DashboardUploadPage() {
   const reviewHeight = reviewOutput.height;
   const reviewScale = Math.round(getSettingNumber("scalePercent", 100));
   const reviewFps = reviewOutput.fps;
-  const reviewOverlap = Math.round(Number(getFieldValue("overlapRatio")));
   const reviewFade = getSettingNumber("fadeDurationSeconds", 0);
   const reviewIntroFade = getSettingNumber("introFadeSeconds", 0);
   const reviewOutroFade = getSettingNumber("outroFadeSeconds", 0);
@@ -871,19 +869,6 @@ export default function DashboardUploadPage() {
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-zinc-50">
                               {reviewFps}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-                            <Repeat2 className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
-                              Overlap
-                            </div>
-                            <div className="font-semibold text-slate-900 dark:text-zinc-50">
-                              {reviewOverlap}%
                             </div>
                           </div>
                         </div>

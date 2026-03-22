@@ -8,14 +8,13 @@ type EdgeRaysShaderLayerProps = {
   frame: number;
   fps: number;
   glowIntensity: number;
-  edgeEnergy: number; // לא בשימוש ישיר ב-Shader כרגע, אך הושאר לתאימות
+  edgeEnergy: number;
   motionEnergy: number;
   opacity?: number;
   color: string;
   style?: React.CSSProperties;
 };
 
-// פונקציית עזר להמרת HEX ל-RGB מנורמל (0.0 עד 1.0) עבור ה-Shader
 const hexToRgb = (hex: string) => {
   const cleanHex = hex.trim().replace(/^#/, "");
   if (!/^[0-9a-fA-F]{6}$/.test(cleanHex)) return [1.0, 1.0, 1.0];
@@ -25,7 +24,6 @@ const hexToRgb = (hex: string) => {
   return [r, g, b];
 };
 
-// קוד ה-Vertex Shader (בסיסי מאוד - רק מותח את הקנבס)
 const vertexShaderSource = `
   attribute vec2 a_position;
   void main() {
@@ -33,16 +31,14 @@ const vertexShaderSource = `
   }
 `;
 
-// קוד ה-Fragment Shader (כאן קורה הקסם במקום ה-CSS)
 const fragmentShaderSource = `
-  precision mediump float;
+  precision highp float;
 
   uniform vec2 u_resolution;
   uniform float u_time;
   uniform float u_glowIntensity;
   uniform float u_edgeEnergy;
   uniform float u_motionEnergy;
-  uniform float u_opacity;
   uniform vec3 u_color;
 
   float hash(float n) {
@@ -74,14 +70,13 @@ const fragmentShaderSource = `
     float intensityDetail = smoothstep(0.45, 1.0, intensity);
     float travel =
       along * (5.0 + intensityDetail * 1.9) -
-      time * (0.22 + stableMotion * 0.38 + intensityDetail * 0.26) +
+      time * (0.14 + stableMotion * 0.22 + intensityDetail * 0.16) +
       seed;
     float n1 = noise(vec2(travel, inward * (0.028 + intensityDetail * 0.01) + seed * 0.18));
-    float n2 = noise(vec2(travel * 1.02 + 2.6, inward * 0.013 + seed * 0.1 + time * 0.03));
-    float n3 = noise(vec2(travel * 0.66 - 1.0, inward * 0.007 + seed * 0.06 - time * 0.018));
-    float n4 = noise(vec2(travel * 1.34 + seed * 1.7, inward * 0.02 + time * 0.052));
-    float combined = n1 * 0.52 + n2 * 0.18 + n3 * 0.12 + n4 * (0.18 + intensityDetail * 0.1);
-    float streak = smoothstep(0.82 - intensityDetail * 0.1, 0.952 - intensityDetail * 0.05, combined);
+    float n2 = noise(vec2(travel * 0.92 + 2.6, inward * 0.013 + seed * 0.1));
+    float n3 = noise(vec2(travel * 0.66 - 1.0, inward * 0.007 + seed * 0.06));
+    float combined = n1 * 0.58 + n2 * 0.24 + n3 * (0.12 + intensityDetail * 0.04);
+    float streak = smoothstep(0.84 - intensityDetail * 0.08, 0.944 - intensityDetail * 0.04, combined);
     float falloff = exp(-inward / (34.0 + stableMotion * 8.0 + intensityDetail * 9.0));
     return streak * falloff;
   }
@@ -134,7 +129,7 @@ const fragmentShaderSource = `
     vec3 coreColor = clamp(baseColor * (1.04 + stableEdge * 0.06), 0.0, 1.0);
     vec3 bloomColor = clamp(baseColor * (0.72 + u_glowIntensity * 0.14), 0.0, 1.0);
     vec3 glowColor = mix(bloomColor, coreColor, clamp(rayField * 1.15, 0.0, 1.0));
-    gl_FragColor = vec4(glowColor * totalGlow, totalGlow * u_opacity);
+    gl_FragColor = vec4(glowColor * totalGlow, totalGlow);
   }
 `;
 
@@ -160,16 +155,15 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
 
   const rgbColor = useMemo(() => hexToRgb(color), [color]);
 
-  // איתחול ה-WebGL וה-Shaders בפעם הראשונה
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const gl = canvas.getContext("webgl", {
       alpha: true,
-      premultipliedAlpha: false,
+      premultipliedAlpha: true,
       antialias: false,
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
     });
     if (!gl) {
       setGlAvailable(false);
@@ -196,7 +190,6 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
     gl.linkProgram(program);
     gl.useProgram(program);
 
-    // הגדרת משולש שמכסה את כל הקנבס
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(
@@ -209,7 +202,6 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // שמירת ה-Uniforms לשימוש בפריימים הבאים
     programInfoRef.current = {
       gl,
       program,
@@ -219,7 +211,6 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
         u_glowIntensity: gl.getUniformLocation(program, "u_glowIntensity"),
         u_edgeEnergy: gl.getUniformLocation(program, "u_edgeEnergy"),
         u_motionEnergy: gl.getUniformLocation(program, "u_motionEnergy"),
-        u_opacity: gl.getUniformLocation(program, "u_opacity"),
         u_color: gl.getUniformLocation(program, "u_color"),
       },
     };
@@ -229,28 +220,24 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
     };
   }, []);
 
-  // עדכון ה-Uniforms בכל פריים (ללא יצירה מחדש של ה-Context)
   useEffect(() => {
     if (!programInfoRef.current) return;
-    const { gl, uniformLocations } = programInfoRef.current;
+    const { gl, program, uniformLocations } = programInfoRef.current;
 
     const time = frame / Math.max(1, fps);
 
-    // Keep frame deterministic for headless Remotion capture.
+    gl.useProgram(program);
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // העברת הנתונים ל-Shader
     gl.uniform2f(uniformLocations.u_resolution, width, height);
     gl.uniform1f(uniformLocations.u_time, time);
     gl.uniform1f(uniformLocations.u_glowIntensity, glowIntensity);
     gl.uniform1f(uniformLocations.u_edgeEnergy, edgeEnergy);
     gl.uniform1f(uniformLocations.u_motionEnergy, motionEnergy);
-    gl.uniform1f(uniformLocations.u_opacity, opacity);
     gl.uniform3fv(uniformLocations.u_color, rgbColor);
 
-    // ציור
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }, [width, height, frame, fps, glowIntensity, edgeEnergy, motionEnergy, opacity, rgbColor]);
 
@@ -265,6 +252,7 @@ export const EdgeRaysShaderLayer: React.FC<EdgeRaysShaderLayerProps> = ({
         position: "absolute",
         inset: 0,
         pointerEvents: "none",
+        opacity,
         ...style,
       }}
     />

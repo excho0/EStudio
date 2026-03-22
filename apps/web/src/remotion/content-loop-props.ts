@@ -35,9 +35,8 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   audioFadeOutSeconds: 0,
   audioFadeInOffsetSeconds: 0,
   audioFadeOutOffsetSeconds: 0,
-  videoDurationSeconds: 4,
+  videoDurationSeconds: null,
   playbackRate: 1,
-  overlapRatio: 0.25,
   captionsEnabled: false,
   captionsStyle: "subtitle",
   captionsPosition: "bottom",
@@ -203,13 +202,9 @@ export const buildContentLoopPropsFromItem = (
       item.sharpenBrightnessWeight ??
       CONTENT_LOOP_DEFAULTS.sharpenBrightnessWeight,
     videoDurationSeconds:
-      getSetting<number>("videoDurationSeconds") ??
+      getSetting<number | null>("videoDurationSeconds") ??
       item.videoDurationSeconds ??
       CONTENT_LOOP_DEFAULTS.videoDurationSeconds,
-    overlapRatio:
-      getSetting<number>("overlapRatio") ??
-      item.overlapRatio ??
-      CONTENT_LOOP_DEFAULTS.overlapRatio,
     captionsEnabled:
       getSetting<boolean>("captionsEnabled") ??
       item.captionsEnabled ??

@@ -16,7 +16,6 @@ type UseCompositionTimingArgs = {
   scalePercent: number;
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
-  overlapRatio: number | null;
   videoDurationSeconds?: number | null;
   songDurationSeconds?: number | null;
   songRangeStartSeconds: number;
@@ -39,7 +38,6 @@ export const useCompositionTiming = ({
   scalePercent,
   segmentDurationSeconds,
   fadeDurationSeconds,
-  overlapRatio,
   videoDurationSeconds,
   songDurationSeconds,
   songRangeStartSeconds,
@@ -86,13 +84,11 @@ export const useCompositionTiming = ({
   const audioFadeOutFrames = Math.max(0, Math.round(audioFadeOutSeconds * fps));
   const audioFadeInOffsetFrames = Math.max(0, Math.round(audioFadeInOffsetSeconds * fps));
   const audioFadeOutOffsetFrames = Math.max(0, Math.round(audioFadeOutOffsetSeconds * fps));
-  const clampedOverlapRatio =
-    Number.isFinite(overlapRatio) && overlapRatio !== null
-      ? Math.min(0.9, Math.max(0, overlapRatio))
-      : null;
   const sourceVideoFrames = Math.max(
     1,
-    Math.round((videoDurationSeconds ?? segmentDurationSeconds) * fps)
+    Math.round(
+      ((videoDurationSeconds ?? 0) > 0 ? videoDurationSeconds ?? 0 : segmentDurationSeconds) * fps
+    )
   );
   const songTotalFrames = Math.max(
     1,
@@ -109,13 +105,18 @@ export const useCompositionTiming = ({
       : Math.round(Math.max(0, songRangeEndSeconds) * fps);
   const rangeEndFrames = clamp(rawRangeEndFrames, rangeStartFrames + 1, songTotalFrames);
   const playableVideoFrames = sourceVideoFrames;
+  const maxAllowedOverlapFrames = Math.max(0, segmentFrames - 1);
+  const minStepFrames = Math.max(1, Math.round(segmentFrames * 0.15));
   const defaultOverlapFrames =
-    fadeFrames > 0 && segmentFrames > 1 ? Math.min(fadeFrames, segmentFrames - 1) : 0;
-  const segmentStepFrames =
-    clampedOverlapRatio === null
-      ? Math.max(1, segmentFrames - defaultOverlapFrames)
-      : Math.max(1, Math.round(segmentFrames * (1 - clampedOverlapRatio)));
-  const overlapFrames = Math.max(0, segmentFrames - segmentStepFrames);
+    fadeFrames > 0 && segmentFrames > 1 ? Math.min(fadeFrames, maxAllowedOverlapFrames) : 0;
+  // Crossfade duration determines the overlap window directly.
+  // Keep a minimum step size so extreme overlaps do not create frame-by-frame
+  // segment stepping that stalls the editor preview.
+  const overlapFrames = Math.min(
+    Math.max(0, maxAllowedOverlapFrames - (minStepFrames - 1)),
+    defaultOverlapFrames
+  );
+  const segmentStepFrames = Math.max(1, segmentFrames - overlapFrames);
   const transitionFrames =
     fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
       ? Math.min(fadeFrames, overlapFrames)

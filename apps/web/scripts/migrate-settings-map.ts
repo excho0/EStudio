@@ -72,7 +72,6 @@ const buildLegacySettings = (record: Record<string, unknown>) => {
     edgeRaysEnabled: toBoolean(record.edgeRaysEnabled),
     edgeRaysIntensity: toNumber(record.edgeRaysIntensity),
     edgeRaysVocalBalance: toNumber(record.edgeRaysVocalBalance),
-    overlapRatio: toNumber(record.overlapRatio),
     playbackRate: toNumber(record.playbackRate),
   };
   Object.keys(value).forEach((key) => {
@@ -115,7 +114,6 @@ const migrateDb = () => {
         edge_rays_enabled as edgeRaysEnabled,
         edge_rays_intensity as edgeRaysIntensity,
         edge_rays_vocal_balance as edgeRaysVocalBalance,
-        overlap_ratio as overlapRatio,
         playback_rate as playbackRate,
         fps,
         width,

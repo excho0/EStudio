@@ -156,20 +156,6 @@ const videoLoopSections: ContentModeSection[] = [
         min: 0,
         step: 0.1,
       },
-      {
-        key: "overlapRatio",
-        label: "Overlap (%)",
-        tooltip: "Portion of the segment used for overlap.",
-        input: "slider",
-        min: 0,
-        max: 90,
-        step: 1,
-        suffix: "%",
-        serialize: (value) =>
-          Math.round(Math.max(0, Math.min(0.9, Number(value) || 0)) * 100),
-        deserialize: (value) =>
-          Math.max(0, Math.min(0.9, Number(value) / 100)),
-      },
     ],
   },
   {
