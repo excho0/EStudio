@@ -16,6 +16,7 @@ dependencies = [
 whisperx = [
   "whisperx==3.8.1",
   "torchcodec==0.7.0",
+  "torchvision>=0.20.0",
   "demucs>=4.0.1",
   "faster-whisper>=1.1.0",
   "transformers>=4.52.0",
