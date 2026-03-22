@@ -62,9 +62,14 @@ export default function EditCaptionsPage() {
   const queryClient = useQueryClient();
   const { socket, connected } = useSocketIO();
   const hasRedirectedRef = useRef(false);
+  const completionRefreshInFlightRef = useRef(false);
   const [generationWatch, setGenerationWatch] = useState<{
     contentId: string;
   } | null>(null);
+  const activeCaptionStatuses = useMemo(
+    () => new Set(["queued", "processing"]),
+    []
+  );
 
   const contentQuery = useQuery<ContentItem>({
     queryKey: queryKeys.contentItem(params.id),
@@ -73,7 +78,29 @@ export default function EditCaptionsPage() {
     queryFn: async () => sdk.content.get(params.id),
   });
 
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications", "captions-page", params.id],
+    enabled: Boolean(params.id),
+    refetchOnMount: "always",
+    refetchInterval: 3000,
+    queryFn: async () => sdk.notifications.list({ limit: 100 }),
+  });
+
   const item = contentQuery.data ?? null;
+  const activeCaptionNotification = useMemo(() => {
+    if (!item) return null;
+    return (
+      notificationsQuery.data?.items.find(
+        (entry) =>
+          entry.kind === "caption" &&
+          entry.contentId === item.id &&
+          activeCaptionStatuses.has(entry.status)
+      ) ?? null
+    );
+  }, [activeCaptionStatuses, item, notificationsQuery.data?.items]);
+  const activeGenerationContentId =
+    generationWatch?.contentId ??
+    (activeCaptionNotification?.contentId === item?.id ? item?.id ?? null : null);
   const mode = item?.mode ?? DEFAULT_CONTENT_MODE;
   const settingsMap = useMemo(
     () => normalizeSettingsMap(mode, item?.settings ?? {}),
@@ -214,18 +241,18 @@ export default function EditCaptionsPage() {
   });
 
   useEffect(() => {
-    if (!generationWatch || !socket || !connected) return;
+    if (!activeGenerationContentId || !socket || !connected) return;
 
     const handleCaptionUpdate = (payload: {
       id: string;
       status: "queued" | "processing" | "completed" | "failed";
       error?: string;
     }) => {
-      if (payload.id !== generationWatch.contentId) return;
+      if (payload.id !== activeGenerationContentId) return;
       if (payload.status === "completed") {
         void (async () => {
           await queryClient.invalidateQueries({
-            queryKey: queryKeys.contentItem(generationWatch.contentId),
+            queryKey: queryKeys.contentItem(activeGenerationContentId),
             exact: true,
           });
           await contentQuery.refetch();
@@ -242,7 +269,53 @@ export default function EditCaptionsPage() {
     return attachSocketSubscriptions(socket, [
       { event: SocketEvents.caption.update, handler: handleCaptionUpdate },
     ] as const);
-  }, [connected, contentQuery, generationWatch, queryClient, socket]);
+  }, [activeGenerationContentId, connected, contentQuery, queryClient, socket]);
+
+  useEffect(() => {
+    if (!activeGenerationContentId) return;
+
+    const intervalId = window.setInterval(() => {
+      void contentQuery.refetch();
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeGenerationContentId, contentQuery]);
+
+  useEffect(() => {
+    if (!item || !activeGenerationContentId) return;
+    if (activeCaptionNotification) return;
+    if (completionRefreshInFlightRef.current) return;
+
+    void (async () => {
+      completionRefreshInFlightRef.current = true;
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.contentItem(activeGenerationContentId),
+          exact: true,
+        });
+        const refreshed = await contentQuery.refetch();
+        const nextCaptionsData = parseSharedCaptionsData(refreshed.data?.settings ?? null);
+        const hasCaptions =
+          nextCaptionsData !== null &&
+          Array.isArray(nextCaptionsData.words) &&
+          nextCaptionsData.words.length > 0;
+
+        if (hasCaptions) {
+          setGenerationWatch(null);
+        }
+      } finally {
+        completionRefreshInFlightRef.current = false;
+      }
+    })();
+  }, [
+    activeCaptionNotification,
+    activeGenerationContentId,
+    contentQuery,
+    item,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (!item || canEditCaptions || hasRedirectedRef.current) return;
@@ -271,7 +344,7 @@ export default function EditCaptionsPage() {
         mode={mode}
         language={captionsLanguage}
         isGeneratingSegments={
-          generateCaptionsMutation.isPending || generationWatch?.contentId === item.id
+          generateCaptionsMutation.isPending || activeGenerationContentId === item.id
         }
         onGenerateSegments={async () => {
           setGenerationWatch({ contentId: item.id });
