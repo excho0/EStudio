@@ -837,6 +837,7 @@ export default function EditContentPage() {
     label: string;
     tone: "default" | "primary" | "accent";
     icon: React.ReactNode;
+    disabled?: boolean;
   }> = [];
 
   if (showDockRevert) {
@@ -846,6 +847,7 @@ export default function EditContentPage() {
       label: "Revert changes",
       tone: "default",
       icon: <RotateCw className="h-4 w-4 shrink-0" />,
+      disabled: saving,
     });
   }
 
@@ -856,6 +858,7 @@ export default function EditContentPage() {
       label: saving ? "Saving changes" : "Save changes",
       tone: "primary",
       icon: <Save className="h-4 w-4 shrink-0" />,
+      disabled: saving,
     });
   }
 
@@ -1497,15 +1500,15 @@ export default function EditContentPage() {
             initial={{ opacity: 0, y: 16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4"
           >
             <motion.div
               animate={{ width: dockWidth }}
-              transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
-              className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(241,245,249,0.82))] p-1.5 shadow-[0_18px_38px_rgba(15,23,42,0.14)] ring-1 ring-slate-300/70 backdrop-blur-2xl dark:bg-[linear-gradient(180deg,rgba(39,39,42,0.78),rgba(24,24,27,0.68))] dark:ring-white/10 dark:shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
+              transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
+              className="flex min-w-0 items-center justify-end gap-1.5 overflow-hidden rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(241,245,249,0.82))] p-1.5 shadow-[0_18px_38px_rgba(15,23,42,0.14)] ring-1 ring-slate-300/70 backdrop-blur-2xl dark:bg-[linear-gradient(180deg,rgba(39,39,42,0.78),rgba(24,24,27,0.68))] dark:ring-white/10 dark:shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
             >
-              <AnimatePresence initial={false} mode="popLayout">
+              <AnimatePresence initial={false}>
                 {dockItems.map((item) => (
                   <Button
                     key={item.key}
@@ -1533,14 +1536,13 @@ export default function EditContentPage() {
                               ? handleJumpBack
                               : handleJumpToPreview
                       }
-                      layout
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 6, x: 6 }}
-                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: item.key === "save" && saving ? 1 : 0.98 }}
-                      disabled={item.key === "save" && saving}
+                      initial={{ opacity: 1 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 1 }}
+                      transition={{ duration: 0 }}
+                      whileHover={{ y: -0.5 }}
+                      whileTap={{ scale: item.disabled ? 1 : 0.98 }}
+                      disabled={item.disabled}
                       className="relative"
                       aria-label={item.label}
                     >
