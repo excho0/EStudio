@@ -2,7 +2,7 @@ name: estudio
 
 services:
   captions-api:
-    profiles: ["captions-api"]
+    # profiles: ["captions-api"]
     build:
       context: ./apps/captions-api
       dockerfile: Dockerfile.nvidia

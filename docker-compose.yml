@@ -73,6 +73,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      captions-api:
+        condition: service_healthy
     env_file:
       # Runtime env file. Copy from .env.example and fill real values before compose up.
       - ./apps/web/.env
@@ -92,6 +94,9 @@ services:
 
       # Shared Redis URL used by queue/socket modules
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      # Internal captions API URL for compose networking.
+      CAPTION_REMOTE_CAPTIONS_API_URL: ${CAPTION_REMOTE_CAPTIONS_API_URL:-http://captions-api:8010}
 
       # Keep uploaded/media assets in the shared bind-mounted storage root.
       STORAGE_BASE_DIR: /app/data
@@ -124,6 +129,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      captions-api:
+        condition: service_healthy
       # Worker can start after web container is started (not necessarily healthy).
       web:
         condition: service_started
@@ -140,6 +147,9 @@ services:
       # Shared Redis URL for queue workers
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
+      # Internal captions API URL for compose networking.
+      CAPTION_REMOTE_CAPTIONS_API_URL: ${CAPTION_REMOTE_CAPTIONS_API_URL:-http://captions-api:8010}
+
       # Internal base URL for worker->web asset fetches during rendering.
       RENDER_ASSET_BASE_URL: ${RENDER_ASSET_BASE_URL:-http://web:3000}
 
@@ -151,7 +161,7 @@ services:
 
   captions-api:
     # Python captions/transcription microservice.
-    profiles: ["captions-api"]
+    # profiles: ["captions-api"]
     container_name: estudio-captions-api
     build:
       context: .
