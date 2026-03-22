@@ -27,7 +27,8 @@ type SocketIOContextValue = {
 
 const SocketIOContext = createContext<SocketIOContextValue | null>(null);
 const MetricsContext = createContext<MetricsPayload | null>(null);
-const COMPLETION_SOUND_SRC = "/sounds/render-complete.mp3";
+const COMPLETION_SOUND_SRC = "/sounds/success.mp3";
+const FAILURE_SOUND_SRC = "/sounds/fail.mp3";
 
 type WindowWithSocket = Window & {
   __appSocket?: Socket;
@@ -198,6 +199,26 @@ export function SocketIOProvider({
       toast.success(message);
       notifyOSAppEvent(`${label} complete`, message);
       const audio = new Audio(COMPLETION_SOUND_SRC);
+      void audio.play().catch(() => undefined);
+    };
+
+    const notifyFailed = async (
+      key: string,
+      label: string,
+      id: string,
+      mode?: string,
+      error?: string
+    ) => {
+      const completed = getCompletedKeys();
+      if (completed?.has(key)) return;
+      completed?.add(key);
+      const modeSuffix = mode ? ` · ${mode}` : "";
+      const contentLabel = await resolveContentLabel(id);
+      const reason = error ? ` (${error})` : "";
+      const message = `${contentLabel}${modeSuffix}${reason}`;
+      toast.error(`${label} failed · ${message}`);
+      notifyOSAppEvent(`${label} failed`, message);
+      const audio = new Audio(FAILURE_SOUND_SRC);
       void audio.play().catch(() => undefined);
     };
 
@@ -401,15 +422,8 @@ export function SocketIOProvider({
       const canceledRenderIds = getCanceledRenderIds();
       canceledRenderKeys?.delete(key);
       canceledRenderIds?.delete(payload.id);
-      const completed = getCompletedKeys();
       const toastKey = `render-failed:${key}`;
-      if (completed?.has(toastKey)) return;
-      completed?.add(toastKey);
-      void resolveContentLabel(payload.id).then((contentLabel) => {
-        const modeSuffix = payload.mode ? ` · ${payload.mode}` : "";
-        const reason = payload.error ? ` (${payload.error})` : "";
-        toast.error(`Render failed · ${contentLabel}${modeSuffix}${reason}`);
-      });
+      void notifyFailed(toastKey, "Render", payload.id, payload.mode, payload.error);
     };
 
     const handlePublishQueuedToast = (payload: {
@@ -439,14 +453,8 @@ export function SocketIOProvider({
       error?: string;
     }) => {
       const key = publishToastKey(payload.id, payload.jobId);
-      const completed = getCompletedKeys();
       const toastKey = `publish-failed:${key}`;
-      if (completed?.has(toastKey)) return;
-      completed?.add(toastKey);
-      void resolveContentLabel(payload.id).then((contentLabel) => {
-        const reason = payload.error ? ` (${payload.error})` : "";
-        toast.error(`Publish failed · ${contentLabel}${reason}`);
-      });
+      void notifyFailed(toastKey, "Publish", payload.id, undefined, payload.error);
     };
 
     const handleCaptionQueuedToast = (payload: { id: string; jobId?: string; mode?: string }) => {
@@ -469,15 +477,8 @@ export function SocketIOProvider({
     }) => {
       if (!payload.id) return;
       const key = captionToastKey(payload.id, payload.mode, payload.jobId);
-      const completed = getCompletedKeys();
       const toastKey = `caption-failed:${key}`;
-      if (completed?.has(toastKey)) return;
-      completed?.add(toastKey);
-      void resolveContentLabel(payload.id).then((contentLabel) => {
-        const modeSuffix = payload.mode ? ` · ${payload.mode}` : "";
-        const reason = payload.error ? ` (${payload.error})` : "";
-        toast.error(`Captions failed · ${contentLabel}${modeSuffix}${reason}`);
-      });
+      void notifyFailed(toastKey, "Captions", payload.id, payload.mode, payload.error);
     };
 
     const handleMetricsUpdate = (payload: MetricsPayload) => {
