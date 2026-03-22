@@ -855,19 +855,7 @@ export default function EditContentPage() {
       action: "save",
       label: saving ? "Saving changes" : "Save changes",
       tone: "primary",
-      icon: (
-        <motion.span
-          animate={saving ? { rotate: 360 } : { rotate: 0 }}
-          transition={
-            saving
-              ? { duration: 1, ease: "linear", repeat: Infinity }
-              : { duration: 0.18, ease: "easeOut" }
-          }
-          className="inline-flex"
-        >
-          <Save className="h-4 w-4 shrink-0" />
-        </motion.span>
-      ),
+      icon: <Save className="h-4 w-4 shrink-0" />,
     });
   }
 
@@ -1552,6 +1540,7 @@ export default function EditContentPage() {
                       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                       whileHover={{ y: -1 }}
                       whileTap={{ scale: item.key === "save" && saving ? 1 : 0.98 }}
+                      disabled={item.key === "save" && saving}
                       className="relative"
                       aria-label={item.label}
                     >
