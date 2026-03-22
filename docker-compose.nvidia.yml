@@ -6,9 +6,6 @@ services:
     build:
       context: ./apps/captions-api
       dockerfile: Dockerfile.nvidia
-    environment:
-      WHISPERX_DEVICE: cuda
-      WHISPERX_COMPUTE_TYPE: float16
     # GPU passthrough via CDI (NixOS/NVIDIA container toolkit mode).
     devices:
       - "nvidia.com/gpu=all"

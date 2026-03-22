@@ -174,7 +174,9 @@ services:
       APP_ENV: production
       APP_HOST: 0.0.0.0
       APP_PORT: 8010
-      CAPTIONS_BACKEND: ace-step-whisperx
+      WHISPERX_CACHE_DIR: /app/data/cache/whisperx
+      HF_HOME: /app/data/cache/huggingface
+      TORCH_HOME: /app/data/cache/torch
     ports:
       # Host port used by web runtime when targeting remote captions backend.
       - "8010:8010"
