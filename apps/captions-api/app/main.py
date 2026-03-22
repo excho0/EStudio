@@ -6,12 +6,13 @@ from fastapi import FastAPI
 from app.api.diagnostics import router as diagnostics_router
 from app.api.transcriptions import router as transcriptions_router
 from app.core.config import settings
-from app.core.logging import get_logger
+from app.core.logging import get_logger, suppress_healthcheck_access_logs
 
 logger = get_logger("runtime")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    suppress_healthcheck_access_logs()
     if settings.CAPTION_REMOTE_TOKEN:
         logger.info("Remote captions API auth enabled (CAPTION_REMOTE_TOKEN is set).")
     else:
