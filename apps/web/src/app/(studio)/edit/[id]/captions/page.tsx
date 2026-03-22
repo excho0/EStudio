@@ -106,9 +106,18 @@ export default function EditCaptionsPage() {
   const modeUi = useMemo(() => getContentModeUi(mode, pathname), [mode, pathname]);
   const previewComponent = modeUi.previewComponent ?? ContentLoopComposition;
 
-  const videoUrl = item ? `/api/content/${item.id}/asset?type=video` : null;
-  const audioUrl = item ? `/api/content/${item.id}/asset?type=song` : null;
-  const thumbnailUrl = item ? `/api/content/${item.id}/asset?type=thumbnail` : null;
+  const assetVersion = item?.updatedAt
+    ? new Date(item.updatedAt).getTime().toString()
+    : undefined;
+  const videoUrl = item
+    ? sdk.content.assetUrl(item.id, "video", { version: assetVersion })
+    : null;
+  const audioUrl = item
+    ? sdk.content.assetUrl(item.id, "song", { version: assetVersion })
+    : null;
+  const thumbnailUrl = item
+    ? sdk.content.assetUrl(item.id, "thumbnail", { version: assetVersion })
+    : null;
   const { blobUrl: videoBlobUrl } = useMediaBlobUrl(videoUrl);
   const { blobUrl: audioBlobUrl } = useMediaBlobUrl(audioUrl);
 
