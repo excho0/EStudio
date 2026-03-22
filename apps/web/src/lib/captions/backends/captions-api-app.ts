@@ -108,7 +108,7 @@ export const transcribeWithCaptionsApiApp = async ({
 
     onProgress?.(1);
     return captionDocumentSchema.parse({
-      backend: "captions-api-app",
+      backend: parsed.backend || "captions-api-app",
       language: parsed.language || language || "en",
       generatedAt: new Date().toISOString(),
       words,
