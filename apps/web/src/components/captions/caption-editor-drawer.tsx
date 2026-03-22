@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Info, RotateCw, Save } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FileJson, RotateCw, Save, Sparkles, Waves, Zap } from "lucide-react";
 import type { PlayerRef } from "@remotion/player";
 import {
-  buildSegmentsFromWords,
-  buildWordsFromSegments,
+  deriveCaptionBlocks,
   type CaptionDocument,
-  type CaptionSegment,
+  type CaptionBlock,
 } from "@/types";
 import { captionDocumentSchema } from "@/types";
 import {
@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Alert, AlertContent, AlertDescription, AlertIcon, AlertTitle } from "@/components/ui/alert";
-import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -47,7 +47,6 @@ import { CaptionEditorTimeline } from "./editor/caption-editor-timeline";
 import { CaptionEditorInspector } from "./editor/caption-editor-inspector";
 import { useCaptionEditorShortcuts } from "./editor/use-caption-editor-shortcuts";
 import type { ContentModePreviewVariant } from "@/lib/content/modes/ui-registry";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type CaptionEditorDrawerProps = {
   open: boolean;
@@ -94,16 +93,71 @@ type ScrubState = {
   active: boolean;
 };
 type CaptionsClipboard = {
-  segments: CaptionSegment[];
+  segments: CaptionBlock[];
+};
+type CaptionEditorDocument = CaptionDocument & {
+  segments: CaptionBlock[];
 };
 type DraftHistory = {
-  past: CaptionDocument[];
-  future: CaptionDocument[];
+  past: CaptionEditorDocument[];
+  future: CaptionEditorDocument[];
+};
+
+type ImportGapPreset = {
+  id: "original" | "balanced" | "smooth" | "tight" | "custom";
+  label: string;
+  description: string;
+  maxGapMs: number;
+  nextBias: number;
+  icon: typeof Sparkles;
 };
 
 const MIN_SEGMENT_MS = 120;
 const SNAP_MS = 50;
 const DEFAULT_NEW_SEGMENT_MS = 1200;
+const IMPORT_BRIDGE_GAP_MS = 1000;
+const IMPORT_GAP_PRESETS: ImportGapPreset[] = [
+  {
+    id: "original",
+    label: "Keep Original",
+    description: "Leave the imported timing untouched and keep natural pauses.",
+    maxGapMs: 0,
+    nextBias: 0,
+    icon: Waves,
+  },
+  {
+    id: "balanced",
+    label: "Balanced Flow",
+    description: "Gently tighten small gaps without making captions feel rushed.",
+    maxGapMs: 700,
+    nextBias: 0.7,
+    icon: Sparkles,
+  },
+  {
+    id: "smooth",
+    label: "Smooth Lyrics",
+    description: "Best default for lyric captions with a cleaner continuous flow.",
+    maxGapMs: IMPORT_BRIDGE_GAP_MS,
+    nextBias: 0.8,
+    icon: Zap,
+  },
+  {
+    id: "tight",
+    label: "Tight Sync",
+    description: "Aggressively closes pauses for denser, always-on caption timing.",
+    maxGapMs: IMPORT_BRIDGE_GAP_MS,
+    nextBias: 0.9,
+    icon: Zap,
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    description: "Tune the feel yourself with a friendlier guided setup.",
+    maxGapMs: IMPORT_BRIDGE_GAP_MS,
+    nextBias: 0.8,
+    icon: Sparkles,
+  },
+];
 
 const snapMs = (value: number) => Math.round(value / SNAP_MS) * SNAP_MS;
 const toSeconds = (ms: number) => (ms / 1000).toFixed(2);
@@ -143,7 +197,10 @@ const toMs = (seconds: string, fallbackMs: number) => {
   return Math.round(parsed * 1000);
 };
 
-const hasMeaningfulDraftChange = (current: CaptionDocument, next: CaptionDocument) => {
+const hasMeaningfulDraftChange = (
+  current: CaptionEditorDocument,
+  next: CaptionEditorDocument
+) => {
   return !(
     (next.globalOffsetMs ?? 0) === (current.globalOffsetMs ?? 0) &&
     next.segments.length === current.segments.length &&
@@ -161,7 +218,7 @@ const hasMeaningfulDraftChange = (current: CaptionDocument, next: CaptionDocumen
 
 const appendHistoryIfChanged = (
   history: DraftHistory,
-  snapshot: CaptionDocument
+  snapshot: CaptionEditorDocument
 ): DraftHistory => {
   const last = history.past[history.past.length - 1];
   if (last && !hasMeaningfulDraftChange(last, snapshot)) {
@@ -179,27 +236,117 @@ const buildDefaultDocument = (_mode: string, language: string): CaptionDocument 
   generatedAt: new Date().toISOString(),
   globalOffsetMs: 0,
   words: [],
-  segments: [],
 });
 
-const normalizeCaptionDocument = (
+const toEditorCaptionDocument = (
   value: CaptionDocument | null | undefined,
   mode: string,
   language: string
-): CaptionDocument => {
+): CaptionEditorDocument => {
   const parsed = captionDocumentSchema.safeParse(value ?? buildDefaultDocument(mode, language));
   if (parsed.success) {
-    const words =
-      parsed.data.words.length > 0
-        ? parsed.data.words
-        : buildWordsFromSegments(parsed.data.segments);
-    const segments = buildSegmentsFromWords(words, {
-      maxWordsPerSegment: 1,
-      maxGapMs: 900,
-    });
+    const words = parsed.data.words;
+    const segments = deriveCaptionBlocks({ words }, { maxWordsPerSegment: 1, maxGapMs: 900 });
     return { ...parsed.data, words, segments };
   }
-  return buildDefaultDocument(mode, language);
+  return { ...buildDefaultDocument(mode, language), segments: [] };
+};
+
+const bridgeSmallSegmentGaps = (
+  document: CaptionDocument,
+  maxGapMs = IMPORT_BRIDGE_GAP_MS,
+  nextBias = 0.8
+): CaptionDocument => {
+  if (maxGapMs <= 0) {
+    return toPersistedCaptionDocument(document);
+  }
+
+  const clampedNextBias = clamp(nextBias, 0, 1);
+  const segments = deriveCaptionBlocks({ words: document.words }, { maxWordsPerSegment: 1, maxGapMs: 900 })
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((segment) => ({
+      ...segment,
+      startMs: Math.max(0, Math.round(segment.startMs)),
+      endMs: Math.max(Math.round(segment.startMs) + 1, Math.round(segment.endMs)),
+    }));
+
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const current = segments[index];
+    const next = segments[index + 1];
+    if (!current || !next) continue;
+
+    const gapMs = next.startMs - current.endMs;
+    if (gapMs <= 0 || gapMs > maxGapMs) continue;
+
+    const nextShiftMs = Math.max(1, Math.round(gapMs * clampedNextBias));
+    const previousExtendMs = Math.max(0, gapMs - nextShiftMs);
+    current.endMs += previousExtendMs;
+    next.startMs = Math.max(current.endMs + 1, next.startMs - nextShiftMs);
+  }
+
+  const words = [...document.words]
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((word) => ({
+      ...word,
+      startMs: Math.max(0, Math.round(word.startMs)),
+      endMs: Math.max(Math.round(word.startMs) + 1, Math.round(word.endMs)),
+    }));
+
+  for (let index = 0; index < words.length - 1; index += 1) {
+    const current = words[index];
+    const next = words[index + 1];
+    if (!current || !next) continue;
+
+    const gapMs = next.startMs - current.endMs;
+    if (gapMs <= 0 || gapMs > maxGapMs) continue;
+
+    const nextShiftMs = Math.max(1, Math.round(gapMs * clampedNextBias));
+    const previousExtendMs = Math.max(0, gapMs - nextShiftMs);
+    current.endMs += previousExtendMs;
+    next.startMs = Math.max(current.endMs + 1, next.startMs - nextShiftMs);
+  }
+
+  return {
+    ...document,
+    words,
+  };
+};
+
+const toPersistedCaptionDocument = (document: CaptionDocument): CaptionDocument => ({
+  backend: document.backend,
+  language: document.language,
+  generatedAt: document.generatedAt,
+  globalOffsetMs: document.globalOffsetMs,
+  words: document.words.map((word) => ({
+    text: word.text,
+    startMs: word.startMs,
+    endMs: word.endMs,
+  })),
+});
+
+const toPersistedCaptionDocumentFromEditor = (
+  source: CaptionEditorDocument
+): CaptionDocument => {
+  const normalizedSegments = [...source.segments]
+    .map((segment) => {
+      const startMs = Math.max(0, Math.round(segment.startMs));
+      const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
+      return { ...segment, startMs, endMs, text: segment.text.trim() };
+    })
+    .filter((segment) => segment.text.length > 0)
+    .sort((a, b) => a.startMs - b.startMs);
+  const words = normalizedSegments.map((segment) => ({
+    text: segment.text,
+    startMs: segment.startMs,
+    endMs: segment.endMs,
+  }));
+  return {
+    backend: source.backend,
+    language: source.language,
+    generatedAt: source.generatedAt,
+    globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
+    words,
+  };
 };
 
 export function CaptionEditorDrawer({
@@ -260,17 +407,18 @@ export function CaptionEditor({
   closeHref,
   className,
 }: CaptionEditorProps) {
+  const router = useRouter();
   const isMobile = useIsMobile();
   const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1024px)");
   const isCompactLayout = isMobile || isTablet;
-  const [draft, setDraft] = useState<CaptionDocument>(() =>
-    normalizeCaptionDocument(value, mode, language)
+  const [draft, setDraft] = useState<CaptionEditorDocument>(() =>
+    toEditorCaptionDocument(value, mode, language)
   );
   const [selectedIndex, setSelectedIndex] = useState<number | null>(() =>
-    (value?.segments?.length ?? 0) > 0 ? 0 : null
+    (value?.words.length ?? 0) > 0 ? 0 : null
   );
   const [selectedIndices, setSelectedIndices] = useState<number[]>(() =>
-    (value?.segments?.length ?? 0) > 0 ? [0] : []
+    (value?.words.length ?? 0) > 0 ? [0] : []
   );
   const [cursorMs, setCursorMs] = useState(0);
   const [zoomPxPerSecond, setZoomPxPerSecond] = useState(90);
@@ -282,20 +430,27 @@ export function CaptionEditor({
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [globalOffsetDialogOpen, setGlobalOffsetDialogOpen] = useState(false);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [pendingImportDocument, setPendingImportDocument] = useState<CaptionDocument | null>(null);
+  const [pendingImportFileName, setPendingImportFileName] = useState("");
+  const [selectedImportPresetId, setSelectedImportPresetId] = useState<ImportGapPreset["id"]>("smooth");
+  const [customImportGapMs, setCustomImportGapMs] = useState(1000);
+  const [customImportNextBias, setCustomImportNextBias] = useState(0.8);
   const [autosaveCountdownMs, setAutosaveCountdownMs] = useState<number | null>(null);
   const [activePreviewMode, setActivePreviewMode] = useState<"full" | "performance">("full");
   const [playerInstanceKey, setPlayerInstanceKey] = useState(0);
   const [playerInitialFrame, setPlayerInitialFrame] = useState(0);
   const [globalOffsetMsInput, setGlobalOffsetMsInput] = useState(() =>
-    String(normalizeCaptionDocument(value, mode, language).globalOffsetMs ?? 0)
+    String(toEditorCaptionDocument(value, mode, language).globalOffsetMs ?? 0)
   );
   const [history, setHistory] = useState<DraftHistory>({ past: [], future: [] });
   const dragRef = useRef<DragState | null>(null);
-  const dragBaselineDraftRef = useRef<CaptionDocument | null>(null);
+  const dragBaselineDraftRef = useRef<CaptionEditorDocument | null>(null);
   const dragSessionDirtyRef = useRef(false);
   const scrubRef = useRef<ScrubState>({ active: false });
   const timelineScrollerRef = useRef<HTMLDivElement | null>(null);
-  const sortedSegmentsRef = useRef<CaptionSegment[]>([]);
+  const sortedSegmentsRef = useRef<CaptionBlock[]>([]);
   const durationMsRef = useRef(0);
   const zoomPxPerSecondRef = useRef(90);
   const cursorRafRef = useRef<number | null>(null);
@@ -305,7 +460,9 @@ export function CaptionEditor({
   const lastPlayerFrameRef = useRef(0);
   const compactCursorSyncAtRef = useRef(0);
   const clipboardRef = useRef<CaptionsClipboard | null>(null);
-  const draftRef = useRef<CaptionDocument>(draft);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const draftRef = useRef<CaptionEditorDocument>(draft);
+  const autosaveSuppressedRef = useRef(false);
   const shiftPressedRef = useRef(false);
   const followScrollTargetRef = useRef<number | null>(null);
   const followScrollRafRef = useRef<number | null>(null);
@@ -315,12 +472,45 @@ export function CaptionEditor({
   const baselineDraftRef = useRef<string>("");
   const suppressOffsetInputEffectRef = useRef(false);
   const previewSwitchSnapshotRef = useRef<{ frame: number; wasPlaying: boolean } | null>(null);
+  const customImportPanelRef = useRef<HTMLDivElement | null>(null);
+  const importReviewContentRef = useRef<HTMLDivElement | null>(null);
 
-  const draftSnapshot = useMemo(() => JSON.stringify(draft), [draft]);
-  const isDirty = draftSnapshot !== baselineDraftRef.current;
+  const persistedDraftSnapshot = useMemo(
+    () => JSON.stringify(toPersistedCaptionDocument(toPersistedCaptionDocumentFromEditor(draft))),
+    [draft]
+  );
+  const isDirty = persistedDraftSnapshot !== baselineDraftRef.current;
   const canSave = useMemo(() => isDirty, [isDirty]);
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
+
+  useEffect(() => {
+    if (!importReviewOpen || selectedImportPresetId !== "custom") return;
+
+    const scrollToBottom = () => {
+      const viewport = importReviewContentRef.current;
+      if (viewport) {
+        viewport.scrollTo({
+          top: viewport.scrollHeight,
+          behavior: "smooth",
+        });
+        return;
+      }
+      customImportPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    };
+
+    const timeout = window.setTimeout(() => {
+      scrollToBottom();
+      window.requestAnimationFrame(scrollToBottom);
+    }, 60);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [importReviewOpen, selectedImportPresetId]);
 
   const autosaveCountdownSeconds = useMemo(() => {
     if (autosaveCountdownMs === null) return null;
@@ -530,11 +720,14 @@ export function CaptionEditor({
     const shouldHydrate = isOpening;
     if (!shouldHydrate) return;
 
-    const next = normalizeCaptionDocument(value, mode, language);
+    const next = toEditorCaptionDocument(value, mode, language);
     const nextSnapshot = JSON.stringify(next);
+    const persistedNextSnapshot = JSON.stringify(
+      toPersistedCaptionDocument(toPersistedCaptionDocumentFromEditor(next))
+    );
     setDraft(next);
     setHistory({ past: [], future: [] });
-    baselineDraftRef.current = nextSnapshot;
+    baselineDraftRef.current = persistedNextSnapshot;
     hydratedValueSnapshotRef.current = nextSnapshot;
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
@@ -552,8 +745,11 @@ export function CaptionEditor({
   useEffect(() => {
     if (!active) return;
     if (isDirty) return;
-    const next = normalizeCaptionDocument(value, mode, language);
+    const next = toEditorCaptionDocument(value, mode, language);
     const nextSnapshot = JSON.stringify(next);
+    const persistedNextSnapshot = JSON.stringify(
+      toPersistedCaptionDocument(toPersistedCaptionDocumentFromEditor(next))
+    );
     if (nextSnapshot === hydratedValueSnapshotRef.current) return;
 
     const currentSnapshot = JSON.stringify(draftRef.current);
@@ -562,7 +758,7 @@ export function CaptionEditor({
 
     setDraft(next);
     setHistory({ past: [], future: [] });
-    baselineDraftRef.current = nextSnapshot;
+    baselineDraftRef.current = persistedNextSnapshot;
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
@@ -577,20 +773,21 @@ export function CaptionEditor({
     if (!baselineDraftRef.current) return;
     const parsed = captionDocumentSchema.safeParse(JSON.parse(baselineDraftRef.current));
     if (!parsed.success) return;
-    setDraft(parsed.data);
+    const restored = toEditorCaptionDocument(parsed.data, mode, language);
+    setDraft(restored);
     setHistory({ past: [], future: [] });
-    const hasSegments = parsed.data.segments.length > 0;
+    const hasSegments = restored.segments.length > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
     setMobileSelectionMode(false);
     setCursorMs(0);
-    const restoredOffset = parsed.data.globalOffsetMs ?? 0;
+    const restoredOffset = restored.globalOffsetMs ?? 0;
     suppressOffsetInputEffectRef.current = true;
     setGlobalOffsetMsInput(String(restoredOffset));
   };
 
   const applyDraftUpdate = useCallback((
-    updater: (current: CaptionDocument) => CaptionDocument,
+    updater: (current: CaptionEditorDocument) => CaptionEditorDocument,
     options?: { recordHistory?: boolean }
   ) => {
     const recordHistory = options?.recordHistory ?? true;
@@ -598,6 +795,7 @@ export function CaptionEditor({
       const next = updater(current);
       if (next === current) return current;
       if (!hasMeaningfulDraftChange(current, next)) return current;
+      autosaveSuppressedRef.current = false;
       if (recordHistory) {
         setHistory((prev) => appendHistoryIfChanged(prev, current));
       } else {
@@ -724,7 +922,7 @@ export function CaptionEditor({
       const cursor = clamp(snapMs(toRawMsFromDisplay(cursorMs)), 0, durationMs);
       let insertedStartMs = 0;
       let insertedEndMs = 0;
-      const withNew: CaptionSegment[] = [...sorted];
+      const withNew: CaptionBlock[] = [...sorted];
       const containing = sorted.find(
         (segment) => cursor > segment.startMs && cursor < segment.endMs
       );
@@ -764,7 +962,7 @@ export function CaptionEditor({
       );
       const endMs = Math.min(windowEnd, startMs + newDuration);
       const normalizedEnd = Math.max(startMs + MIN_SEGMENT_MS, endMs);
-      const next: CaptionSegment = {
+      const next: CaptionBlock = {
         text: "New caption",
         startMs,
         endMs: normalizedEnd,
@@ -861,7 +1059,7 @@ export function CaptionEditor({
     let nextSelection: number[] = [];
     applyDraftUpdate((current) => {
       const existing = [...current.segments].sort((a, b) => a.startMs - b.startMs);
-      const placed: CaptionSegment[] = [];
+      const placed: CaptionBlock[] = [];
       for (const original of source) {
         const relativeOffset = original.startMs - sourceStart;
         const duration = Math.max(MIN_SEGMENT_MS, original.endMs - original.startMs);
@@ -1489,37 +1687,21 @@ export function CaptionEditor({
     };
   }, [active, setZoomAnchored]);
 
-  const buildNormalizedDraft = useCallback((source: CaptionDocument): CaptionDocument => {
-    const normalizedSegments = [...source.segments]
-      .map((segment) => {
-        const startMs = Math.max(0, Math.round(segment.startMs));
-        const endMs = Math.max(startMs + 1, Math.round(segment.endMs));
-        return { ...segment, startMs, endMs, text: segment.text.trim() };
-      })
-      .filter((segment) => segment.text.length > 0)
-      .sort((a, b) => a.startMs - b.startMs);
-    const words = buildWordsFromSegments(normalizedSegments);
-    return {
-      ...source,
-      generatedAt: new Date().toISOString(),
-      globalOffsetMs: Math.round(source.globalOffsetMs ?? 0),
-      words,
-      segments: buildSegmentsFromWords(words, {
-        maxWordsPerSegment: 1,
-        maxGapMs: 900,
-      }),
-    };
-  }, []);
-
   const persistDraft = useCallback(async (
-    source: CaptionDocument,
+    source: CaptionEditorDocument,
     options?: {
       closeAfterSave?: boolean;
       toastMode?: "none" | "autosave";
       resetHistory?: boolean;
     }
   ) => {
-    const parsed = captionDocumentSchema.safeParse(buildNormalizedDraft(source));
+    const normalizedDraft = toPersistedCaptionDocumentFromEditor(source);
+    const parsed = captionDocumentSchema.safeParse(
+      toPersistedCaptionDocument({
+        ...normalizedDraft,
+        generatedAt: new Date().toISOString(),
+      })
+    );
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "Invalid captions data.");
       return false;
@@ -1544,8 +1726,12 @@ export function CaptionEditor({
       } else {
         await savePromise;
       }
-      setDraft(parsed.data);
-      baselineDraftRef.current = JSON.stringify(parsed.data);
+      const persisted = toPersistedCaptionDocument(parsed.data);
+      const nextDraft = toEditorCaptionDocument(persisted, mode, language);
+      setDraft(nextDraft);
+      draftRef.current = nextDraft;
+      baselineDraftRef.current = JSON.stringify(persisted);
+      autosaveSuppressedRef.current = false;
       if (options?.resetHistory ?? true) {
         setHistory({ past: [], future: [] });
       }
@@ -1561,10 +1747,17 @@ export function CaptionEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [buildNormalizedDraft, onRequestClose, onSave]);
+  }, [language, mode, onRequestClose, onSave]);
 
   useEffect(() => {
-    if (!active || isSaving || restoreConfirmOpen || !isDirty) {
+    if (
+      !active ||
+      isSaving ||
+      restoreConfirmOpen ||
+      closeConfirmOpen ||
+      !isDirty ||
+      autosaveSuppressedRef.current
+    ) {
       setAutosaveCountdownMs(null);
       return;
     }
@@ -1582,13 +1775,15 @@ export function CaptionEditor({
       window.clearInterval(interval);
       setAutosaveCountdownMs(null);
     };
-  }, [active, draftSnapshot, isDirty, isSaving, restoreConfirmOpen]);
+  }, [active, closeConfirmOpen, persistedDraftSnapshot, isDirty, isSaving, restoreConfirmOpen]);
 
   useEffect(() => {
     if (!active) return;
     if (isSaving) return;
     if (restoreConfirmOpen) return;
+    if (closeConfirmOpen) return;
     if (!isDirty) return;
+    if (autosaveSuppressedRef.current) return;
     const timeout = window.setTimeout(() => {
       void persistDraft(draftRef.current, {
         toastMode: "autosave",
@@ -1599,7 +1794,21 @@ export function CaptionEditor({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [active, draftSnapshot, isDirty, isSaving, persistDraft, restoreConfirmOpen]);
+  }, [active, closeConfirmOpen, persistedDraftSnapshot, isDirty, isSaving, persistDraft, restoreConfirmOpen]);
+
+  useEffect(() => {
+    if (!active || isSaving || !isDirty) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [active, isDirty, isSaving]);
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -1608,6 +1817,148 @@ export function CaptionEditor({
       toastMode: "none",
       resetHistory: false,
     });
+  };
+
+  const finalizeClose = useCallback(() => {
+    if (closeHref) {
+      router.push(closeHref);
+      return;
+    }
+    onRequestClose?.();
+  }, [closeHref, onRequestClose, router]);
+
+  const handleCloseRequest = useCallback(() => {
+    if (isSaving) return;
+    if (isDirty) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+    finalizeClose();
+  }, [finalizeClose, isDirty, isSaving]);
+
+  const handleSaveAndClose = useCallback(async () => {
+    if (isSaving) return;
+    const didSave = await persistDraft(draftRef.current, {
+      closeAfterSave: false,
+      toastMode: "none",
+      resetHistory: false,
+    });
+    if (!didSave) return;
+    setCloseConfirmOpen(false);
+    finalizeClose();
+  }, [finalizeClose, isSaving, persistDraft]);
+
+  const handleImportButtonClick = () => {
+    if (isSaving) return;
+    importInputRef.current?.click();
+  };
+
+  const applyImportedDocument = useCallback(
+    (sourceDocument: CaptionDocument, fileName: string, preset?: ImportGapPreset) => {
+      const processedDocument = preset
+        ? bridgeSmallSegmentGaps(sourceDocument, preset.maxGapMs, preset.nextBias)
+        : toPersistedCaptionDocument(sourceDocument);
+      const imported = toEditorCaptionDocument(
+        toPersistedCaptionDocument(processedDocument),
+        mode,
+        language
+      );
+      const importedSnapshot = JSON.stringify(imported);
+      const previousDraft = draftRef.current;
+      setDraft(imported);
+      draftRef.current = imported;
+      setHistory((current) => appendHistoryIfChanged({ ...current, future: [] }, previousDraft));
+      const hasSegments = imported.segments.length > 0;
+      setSelectedIndex(hasSegments ? 0 : null);
+      setSelectedIndices(hasSegments ? [0] : []);
+      setMobileSelectionMode(false);
+      setCursorMs(0);
+      setPlayerInitialFrame(0);
+      setPlayerInstanceKey((current) => current + 1);
+      suppressOffsetInputEffectRef.current = true;
+      setGlobalOffsetMsInput(String(imported.globalOffsetMs ?? 0));
+      hydratedValueSnapshotRef.current = importedSnapshot;
+      autosaveSuppressedRef.current = true;
+      setAutosaveCountdownMs(null);
+      setPendingImportDocument(null);
+      setPendingImportFileName("");
+      setImportReviewOpen(false);
+      toast.success(`Imported captions from ${fileName}.`);
+    },
+    [language, mode]
+  );
+
+  const downloadCaptionJson = useCallback((filename: string, payload: CaptionDocument) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleExportJson = useCallback(() => {
+    const payload = toPersistedCaptionDocumentFromEditor(draftRef.current);
+    downloadCaptionJson("captions-data.json", payload);
+  }, [downloadCaptionJson]);
+
+  const handleDownloadTemplate = useCallback(() => {
+    downloadCaptionJson("captions-template.json", {
+      backend: "manual",
+      language: language.trim() || "en",
+      generatedAt: new Date().toISOString(),
+      globalOffsetMs: 0,
+      words: [
+        {
+          text: "Hello",
+          startMs: 0,
+          endMs: 420,
+        },
+        {
+          text: "world",
+          startMs: 420,
+          endMs: 920,
+        },
+        {
+          text: "again",
+          startMs: 1120,
+          endMs: 1640,
+        },
+      ],
+    });
+  }, [downloadCaptionJson, language]);
+
+  const handleImportFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const rawText = await file.text();
+      const parsedJson = JSON.parse(rawText) as unknown;
+      const parsedDocument = captionDocumentSchema.safeParse(parsedJson);
+      if (!parsedDocument.success) {
+        toast.error(
+          parsedDocument.error.issues[0]?.message ?? "Invalid captions JSON file."
+        );
+        return;
+      }
+      setPendingImportDocument(toPersistedCaptionDocument(parsedDocument.data));
+      setPendingImportFileName(file.name);
+      setSelectedImportPresetId("smooth");
+      setCustomImportGapMs(1000);
+      setCustomImportNextBias(0.8);
+      setImportReviewOpen(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to import captions file."
+      );
+    }
   };
 
   return (
@@ -1621,15 +1972,13 @@ export function CaptionEditor({
           <div className="flex min-w-0 items-center gap-3">
           {closeHref ? (
             <Button
-              asChild
               type="button"
               variant="ghost"
               size="icon-sm"
               aria-label="Close captions editor"
+              onClick={handleCloseRequest}
             >
-              <Link href={closeHref}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
+              <ArrowLeft className="h-4 w-4" />
             </Button>
           ) : onRequestClose ? (
             <Button
@@ -1637,7 +1986,7 @@ export function CaptionEditor({
               variant="ghost"
                 size="icon-sm"
                 aria-label="Close captions editor"
-                onClick={onRequestClose}
+                onClick={handleCloseRequest}
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -1651,7 +2000,14 @@ export function CaptionEditor({
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <div className="hidden items-center gap-1 lg:flex">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFileChange}
+            />
+            {/* <div className="hidden items-center gap-1 lg:flex">
               <Tooltip disableMobileDrawer delayDuration={100}>
                 <TooltipTrigger asChild>
                   <Button
@@ -1674,7 +2030,7 @@ export function CaptionEditor({
                 inputMode="numeric"
                 aria-label="Global captions offset in milliseconds"
               />
-            </div>
+            </div> */}
             <Button
               type="button"
               variant="outline"
@@ -1733,6 +2089,9 @@ export function CaptionEditor({
             onCopy={copySelectedSegments}
             onPaste={pasteSegmentsAtCursor}
             onDelete={removeSelectedSegments}
+            onExportJson={handleExportJson}
+            onDownloadTemplate={handleDownloadTemplate}
+            onImportJson={handleImportButtonClick}
             onUndo={undo}
             onRedo={redo}
             onEditSelected={() => setMobileInspectorOpen(true)}
@@ -1878,7 +2237,7 @@ export function CaptionEditor({
             <ResponsiveDrawerHeader>
               <ResponsiveDrawerTitle>Discard unsaved changes?</ResponsiveDrawerTitle>
             </ResponsiveDrawerHeader>
-            <ResponsiveDrawerContent>
+            <ResponsiveDrawerContent className="p-2">
               <Alert variant="warning" appearance="light" size="md">
                 <AlertIcon>
                   <AlertTriangle />
@@ -1910,6 +2269,316 @@ export function CaptionEditor({
                 }}
               >
                 Discard Changes
+              </Button>
+            </ResponsiveDrawerFooter>
+          </ResponsiveDrawer>
+
+          <ResponsiveDrawer
+            open={closeConfirmOpen}
+            onOpenChange={setCloseConfirmOpen}
+          >
+            <ResponsiveDrawerHeader>
+              <ResponsiveDrawerTitle>Save before closing?</ResponsiveDrawerTitle>
+            </ResponsiveDrawerHeader>
+            <ResponsiveDrawerContent className="p-2">
+              <Alert variant="warning" appearance="light" size="md">
+                <AlertIcon>
+                  <AlertTriangle />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertTitle>You have unsaved caption changes</AlertTitle>
+                  <AlertDescription>
+                    Save your caption edits before leaving, or discard them and close the editor.
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+            </ResponsiveDrawerContent>
+            <ResponsiveDrawerFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCloseConfirmOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  handleRestore();
+                  setCloseConfirmOpen(false);
+                  finalizeClose();
+                }}
+              >
+                Discard
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  void handleSaveAndClose();
+                }}
+                loading={isSaving}
+              >
+                Save and Close
+              </Button>
+            </ResponsiveDrawerFooter>
+          </ResponsiveDrawer>
+
+          <ResponsiveDrawer
+            open={importReviewOpen}
+            onOpenChange={(open) => {
+              setImportReviewOpen(open);
+              if (!open) {
+                setPendingImportDocument(null);
+                setPendingImportFileName("");
+              }
+            }}
+            className="sm:max-w-3xl"
+          >
+            <ResponsiveDrawerHeader>
+              <ResponsiveDrawerTitle>Import captions your way</ResponsiveDrawerTitle>
+            </ResponsiveDrawerHeader>
+            <ResponsiveDrawerContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+              <div
+                ref={importReviewContentRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              >
+                <div className="space-y-4 pr-1">
+                <div className="rounded-3xl bg-muted/50 px-4 py-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-4xl border border-border/60 bg-background text-foreground shadow-[0_10px_30px_-18px_rgba(0,0,0,0.7)]">
+                      <FileJson className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">
+                          Ready To Import
+                        </div>
+                        <div className="rounded-full bg-background px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          JSON
+                        </div>
+                      </div>
+                      <div className="mt-1 truncate text-base font-medium text-foreground">
+                        {pendingImportFileName || "captions-data.json"}
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        Pick the caption flow that feels right before these words land in the editor.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {IMPORT_GAP_PRESETS.filter((preset) => preset.id !== "custom").map((preset) => {
+                    const Icon = preset.icon;
+                    const isSelected = selectedImportPresetId === preset.id;
+
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setSelectedImportPresetId(preset.id)}
+                        className={cn(
+                          "w-full rounded-2xl px-4 py-4 text-left transition-colors",
+                          isSelected
+                            ? "bg-foreground text-background"
+                            : "bg-muted/50 text-foreground hover:bg-muted"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div
+                              className={cn(
+                                "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                                isSelected
+                                  ? "bg-background/15 text-background"
+                                  : "bg-background text-foreground"
+                              )}
+                            >
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium">{preset.label}</div>
+                              <div
+                                className={cn(
+                                  "mt-1 text-sm",
+                                  isSelected ? "text-background/75" : "text-muted-foreground"
+                                )}
+                              >
+                                {preset.description}
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                              isSelected
+                                ? "bg-background/15 text-background"
+                                : "bg-background text-muted-foreground"
+                            )}
+                          >
+                            {preset.maxGapMs > 0
+                              ? `${Math.round(preset.nextBias * 100)}/${100 - Math.round(preset.nextBias * 100)}`
+                              : "As-is"}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(() => {
+                  const preset = IMPORT_GAP_PRESETS.find((item) => item.id === "custom");
+                  if (!preset) return null;
+                  const Icon = preset.icon;
+                  const isSelected = selectedImportPresetId === preset.id;
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImportPresetId(preset.id)}
+                      className={cn(
+                        "w-full rounded-2xl px-4 py-4 text-left transition-colors",
+                        isSelected
+                          ? "bg-foreground text-background"
+                          : "bg-muted/50 text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div
+                            className={cn(
+                              "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                              isSelected
+                                ? "bg-background/15 text-background"
+                                : "bg-background text-foreground"
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium">{preset.label}</div>
+                            <div
+                              className={cn(
+                                "mt-1 text-sm",
+                                isSelected ? "text-background/75" : "text-muted-foreground"
+                              )}
+                            >
+                              {preset.description}
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                            isSelected
+                              ? "bg-background/15 text-background"
+                              : "bg-background text-muted-foreground"
+                          )}
+                        >
+                          {Math.round(customImportNextBias * 100)}/{100 - Math.round(customImportNextBias * 100)}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })()}
+
+                {selectedImportPresetId === "custom" ? (
+                  <div
+                    ref={customImportPanelRef}
+                    className="space-y-3 rounded-2xl bg-muted/50 p-4"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-foreground">
+                        How much of a pause should we smooth out?
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground">Tiny gaps</span>
+                        <span className="font-medium text-foreground">{customImportGapMs}ms</span>
+                        <span className="text-muted-foreground">Longer pauses</span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={1500}
+                        step={50}
+                        value={[customImportGapMs]}
+                        onValueChange={(value) => setCustomImportGapMs(value[0] ?? 0)}
+                        className="mt-3"
+                      />
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        We will only close pauses up to this length.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="text-sm font-medium text-foreground">
+                        How much should the next caption lead?
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground">Balanced</span>
+                        <span className="font-medium text-foreground">
+                          {Math.round(customImportNextBias * 100)}/{100 - Math.round(customImportNextBias * 100)}
+                        </span>
+                        <span className="text-muted-foreground">Lead strongly</span>
+                      </div>
+                      <Slider
+                        min={50}
+                        max={95}
+                        step={1}
+                        value={[Math.round(customImportNextBias * 100)]}
+                        onValueChange={(value) =>
+                          setCustomImportNextBias((value[0] ?? 50) / 100)
+                        }
+                        className="mt-3"
+                      />
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Higher values pull the next caption earlier and keep the flow tighter.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-background px-4 py-3 text-sm text-muted-foreground">
+                      Resulting split:
+                      <span className="ml-2 font-medium text-foreground">
+                        {Math.round(customImportNextBias * 100)}% next caption /{" "}
+                        {100 - Math.round(customImportNextBias * 100)}% previous caption
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+                </div>
+              </div>
+            </ResponsiveDrawerContent>
+            <ResponsiveDrawerFooter className="sticky bottom-0 z-10 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setImportReviewOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!pendingImportDocument) return;
+                  const selectedPreset = IMPORT_GAP_PRESETS.find(
+                    (preset) => preset.id === selectedImportPresetId
+                  );
+                  const resolvedPreset =
+                    selectedPreset?.id === "custom"
+                      ? {
+                          ...selectedPreset,
+                          maxGapMs: customImportGapMs,
+                          nextBias: customImportNextBias,
+                        }
+                      : selectedPreset;
+                  applyImportedDocument(
+                    pendingImportDocument,
+                    pendingImportFileName,
+                    resolvedPreset && resolvedPreset.id !== "original" ? resolvedPreset : undefined
+                  );
+                }}
+              >
+                Import Captions
               </Button>
             </ResponsiveDrawerFooter>
           </ResponsiveDrawer>

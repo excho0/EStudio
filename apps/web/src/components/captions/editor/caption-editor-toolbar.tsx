@@ -4,6 +4,11 @@ import {
   Captions,
   Clipboard,
   Copy,
+  Download,
+  FileBracesCorner,
+  FileDown,
+  FileUp,
+  Import,
   Loader2,
   Monitor,
   Pause,
@@ -17,6 +22,7 @@ import {
   SquareMousePointer,
   Trash2,
   Undo2,
+  Upload,
   Volume2
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -55,6 +61,9 @@ type CaptionEditorToolbarProps = {
   onCopy: () => void;
   onPaste: () => void;
   onDelete: () => void;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onDownloadTemplate?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onEditSelected?: () => void;
@@ -84,6 +93,9 @@ export function CaptionEditorToolbar({
   onCopy,
   onPaste,
   onDelete,
+  onImportJson,
+  onExportJson,
+  onDownloadTemplate,
   onUndo,
   onRedo,
   onEditSelected,
@@ -121,16 +133,33 @@ export function CaptionEditorToolbar({
   const mobileItems = useMemo<ActionItem[]>(
     () => {
       const items: ActionItem[] = [];
-      if (hasNoCaptions && onGenerateSegments) {
         items.push({
-          label: "Generate captions",
+          label: !hasNoCaptions ? "Regenerate captions" : "Generate captions",
           icon: Captions,
           onSelect: triggerGenerateFromMenu,
           disabled: isGeneratingSegments,
         });
         items.push({ type: "separator" });
-      }
       items.push(
+      {
+        label: "Import captions JSON",
+        icon: Download,
+        onSelect: onImportJson,
+        disabled: !onImportJson,
+      },
+      {
+        label: "Export captions JSON",
+        icon: Upload,
+        onSelect: onExportJson,
+        disabled: !onExportJson,
+      },
+      {
+        label: "Download JSON template",
+        icon: FileBracesCorner,
+        onSelect: onDownloadTemplate,
+        disabled: !onDownloadTemplate,
+      },
+      { type: "separator" },
       {
         label: "Global offset",
         icon: SlidersHorizontal,
@@ -158,7 +187,7 @@ export function CaptionEditorToolbar({
       // },
       // { type: "separator" },
       {
-        label: "Add segment",
+        label: "Add caption",
         icon: Plus,
         onSelect: onAddSegment,
         disabled: hasNoCaptions,
@@ -213,12 +242,56 @@ export function CaptionEditorToolbar({
       onAddSegment,
       onCopy,
       onDelete,
+      onImportJson,
+      onExportJson,
+      onDownloadTemplate,
       onEditSelected,
       onGenerateSegments,
       onPaste,
       onOpenGlobalOffsetEditor,
       triggerGenerateFromMenu,
       canEditSelected,
+    ]
+  );
+
+  const desktopItems = useMemo<ActionItem[]>(
+    () => {
+      const items: ActionItem[] = [
+        {
+          label: "Import captions JSON",
+          icon: Download,
+          onSelect: onImportJson,
+          disabled: !onImportJson,
+        },
+        {
+          label: "Export captions JSON",
+          icon: Upload,
+          onSelect: onExportJson,
+          disabled: !onExportJson,
+        },
+        {
+          label: "Download JSON template",
+          icon: FileBracesCorner,
+          onSelect: onDownloadTemplate,
+          disabled: !onDownloadTemplate,
+        },
+        { type: "separator" },
+        {
+          label: "Global offset",
+          icon: SlidersHorizontal,
+          onSelect: onOpenGlobalOffsetEditor,
+          disabled: hasNoCaptions || !onOpenGlobalOffsetEditor,
+        },
+      ];
+
+      return items;
+    },
+    [
+      hasNoCaptions,
+      onImportJson,
+      onExportJson,
+      onDownloadTemplate,
+      onOpenGlobalOffsetEditor,
     ]
   );
 
@@ -409,8 +482,9 @@ export function CaptionEditorToolbar({
                 <Redo2 className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Redo</TooltipContent>
-          </Tooltip>
+              <TooltipContent side="top">Redo</TooltipContent>
+            </Tooltip>
+            <ResponsiveActionMenu items={desktopItems} title="Caption Actions" />
         </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5">
             <Captions className="h-4 w-4 flex shrink-0 text-muted-foreground" />
@@ -420,7 +494,7 @@ export function CaptionEditorToolbar({
             <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
             <span className="text-sm font-semibold tabular-nums">{segmentCount}</span>
             <span className="text-xs text-muted-foreground">
-              segment{segmentCount === 1 ? "" : "s"}
+              caption{segmentCount === 1 ? "" : "s"}
             </span>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CaptionSegment } from "@/types";
+import type { CaptionBlock } from "@/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { cn } from "@/lib/shared/utils";
@@ -24,7 +24,7 @@ type Props = {
   durationMs: number;
   cursorMs: number;
   tickMarks: number[];
-  sortedSegments: CaptionSegment[];
+  sortedSegments: CaptionBlock[];
   selectedIndices: number[];
   toSeconds: (ms: number) => string;
   timeOffsetMs?: number;
@@ -408,7 +408,7 @@ export function CaptionEditorTimeline({
           Redo
         </ContextMenuItem>
         <ContextMenuSeparator /> */}
-        <ContextMenuItem onClick={onAddSegment}>Add segment</ContextMenuItem>
+        <ContextMenuItem onClick={onAddSegment}>Add caption</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!canCopy} onClick={onCopy}>
           Copy selected

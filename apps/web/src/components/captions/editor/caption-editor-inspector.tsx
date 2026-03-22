@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Sparkles, SquareDashed, SquareDashedMousePointer, Trash2 } from "lucide-react";
-import type { CaptionSegment } from "@/types";
+import type { CaptionBlock } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ type Props = {
   sortedSegmentsLength: number;
   selectedIndices: number[];
   selectedIndex: number | null;
-  selectedSegment: CaptionSegment | null;
+  selectedSegment: CaptionBlock | null;
   isGeneratingSegments?: boolean;
   onAddSegment: () => void;
   onGenerateSegments: () => void;
@@ -42,7 +42,7 @@ export function CaptionEditorInspector({
     return (
       <div className="flex flex-col gap-2 h-full items-center text-center justify-center rounded-md border border-dashed p-4 text-sm text-muted-foreground">
         <SquareDashed className="flex shrink-0" />
-        <span className="text-base font-semibold">No caption segments yet.</span>
+        <span className="text-base font-semibold">No captions yet.</span>
 
         <div className="flex flex-row gap-2.5 text-center justify-center items-center mt-2">
           <Button 
@@ -78,7 +78,7 @@ export function CaptionEditorInspector({
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">{selectedIndices.length} segments selected</p>
+          <p className="text-sm font-medium">{selectedIndices.length} captions selected</p>
           <Tooltip disableMobileDrawer delayDuration={100}>
             <TooltipTrigger asChild>
               <Button
@@ -92,7 +92,7 @@ export function CaptionEditorInspector({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              Remove all selected segments
+              Remove all selected captions
             </TooltipContent>
           </Tooltip>
         </div>
@@ -112,7 +112,7 @@ export function CaptionEditorInspector({
     return (
       <div className="flex flex-col gap-2 h-full items-center text-center justify-center rounded-md border border-dashed p-4 text-sm text-muted-foreground">
         <SquareDashedMousePointer className="flex shrink-0" />
-        <span>Select a segment from timeline to edit.</span>
+        <span>Select a caption from the timeline to edit.</span>
       </div>
     );
   }
@@ -120,7 +120,7 @@ export function CaptionEditorInspector({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">Segment {selectedIndex + 1}</p>
+        <p className="text-sm font-medium">Caption {selectedIndex + 1}</p>
         <Tooltip disableMobileDrawer delayDuration={100}>
           <TooltipTrigger asChild>
             <Button
@@ -134,7 +134,7 @@ export function CaptionEditorInspector({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">
-            Remove segment
+            Remove caption
           </TooltipContent>
         </Tooltip>
       </div>
