@@ -8,6 +8,7 @@ import { ToasterResponsive } from "@/components/providers/toaster-responsive";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppSessionProvider } from "@/components/auth/session-provider";
 import { SocketIOProvider } from "@/components/studio/socketIO-provider";
+import { PwaRegister } from "@/components/providers/pwa-register";
 import { APP_NAME } from "@/lib/shared/constants";
 
 const geistSans = Geist({
@@ -23,6 +24,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: APP_NAME,
   description: "AI-powered video content creation and rendering platform",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/favicon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: APP_NAME,
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({
@@ -35,6 +49,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <PwaRegister />
         <QueryProvider>
           <SocketIOProvider>
             <AppSessionProvider>
