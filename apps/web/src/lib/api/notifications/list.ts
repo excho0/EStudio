@@ -37,6 +37,16 @@ export const handleListNotifications = async (
     }
 
     const existing = merged.get(live.key);
+    const existingIsTerminal =
+      existing != null &&
+      !ACTIVE_STATUSES.has(existing.status) &&
+      existing.updatedAt >= live.updatedAt;
+
+    if (existingIsTerminal) {
+      void clearLiveNotificationSnapshot(userId, live.key);
+      return;
+    }
+
     merged.set(live.key, {
       id: existing?.id ?? `live:${live.key}`,
       key: live.key,

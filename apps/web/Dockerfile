@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxfixes3 \
   libxrandr2 \
   libgbm1 \
-  libasound2t64 \
+  libasound2 \
   libatspi2.0-0 \
   libx11-xcb1 \
   libxshmfence1 \
