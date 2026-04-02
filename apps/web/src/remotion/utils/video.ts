@@ -2,27 +2,43 @@ export type VideoSlice = {
   from: number;
   startFrom: number;
   duration: number;
+  sourceDuration: number;
 };
 
 export const buildVideoSlices = (
   startFrom: number,
   duration: number,
-  videoFrames: number
+  sourceDuration: number,
+  videoFrames: number,
+  playbackRate: number
 ) => {
   const slices: VideoSlice[] = [];
-  let remaining = duration;
+  const safePlaybackRate = Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+  let remainingOutput = duration;
+  let remainingSource = sourceDuration;
   let currentStart = startFrom;
-  let offset = 0;
+  let outputOffset = 0;
 
-  while (remaining > 0) {
+  while (remainingOutput > 0 && remainingSource > 0) {
     if (currentStart >= videoFrames) {
       currentStart = 0;
     }
     const available = Math.max(0, videoFrames - currentStart);
-    const sliceDuration = Math.min(remaining, available || remaining);
-    slices.push({ from: offset, startFrom: currentStart, duration: sliceDuration });
-    remaining -= sliceDuration;
-    offset += sliceDuration;
+    const sliceSourceDuration = Math.min(remainingSource, available || remainingSource);
+    const rawOutputDuration = sliceSourceDuration / safePlaybackRate;
+    const sliceOutputDuration = Math.min(
+      remainingOutput,
+      Math.max(1, Math.round(rawOutputDuration))
+    );
+    slices.push({
+      from: outputOffset,
+      startFrom: currentStart,
+      duration: sliceOutputDuration,
+      sourceDuration: sliceSourceDuration,
+    });
+    remainingOutput -= sliceOutputDuration;
+    remainingSource -= sliceSourceDuration;
+    outputOffset += sliceOutputDuration;
     currentStart = 0;
 
     if (slices.length > 1000) {

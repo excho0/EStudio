@@ -78,7 +78,8 @@ export const useCompositionTiming = ({
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const scaleFactor = Math.min(2, Math.max(0, scalePercent / 100));
-  const segmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
+  const sourceSegmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
+  const segmentFrames = Math.max(1, Math.round(sourceSegmentFrames / resolvedPlaybackRate));
   const fadeFrames = Math.max(0, Math.round(fadeDurationSeconds * fps));
   const audioFadeInFrames = Math.max(0, Math.round(audioFadeInSeconds * fps));
   const audioFadeOutFrames = Math.max(0, Math.round(audioFadeOutSeconds * fps));
@@ -117,6 +118,11 @@ export const useCompositionTiming = ({
     defaultOverlapFrames
   );
   const segmentStepFrames = Math.max(1, segmentFrames - overlapFrames);
+  const sourceOverlapFrames = Math.min(
+    sourceSegmentFrames - 1,
+    Math.max(0, Math.round(overlapFrames * resolvedPlaybackRate))
+  );
+  const sourceSegmentStepFrames = Math.max(1, sourceSegmentFrames - sourceOverlapFrames);
   const transitionFrames =
     fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
       ? Math.min(fadeFrames, overlapFrames)
@@ -140,7 +146,7 @@ export const useCompositionTiming = ({
         })
       : 1;
   const audioVolume = Math.max(0, Math.min(1, audioFadeInOpacity * audioFadeOutOpacity));
-  const maxSegmentStartFrame = Math.max(0, playableVideoFrames - segmentFrames);
+  const maxSegmentStartFrame = Math.max(0, playableVideoFrames - sourceSegmentFrames);
   const timelineMs = (frame / fps) * 1000;
 
   return useMemo(
@@ -152,6 +158,7 @@ export const useCompositionTiming = ({
       outroOverlayOpacity,
       resolvedPlaybackRate,
       scaleFactor,
+      sourceSegmentFrames,
       segmentFrames,
       fadeFrames,
       audioFadeInFrames,
@@ -166,6 +173,7 @@ export const useCompositionTiming = ({
       defaultOverlapFrames,
       segmentStepFrames,
       overlapFrames,
+      sourceSegmentStepFrames,
       transitionFrames,
       audioFadeInStart,
       audioFadeInEnd,
@@ -198,8 +206,10 @@ export const useCompositionTiming = ({
       rangeStartFrames,
       resolvedPlaybackRate,
       scaleFactor,
+      sourceSegmentFrames,
       segmentFrames,
       segmentStepFrames,
+      sourceSegmentStepFrames,
       songTotalFrames,
       sourceVideoFrames,
       timelineMs,

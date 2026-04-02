@@ -29,7 +29,6 @@ import { useMotionTransform } from "./hooks/useMotionTransform";
 type LoopVideoProps = {
   src: string;
   startFrom?: number;
-  endAt?: number;
   muted?: boolean;
   playbackRate?: number;
   style?: React.CSSProperties;
@@ -52,6 +51,7 @@ const SegmentLayer: React.FC<{
   playableVideoFrames: number;
   windowStartFrame: number;
   startFrom: number;
+  sourceDuration: number;
   playbackRate?: number;
   sharpenEnabled?: boolean;
   sharpenAmount?: number;
@@ -67,6 +67,7 @@ const SegmentLayer: React.FC<{
   playableVideoFrames,
   windowStartFrame,
   startFrom,
+  sourceDuration,
   playbackRate,
   sharpenEnabled = false,
   sharpenAmount = 0.4,
@@ -77,7 +78,13 @@ const SegmentLayer: React.FC<{
   sharpenBrightnessWeight = 0.03,
   scale,
 }) => {
-  const slices = buildVideoSlices(startFrom, duration, playableVideoFrames);
+  const slices = buildVideoSlices(
+    startFrom,
+    duration,
+    sourceDuration,
+    playableVideoFrames,
+    playbackRate ?? 1
+  );
   const masterStrength = Math.max(
     0,
     Math.min(1, Number.isFinite(sharpenMaster) ? sharpenMaster : sharpenAmount)
@@ -113,7 +120,6 @@ const SegmentLayer: React.FC<{
           <LoopVideo
             src={videoSrc}
             startFrom={windowStartFrame + slice.startFrom}
-            endAt={slice.startFrom + slice.duration}
             muted
             playbackRate={playbackRate}
             style={{
@@ -192,6 +198,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     contentLayerOpacity,
     outroOverlayOpacity,
     resolvedPlaybackRate,
+    sourceSegmentFrames,
     scaleFactor,
     segmentFrames,
     transitionFrames,
@@ -200,6 +207,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     rangeEndFrames,
     playableVideoFrames,
     segmentStepFrames,
+    sourceSegmentStepFrames,
     maxSegmentStartFrame,
     timelineMs,
   } = useCompositionTiming({
@@ -348,10 +356,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
               videoSrc={videoSrc}
               playableVideoFrames={playableVideoFrames}
               windowStartFrame={0}
+              sourceDuration={sourceSegmentFrames}
               startFrom={
                 maxSegmentStartFrame === 0
                   ? 0
-                  : (index * segmentStepFrames) % (maxSegmentStartFrame + 1)
+                  : (index * sourceSegmentStepFrames) % (maxSegmentStartFrame + 1)
               }
               playbackRate={resolvedPlaybackRate}
               sharpenEnabled={sharpenEnabled}
@@ -389,6 +398,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       videoSrc,
       maxSegmentStartFrame,
       resolvedPlaybackRate,
+      sourceSegmentFrames,
+      sourceSegmentStepFrames,
       sharpenAmount,
       sharpenUseMaster,
       sharpenMaster,
