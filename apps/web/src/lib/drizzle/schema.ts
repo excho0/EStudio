@@ -210,6 +210,30 @@ export const notifications = sqliteTable(
   ]
 );
 
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    expirationTime: integer("expirationTime", { mode: "timestamp_ms" }),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("userAgent"),
+    lastSeenAt: integer("lastSeenAt", { mode: "timestamp_ms" }).notNull(),
+    disabledAt: integer("disabledAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("push_subscriptions_user_id_idx").on(table.userId),
+    index("push_subscriptions_user_updated_at_idx").on(table.userId, table.updatedAt),
+    index("push_subscriptions_endpoint_idx").on(table.endpoint),
+  ]
+);
+
 export const appSettings = sqliteTable(
   "app_settings",
   {
@@ -223,6 +247,22 @@ export const appSettings = sqliteTable(
   (table) => [
     index("app_settings_updated_at_idx").on(table.updatedAt),
     index("app_settings_updated_by_idx").on(table.updatedBy),
+  ]
+);
+
+export const userPreferences = sqliteTable(
+  "user_preferences",
+  {
+    userId: text("userId")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    data: text("data", { mode: "json" }).notNull(),
+    version: integer("version").notNull().default(1),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("user_preferences_updated_at_idx").on(table.updatedAt),
   ]
 );
 
@@ -320,6 +360,30 @@ export const notificationsPg = pgTable(
   ]
 );
 
+export const pushSubscriptionsPg = pgTable(
+  "push_subscriptions",
+  {
+    id: pgText("id").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    endpoint: pgText("endpoint").notNull(),
+    expirationTime: pgTimestamp("expirationTime", { mode: "date" }),
+    p256dh: pgText("p256dh").notNull(),
+    auth: pgText("auth").notNull(),
+    userAgent: pgText("userAgent"),
+    lastSeenAt: pgTimestamp("lastSeenAt", { mode: "date" }).notNull(),
+    disabledAt: pgTimestamp("disabledAt", { mode: "date" }),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("push_subscriptions_user_id_idx").on(table.userId),
+    pgIndex("push_subscriptions_user_updated_at_idx").on(table.userId, table.updatedAt),
+    pgIndex("push_subscriptions_endpoint_idx").on(table.endpoint),
+  ]
+);
+
 export const appSettingsPg = pgTable(
   "app_settings",
   {
@@ -333,6 +397,22 @@ export const appSettingsPg = pgTable(
   (table) => [
     pgIndex("app_settings_updated_at_idx").on(table.updatedAt),
     pgIndex("app_settings_updated_by_idx").on(table.updatedBy),
+  ]
+);
+
+export const userPreferencesPg = pgTable(
+  "user_preferences",
+  {
+    userId: pgText("userId")
+      .primaryKey()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    data: pgJsonb("data").notNull(),
+    version: pgInteger("version").notNull().default(1),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("user_preferences_updated_at_idx").on(table.updatedAt),
   ]
 );
 
@@ -441,7 +521,9 @@ export const sqliteSchema = {
   contentItems,
   publishes,
   notifications,
+  pushSubscriptions,
   appSettings,
+  userPreferences,
 };
 
 export const schema = {
@@ -454,7 +536,9 @@ export const schema = {
   contentItems: contentItemsPg,
   publishes: publishesPg,
   notifications: notificationsPg,
+  pushSubscriptions: pushSubscriptionsPg,
   appSettings: appSettingsPg,
+  userPreferences: userPreferencesPg,
 };
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -464,7 +548,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   appTokens: many(appTokens),
   publishes: many(publishes),
   notifications: many(notifications),
+  pushSubscriptions: many(pushSubscriptions),
   appSettingsUpdates: many(appSettings),
+  preferences: many(userPreferences),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -500,9 +586,23 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
 export const appSettingsRelations = relations(appSettings, ({ one }) => ({
   updatedByUser: one(users, {
     fields: [appSettings.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userPreferences.userId],
     references: [users.id],
   }),
 }));
@@ -515,7 +615,9 @@ export const usersPgRelations = relations(usersPg, ({ many }) => ({
   contentItems: many(contentItemsPg),
   publishes: many(publishesPg),
   notifications: many(notificationsPg),
+  pushSubscriptions: many(pushSubscriptionsPg),
   appSettingsUpdates: many(appSettingsPg),
+  preferences: many(userPreferencesPg),
 }));
 
 export const accountsPgRelations = relations(accountsPg, ({ one }) => ({
@@ -557,9 +659,23 @@ export const notificationsPgRelations = relations(notificationsPg, ({ one }) => 
   }),
 }));
 
+export const pushSubscriptionsPgRelations = relations(pushSubscriptionsPg, ({ one }) => ({
+  user: one(usersPg, {
+    fields: [pushSubscriptionsPg.userId],
+    references: [usersPg.id],
+  }),
+}));
+
 export const appSettingsPgRelations = relations(appSettingsPg, ({ one }) => ({
   updatedByUser: one(usersPg, {
     fields: [appSettingsPg.updatedBy],
+    references: [usersPg.id],
+  }),
+}));
+
+export const userPreferencesPgRelations = relations(userPreferencesPg, ({ one }) => ({
+  user: one(usersPg, {
+    fields: [userPreferencesPg.userId],
     references: [usersPg.id],
   }),
 }));

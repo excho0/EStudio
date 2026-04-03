@@ -4,6 +4,7 @@ export { contentSdk } from "@/lib/sdk/domains/content";
 export { dashboardSdk } from "@/lib/sdk/domains/dashboard";
 export { uploadsSdk } from "@/lib/sdk/domains/uploads";
 export { userSdk } from "@/lib/sdk/domains/user";
+export { userPreferencesSdk } from "@/lib/sdk/domains/user-preferences";
 export { publishSdk } from "@/lib/sdk/domains/publish";
 export { notificationsSdk } from "@/lib/sdk/domains/notifications";
 export { settingsSdk } from "@/lib/sdk/domains/settings";

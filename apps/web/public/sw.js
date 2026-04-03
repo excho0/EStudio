@@ -60,3 +60,64 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+self.addEventListener("push", (event) => {
+  if (!event.data) {
+    return;
+  }
+
+  event.waitUntil(
+    (async () => {
+      let payload = null;
+      try {
+        payload = event.data.json();
+      } catch {
+        payload = { title: "EStudio", body: event.data.text() };
+      }
+
+      const title = payload?.title || "EStudio";
+      const body = payload?.body;
+      const icon = payload?.icon || "/icons/pwa-192.png";
+      const badge = payload?.badge || "/icons/pwa-192.png";
+      const tag = payload?.tag;
+      const data = {
+        ...(payload?.data && typeof payload.data === "object" ? payload.data : {}),
+        url: payload?.url || "/dashboard",
+      };
+
+      await self.registration.showNotification(title, {
+        body,
+        icon,
+        badge,
+        tag,
+        data,
+      });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || "/dashboard";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          const currentUrl = new URL(client.url);
+          const wantedUrl = new URL(targetUrl, self.location.origin);
+          if (currentUrl.pathname === wantedUrl.pathname) {
+            return client.focus();
+          }
+        }
+      }
+
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+
+      return undefined;
+    }),
+  );
+});

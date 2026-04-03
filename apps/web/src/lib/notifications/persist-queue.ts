@@ -13,6 +13,7 @@ import {
   type LiveNotificationSnapshotInput,
   setLiveNotificationSnapshot,
 } from "@/lib/notifications/live-store";
+import { sendWebPushToUserByKind } from "@/lib/push/web-push";
 
 export type NotificationPersistPayload = LiveNotificationSnapshotInput & {
   userId?: string | null;
@@ -86,6 +87,51 @@ const withResolvedNotificationMetadata = async (
 const isTerminal = (status: NotificationStatus) =>
   status === "completed" || status === "failed" || status === "canceled";
 
+const buildPushTitle = (payload: NotificationPersistPayload) => {
+  const label =
+    payload.kind === "render"
+      ? "Render"
+      : payload.kind === "publish"
+        ? "Publish"
+        : "Captions";
+
+  if (payload.status === "completed") {
+    return `${label} complete`;
+  }
+  if (payload.status === "failed") {
+    return `${label} failed`;
+  }
+  if (payload.status === "canceled") {
+    return `${label} canceled`;
+  }
+  return label;
+};
+
+const buildPushBody = (payload: NotificationPersistPayload) => {
+  const title =
+    typeof payload.metadata?.title === "string" ? payload.metadata.title.trim() : "";
+  if (payload.status === "failed" && payload.error?.trim()) {
+    return title ? `${title} · ${payload.error.trim()}` : payload.error.trim();
+  }
+  if (title) {
+    return title;
+  }
+  return payload.stage?.trim() || undefined;
+};
+
+const buildPushUrl = (payload: NotificationPersistPayload) => {
+  if (!payload.contentId) {
+    return "/dashboard";
+  }
+  if (payload.kind === "render") {
+    return `/renders/${payload.contentId}`;
+  }
+  if (payload.kind === "publish") {
+    return `/publishes/${payload.contentId}`;
+  }
+  return `/edit/${payload.contentId}/captions`;
+};
+
 const normalizeProgress = (value?: number) => {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   const normalized = value > 1 ? value / 100 : value;
@@ -132,6 +178,17 @@ const flushBatch = async (entries: NotificationPersistPayload[]) => {
         rememberPersist(payload);
         if (isTerminal(payload.status)) {
           await clearLiveNotificationSnapshot(payload.userId, payload.key);
+          await sendWebPushToUserByKind(payload.userId, payload.kind, {
+            title: buildPushTitle(payload),
+            body: buildPushBody(payload),
+            url: buildPushUrl(payload),
+            tag: payload.key,
+            data: {
+              contentId: payload.contentId,
+              kind: payload.kind,
+              status: payload.status,
+            },
+          });
         }
       } catch {
         pending.set(`${payload.userId}:${payload.key}`, payload);
