@@ -1,4 +1,4 @@
-const CACHE_NAME = "estudio-v1";
+const CACHE_NAME = "estudio-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/pwa-192.png", "/icons/pwa-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -68,6 +68,18 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
+      const clients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      const hasVisibleAppClient = clients.some((client) => {
+        const visibilityState = client.visibilityState || "hidden";
+        return visibilityState === "visible";
+      });
+      if (hasVisibleAppClient) {
+        return;
+      }
+
       let payload = null;
       try {
         payload = event.data.json();
@@ -78,7 +90,7 @@ self.addEventListener("push", (event) => {
       const title = payload?.title || "EStudio";
       const body = payload?.body;
       const icon = payload?.icon || "/icons/pwa-192.png";
-      // const badge = payload?.badge;
+      const badge = payload?.badge || "/icons/pwa-192.png";
       const image = payload?.image;
       const tag = payload?.tag;
       const data = {
@@ -89,7 +101,7 @@ self.addEventListener("push", (event) => {
       await self.registration.showNotification(title, {
         body,
         icon,
-        // ...(badge ? { badge } : {}),
+        ...(badge ? { badge } : {}),
         ...(image ? { image } : {}),
         tag,
         data,

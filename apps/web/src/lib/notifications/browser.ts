@@ -26,6 +26,7 @@ export const notifyOSAppEvent = (title: string, body?: string) => {
   }
 
   const iconUrl = `${window.location.origin}/icons/pwa-192.png`;
+  const badgeUrl = `${window.location.origin}/icons/pwa-192.png`;
   const normalizedTitle = title.trim();
   const brandedTitle = normalizedTitle.startsWith(APP_NAME)
     ? normalizedTitle
@@ -34,6 +35,7 @@ export const notifyOSAppEvent = (title: string, body?: string) => {
   new Notification(brandedTitle, {
     body,
     icon: iconUrl,
+    badge: badgeUrl,
   });
   
 };

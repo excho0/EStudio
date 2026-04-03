@@ -35,16 +35,18 @@ const resolveStoreMode = (
   return { mode: "memory", explicit: false };
 };
 
-export const createScopedSnapshotStore = <T extends { id: string }>(
+export const createScopedSnapshotStore = <T extends { id: string; key?: string }>(
   options: SnapshotStoreOptions
 ) => {
   const memoryStore = new Map<string, Map<string, T>>();
   const pool = options.pool ?? "realtime";
+  const resolveEntryKey = (payload: T) =>
+    payload.key && payload.key.trim().length > 0 ? payload.key : payload.id;
 
   const memorySet = (scope: string | null | undefined, payload: T) => {
     const scoped = resolveScope(scope);
     const entries = memoryStore.get(scoped) ?? new Map<string, T>();
-    entries.set(payload.id, payload);
+    entries.set(resolveEntryKey(payload), payload);
     memoryStore.set(scoped, entries);
   };
 
@@ -84,7 +86,7 @@ export const createScopedSnapshotStore = <T extends { id: string }>(
       return;
     }
     try {
-      await client.hSet(redisKey(scope), payload.id, JSON.stringify(payload));
+      await client.hSet(redisKey(scope), resolveEntryKey(payload), JSON.stringify(payload));
     } catch {
       memorySet(scope, payload);
     }

@@ -32,6 +32,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { useCaptionProgress } from "@/components/studio/use-caption-progress";
+import { usePublishProgress } from "@/components/studio/use-publish-progress";
 import { sdk } from "@/lib/sdk";
 import { Separator } from "@/components/ui/separator";
 import type { LucideIcon } from "lucide-react";
@@ -182,33 +184,6 @@ const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
     map.set(subjectKey, pickPreferredJob(existing, item));
   }
   return Array.from(map.values()).sort(compareJobsByRecency);
-};
-
-const getSubjectKey = (item: Pick<ActivityJob, "kind" | "id" | "mode">) =>
-  `${item.kind}:${item.id}:${item.mode ?? "default"}`;
-
-const filterSupersededActiveJobs = (items: ActivityJob[]) => {
-  const latestTerminalBySubject = new Map<string, number>();
-
-  items.forEach((item) => {
-    if (!isTerminalStatus(item.status)) return;
-    const subjectKey = getSubjectKey(item);
-    const existing = latestTerminalBySubject.get(subjectKey) ?? 0;
-    if (item.updatedAt > existing) {
-      latestTerminalBySubject.set(subjectKey, item.updatedAt);
-    }
-  });
-
-  return items.filter((item) => {
-    if (!isActiveStatus(item.status)) {
-      return true;
-    }
-    const latestTerminalAt = latestTerminalBySubject.get(getSubjectKey(item));
-    if (latestTerminalAt == null) {
-      return true;
-    }
-    return item.updatedAt > latestTerminalAt;
-  });
 };
 
 const parseTitleFromNotificationMetadata = (metadata: Record<string, unknown> | null | undefined) => {
@@ -421,6 +396,8 @@ const demoNotificationJobs: ActivityJob[] = [
 export function NotificationCenterDrawer() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const captionProgressMap = useCaptionProgress({ paused: !open });
+  const publishProgressMap = usePublishProgress({ paused: !open });
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>(() => {
     if (process.env.NODE_ENV !== "development") {
       return {};
@@ -802,11 +779,54 @@ export function NotificationCenterDrawer() {
     return dedupeJobs([...fromBootstrap, ...fromSocket]);
   }, [bootstrapQuery.data, jobs]);
   const sortedJobs = combinedJobs;
+  const activeCaptionJobs = useMemo(() => {
+    return Object.values(captionProgressMap)
+      .map((entry) => ({
+        key: entry.key ?? `${entry.id}:${entry.mode ?? "default"}`,
+        id: entry.id,
+        title: parseTitleFromNotificationMetadata(entry.metadata),
+        jobId: entry.jobId,
+        mode: entry.mode,
+        kind: "caption" as const,
+        status: entry.status,
+        progress: entry.progress,
+        error: entry.error,
+        metadata: entry.metadata,
+        updatedAt: entry.updatedAt ?? Date.now(),
+      }))
+      .sort(compareJobsByRecency);
+  }, [captionProgressMap]);
+  const activePublishJobs = useMemo(() => {
+    return Object.values(publishProgressMap)
+      .map((entry) => ({
+        key: entry.key ?? `publish:${entry.jobId}`,
+        id: entry.id,
+        title: parseTitleFromNotificationMetadata(entry.metadata),
+        jobId: entry.jobId,
+        kind: "publish" as const,
+        status: entry.status,
+        progress: entry.progress,
+        stage: entry.stage,
+        error: entry.error,
+        metadata: entry.metadata,
+        updatedAt: entry.updatedAt ?? Date.now(),
+      }))
+      .sort(compareJobsByRecency);
+  }, [publishProgressMap]);
   const activeJobs = useMemo(() => {
     return dedupeActiveJobsBySubject(
-      filterSupersededActiveJobs(sortedJobs).filter((job) => isActiveStatus(job.status))
+      [
+        ...sortedJobs.filter(
+          (job) =>
+            job.kind !== "caption" &&
+            job.kind !== "publish" &&
+            isActiveStatus(job.status)
+        ),
+        ...activePublishJobs,
+        ...activeCaptionJobs,
+      ]
     );
-  }, [sortedJobs]);
+  }, [activeCaptionJobs, activePublishJobs, sortedJobs]);
 
   const recentJobs = useMemo(() => {
     return sortedJobs

@@ -18,6 +18,14 @@ import {
   rescanResponseSchema,
   triggerRenderResponseSchema,
 } from "@/lib/data/render";
+import {
+  captionProgressMapResponseSchema,
+  type CaptionProgress,
+} from "@/lib/data/captions/progress";
+import {
+  publishProgressMapResponseSchema,
+  type PublishProgressSnapshot,
+} from "@/lib/data/publish/progress";
 
 const client = new ApiClient();
 
@@ -36,6 +44,12 @@ export type ContentRendersResponse = z.infer<typeof rendersResponseSchema>;
 export type ContentProgressResponse = z.infer<
   typeof renderProgressMapResponseSchema
 >;
+export type ContentCaptionProgressResponse = {
+  items?: Record<string, CaptionProgress>;
+};
+export type ContentPublishProgressResponse = {
+  items?: Record<string, PublishProgressSnapshot>;
+};
 export type ContentRescanResponse = z.infer<typeof rescanResponseSchema>;
 export type ContentPublishesResponse = z.infer<
   typeof contentPublishesResponseSchema
@@ -151,6 +165,20 @@ export const contentSdk = {
       "/api/content/progress",
       "Failed to load render progress.",
       renderProgressMapResponseSchema
+    );
+  },
+  captionProgress(): Promise<ContentCaptionProgressResponse> {
+    return client.get(
+      "/api/content/captions/progress",
+      "Failed to load caption progress.",
+      captionProgressMapResponseSchema
+    );
+  },
+  publishProgress(): Promise<ContentPublishProgressResponse> {
+    return client.get(
+      "/api/publishes/progress",
+      "Failed to load publish progress.",
+      publishProgressMapResponseSchema
     );
   },
   rescan(): Promise<ContentRescanResponse> {

@@ -38,7 +38,11 @@ export const clearRenderProgressSnapshot = async ({
   mode?: string;
   key?: string;
 }) => {
-  await progressStore.remove(userId, key ?? getRenderProgressKey(id, mode));
+  const resolvedKey = key ?? getRenderProgressKey(id, mode);
+  await Promise.all([
+    progressStore.remove(userId, resolvedKey),
+    ...(resolvedKey !== id ? [progressStore.remove(userId, id)] : []),
+  ]);
 };
 
 export const getRenderProgressSnapshot = async (userId?: string | null) => {

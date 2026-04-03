@@ -15,6 +15,16 @@ import {
   setRenderProgressSnapshot,
 } from "@/lib/rendering/progress-store";
 import {
+  clearCaptionProgressSnapshot,
+  getCaptionProgressSnapshot,
+  setCaptionProgressSnapshot,
+} from "@/lib/captions/progress-store";
+import {
+  clearPublishProgressSnapshot,
+  getPublishProgressSnapshot,
+  setPublishProgressSnapshot,
+} from "@/lib/publishing/progress-store";
+import {
   enqueueNotificationPersist,
   type NotificationPersistPayload,
 } from "@/lib/notifications/persist-queue";
@@ -183,6 +193,24 @@ export const emitRenderCancelRequested = (
 
 export const emitPublishUpdate = (payload: PublishUpdateEmitterPayload) => {
   const typedPayload = payload as PublishUpdatePayload;
+  if (payload.jobId) {
+    if (payload.status === "queued" || payload.status === "publishing") {
+      void setPublishProgressSnapshot({
+        userId: payload.userId,
+        id: payload.id,
+        jobId: payload.jobId,
+        status: payload.status === "queued" ? "queued" : "publishing",
+        error: payload.error,
+        metadata: payload.metadata ?? undefined,
+      });
+    } else {
+      void clearPublishProgressSnapshot({
+        userId: payload.userId,
+        id: payload.id,
+        jobId: payload.jobId,
+      });
+    }
+  }
   emitDomainEvent("publish.update", typedPayload);
   if (payload.status === "publishing") {
     emitDomainEvent("publish.started", typedPayload);
@@ -216,6 +244,17 @@ export const emitPublishUpdate = (payload: PublishUpdateEmitterPayload) => {
 };
 
 export const emitPublishProgress = (payload: PublishProgressEmitterPayload) => {
+  if (payload.jobId) {
+    void setPublishProgressSnapshot({
+      userId: payload.userId,
+      id: payload.id,
+      jobId: payload.jobId,
+      status: "publishing",
+      progress: payload.progress,
+      stage: payload.stage,
+      metadata: payload.metadata ?? undefined,
+    });
+  }
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("publish", payload.id, undefined, payload.jobId),
@@ -230,20 +269,41 @@ export const emitPublishProgress = (payload: PublishProgressEmitterPayload) => {
 };
 
 export const emitCaptionUpdate = (payload: CaptionUpdateEmitterPayload) => {
+  const status =
+    payload.status === "queued"
+      ? "queued"
+      : payload.status === "processing"
+        ? "processing"
+        : payload.status === "failed"
+          ? "failed"
+          : "completed";
+
+  if (status === "queued" || status === "processing") {
+    void setCaptionProgressSnapshot({
+      userId: payload.userId,
+      id: payload.id,
+      jobId: payload.jobId,
+      mode: payload.mode,
+      status,
+      progress: payload.progress,
+      error: payload.error,
+      metadata: payload.metadata ?? undefined,
+    });
+  } else {
+    void clearCaptionProgressSnapshot({
+      userId: payload.userId,
+      id: payload.id,
+      mode: payload.mode,
+    });
+  }
+
   persistNotification({
     userId: payload.userId,
     key: getNotificationKey("caption", payload.id, payload.mode, payload.jobId),
     contentId: payload.id,
     mode: payload.mode,
     kind: "caption",
-    status:
-      payload.status === "queued"
-        ? "queued"
-        : payload.status === "processing"
-          ? "processing"
-          : payload.status === "failed"
-            ? "failed"
-          : "completed",
+    status,
     progress: payload.progress,
     error: payload.error,
     metadata: payload.metadata,
@@ -266,6 +326,10 @@ export const emitSettingsUpdated = (payload: SettingsUpdatedEmitterPayload) => {
 };
 
 export {
+  clearPublishProgressSnapshot,
+  getPublishProgressSnapshot,
+  clearCaptionProgressSnapshot,
+  getCaptionProgressSnapshot,
   clearRenderProgressSnapshot,
   clearRenderProgressSnapshotsForContent,
   getRenderProgressSnapshot,

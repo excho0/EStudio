@@ -11,6 +11,7 @@ import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
+import { useCaptionProgress } from "@/components/studio/use-caption-progress";
 import {
   DEFAULT_CONTENT_MODE,
   getOutputDefaultsForMode,
@@ -61,6 +62,7 @@ export default function EditCaptionsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { socket, connected } = useSocketIO();
+  const captionProgressMap = useCaptionProgress();
   const hasRedirectedRef = useRef(false);
   const completionRefreshInFlightRef = useRef(false);
   const [generationWatch, setGenerationWatch] = useState<{
@@ -78,34 +80,18 @@ export default function EditCaptionsPage() {
     queryFn: async () => sdk.content.get(params.id),
   });
 
-  const notificationsQuery = useQuery({
-    queryKey: ["notifications", "captions-page", params.id],
-    enabled: Boolean(params.id),
-    refetchOnMount: "always",
-    refetchInterval: 3000,
-    queryFn: async () => sdk.notifications.list({ limit: 100 }),
-  });
-
   const item = contentQuery.data ?? null;
   const mode = item?.mode ?? DEFAULT_CONTENT_MODE;
-  const activeCaptionNotification = useMemo(() => {
+  const activeCaptionProgress = useMemo(() => {
     if (!item) return null;
-    const relevant = (notificationsQuery.data?.items ?? [])
-      .filter(
-        (entry) =>
-          entry.kind === "caption" &&
-          entry.contentId === item.id &&
-          (entry.mode ?? mode) === mode
-      )
-      .sort((left, right) => right.updatedAt - left.updatedAt);
-
-    const latest = relevant[0] ?? null;
-    if (!latest) return null;
-    return activeCaptionStatuses.has(latest.status) ? latest : null;
-  }, [activeCaptionStatuses, item, mode, notificationsQuery.data?.items]);
+    const key = mode?.trim() ? `${item.id}::${mode.trim()}` : item.id;
+    const entry = captionProgressMap[key] ?? null;
+    if (!entry) return null;
+    return activeCaptionStatuses.has(entry.status) ? entry : null;
+  }, [activeCaptionStatuses, captionProgressMap, item, mode]);
   const activeGenerationContentId =
     generationWatch?.contentId ??
-    (activeCaptionNotification?.contentId === item?.id ? item?.id ?? null : null);
+    (activeCaptionProgress?.id === item?.id ? item?.id ?? null : null);
   const settingsMap = useMemo(
     () => normalizeSettingsMap(mode, item?.settings ?? {}),
     [item?.settings, mode]
@@ -289,7 +275,7 @@ export default function EditCaptionsPage() {
 
   useEffect(() => {
     if (!item || !activeGenerationContentId) return;
-    if (activeCaptionNotification) return;
+    if (activeCaptionProgress) return;
     if (completionRefreshInFlightRef.current) return;
 
     void (async () => {
@@ -314,7 +300,7 @@ export default function EditCaptionsPage() {
       }
     })();
   }, [
-    activeCaptionNotification,
+    activeCaptionProgress,
     activeGenerationContentId,
     contentQuery,
     item,
