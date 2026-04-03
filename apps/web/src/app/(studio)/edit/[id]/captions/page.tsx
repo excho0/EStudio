@@ -87,21 +87,25 @@ export default function EditCaptionsPage() {
   });
 
   const item = contentQuery.data ?? null;
+  const mode = item?.mode ?? DEFAULT_CONTENT_MODE;
   const activeCaptionNotification = useMemo(() => {
     if (!item) return null;
-    return (
-      notificationsQuery.data?.items.find(
+    const relevant = (notificationsQuery.data?.items ?? [])
+      .filter(
         (entry) =>
           entry.kind === "caption" &&
           entry.contentId === item.id &&
-          activeCaptionStatuses.has(entry.status)
-      ) ?? null
-    );
-  }, [activeCaptionStatuses, item, notificationsQuery.data?.items]);
+          (entry.mode ?? mode) === mode
+      )
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+
+    const latest = relevant[0] ?? null;
+    if (!latest) return null;
+    return activeCaptionStatuses.has(latest.status) ? latest : null;
+  }, [activeCaptionStatuses, item, mode, notificationsQuery.data?.items]);
   const activeGenerationContentId =
     generationWatch?.contentId ??
     (activeCaptionNotification?.contentId === item?.id ? item?.id ?? null : null);
-  const mode = item?.mode ?? DEFAULT_CONTENT_MODE;
   const settingsMap = useMemo(
     () => normalizeSettingsMap(mode, item?.settings ?? {}),
     [item?.settings, mode]

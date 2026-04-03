@@ -184,6 +184,33 @@ const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
   return Array.from(map.values()).sort(compareJobsByRecency);
 };
 
+const getSubjectKey = (item: Pick<ActivityJob, "kind" | "id" | "mode">) =>
+  `${item.kind}:${item.id}:${item.mode ?? "default"}`;
+
+const filterSupersededActiveJobs = (items: ActivityJob[]) => {
+  const latestTerminalBySubject = new Map<string, number>();
+
+  items.forEach((item) => {
+    if (!isTerminalStatus(item.status)) return;
+    const subjectKey = getSubjectKey(item);
+    const existing = latestTerminalBySubject.get(subjectKey) ?? 0;
+    if (item.updatedAt > existing) {
+      latestTerminalBySubject.set(subjectKey, item.updatedAt);
+    }
+  });
+
+  return items.filter((item) => {
+    if (!isActiveStatus(item.status)) {
+      return true;
+    }
+    const latestTerminalAt = latestTerminalBySubject.get(getSubjectKey(item));
+    if (latestTerminalAt == null) {
+      return true;
+    }
+    return item.updatedAt > latestTerminalAt;
+  });
+};
+
 const parseTitleFromNotificationMetadata = (metadata: Record<string, unknown> | null | undefined) => {
   const title = metadata?.title;
   if (typeof title !== "string") return undefined;
@@ -776,7 +803,9 @@ export function NotificationCenterDrawer() {
   }, [bootstrapQuery.data, jobs]);
   const sortedJobs = combinedJobs;
   const activeJobs = useMemo(() => {
-    return dedupeActiveJobsBySubject(sortedJobs.filter((job) => isActiveStatus(job.status)));
+    return dedupeActiveJobsBySubject(
+      filterSupersededActiveJobs(sortedJobs).filter((job) => isActiveStatus(job.status))
+    );
   }, [sortedJobs]);
 
   const recentJobs = useMemo(() => {
