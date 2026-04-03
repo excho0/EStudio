@@ -1,4 +1,5 @@
 export const queryKeys = {
+  dashboardStats: (range: number | "all") => ["dashboard-stats", range] as const,
   contentListBase: ["content"] as const,
   contentList: (params: {
     query: string;

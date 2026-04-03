@@ -303,6 +303,286 @@ export async function getContentStats(userId: string) {
   });
 }
 
+type DashboardTrendPoint = {
+  date: string;
+  value: number;
+};
+
+type DashboardStatsRange = number | "all";
+
+function formatUtcDateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function buildDayWindow(days: number) {
+  const today = new Date();
+  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+
+  const dates: string[] = [];
+  const counts = new Map<string, number>();
+  for (let index = 0; index < days; index += 1) {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    const key = formatUtcDateKey(date);
+    dates.push(key);
+    counts.set(key, 0);
+  }
+
+  return { start, dates, counts };
+}
+
+function toTrendPoints(dates: string[], counts: Map<string, number>): DashboardTrendPoint[] {
+  return dates.map((date) => ({
+    date,
+    value: counts.get(date) ?? 0,
+  }));
+}
+
+function sampleTrendPoints(
+  points: DashboardTrendPoint[],
+  maxPoints = 20,
+): DashboardTrendPoint[] {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  const sampled: DashboardTrendPoint[] = [];
+  const lastIndex = points.length - 1;
+
+  for (let index = 0; index < maxPoints; index += 1) {
+    const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+    const point = points[sourceIndex];
+    if (!sampled.length || sampled[sampled.length - 1]?.date !== point.date) {
+      sampled.push(point);
+    }
+  }
+
+  if (sampled[sampled.length - 1]?.date !== points[lastIndex]?.date) {
+    sampled.push(points[lastIndex]);
+  }
+
+  return sampled;
+}
+
+function toCompressedAllTimeTrendPoints(
+  dates: string[],
+  counts: Map<string, number>,
+): DashboardTrendPoint[] {
+  let runningTotal = 0;
+  const activePoints: DashboardTrendPoint[] = [];
+
+  for (const date of dates) {
+    const increment = counts.get(date) ?? 0;
+    if (increment <= 0) {
+      continue;
+    }
+    runningTotal += increment;
+    activePoints.push({
+      date,
+      value: runningTotal,
+    });
+  }
+
+  if (activePoints.length === 0) {
+    const startDate = dates[0] ?? new Date().toISOString().slice(0, 10);
+    const endDate = dates[dates.length - 1] ?? startDate;
+    return [
+      { date: startDate, value: 0 },
+      { date: endDate, value: 0 },
+    ];
+  }
+
+  const points: DashboardTrendPoint[] = [
+    { date: dates[0] ?? activePoints[0]!.date, value: 0 },
+    ...activePoints,
+  ];
+
+  const lastPoint = activePoints[activePoints.length - 1]!;
+  const endDate = dates[dates.length - 1] ?? lastPoint.date;
+  if (endDate !== lastPoint.date) {
+    points.push({
+      date: endDate,
+      value: lastPoint.value,
+    });
+  }
+
+  return sampleTrendPoints(points, 18);
+}
+
+function sumTrendValues(points: DashboardTrendPoint[]) {
+  return points.reduce((total, point) => total + point.value, 0);
+}
+
+function buildStatDiff(
+  points: DashboardTrendPoint[],
+  options?: {
+    upIsPositive?: boolean;
+    decimals?: number;
+    label?: string;
+  },
+) {
+  const safePoints =
+    points.length >= 2
+      ? points
+      : [
+          { date: "start", value: 0 },
+          { date: "end", value: 0 },
+        ];
+  const midpoint = Math.max(1, Math.floor(safePoints.length / 2));
+  const previous = safePoints.slice(0, midpoint);
+  const current = safePoints.slice(midpoint);
+
+  const previousTotal = sumTrendValues(previous);
+  const currentTotal = sumTrendValues(current);
+
+  let value = 0;
+  if (previousTotal === 0) {
+    value = currentTotal === 0 ? 0 : 100;
+  } else {
+    value = ((currentTotal - previousTotal) / previousTotal) * 100;
+  }
+
+  return {
+    value,
+    decimals: options?.decimals ?? 1,
+    ...(options?.upIsPositive === false ? { upIsPositive: false } : {}),
+    ...(options?.label ? { label: options.label } : {}),
+  };
+}
+
+function buildAllTimeWindow(rows: Array<{ createdAt: string; updatedAt: string; status: string }>) {
+  const validDates = rows.flatMap((row) => {
+    const createdAt = new Date(row.createdAt);
+    const updatedAt = new Date(row.updatedAt);
+    return [
+      createdAt,
+      updatedAt,
+    ].filter((value) => !Number.isNaN(value.getTime()));
+  });
+
+  if (validDates.length === 0) {
+    return buildDayWindow(7);
+  }
+
+  let start = validDates.reduce((earliest, current) =>
+    current.getTime() < earliest.getTime() ? current : earliest,
+  );
+  start = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+
+  const today = new Date();
+  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const daySpan = Math.max(
+    1,
+    Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+  );
+
+  return buildDayWindow(daySpan);
+}
+
+export async function getDashboardStats(
+  userId: string,
+  range: DashboardStatsRange = 7,
+) {
+  const totals = await getContentStats(userId);
+
+  const rows: Array<{ createdAt: string; updatedAt: string; status: string }> =
+    await withContentDb({
+    pg: async ({ db, table }) => {
+      const rawRows = await db
+        .select({
+          createdAt: table.createdAt,
+          updatedAt: table.updatedAt,
+          status: table.status,
+        })
+        .from(table)
+        .where(eq(table.userId, userId));
+      return rawRows.map((row) => ({
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        status: row.status,
+      }));
+    },
+    sqlite: async ({ db, table }) => {
+      return db
+        .select({
+          createdAt: table.createdAt,
+          updatedAt: table.updatedAt,
+          status: table.status,
+        })
+        .from(table)
+        .where(eq(table.userId, userId));
+    },
+  });
+
+  const safeWindowDays =
+    range === "all" ? null : Math.max(1, Math.min(365, Math.trunc(range)));
+  const resolvedWindowDays = safeWindowDays ?? 7;
+  const projectsWindow =
+    range === "all" ? buildAllTimeWindow(rows) : buildDayWindow(resolvedWindowDays);
+  const renderedWindow =
+    range === "all" ? buildAllTimeWindow(rows) : buildDayWindow(resolvedWindowDays);
+  const failedWindow =
+    range === "all" ? buildAllTimeWindow(rows) : buildDayWindow(resolvedWindowDays);
+
+  for (const row of rows) {
+    const createdAt = new Date(row.createdAt);
+    if (!Number.isNaN(createdAt.getTime()) && createdAt >= projectsWindow.start) {
+      const key = formatUtcDateKey(createdAt);
+      if (projectsWindow.counts.has(key)) {
+        projectsWindow.counts.set(key, (projectsWindow.counts.get(key) ?? 0) + 1);
+      }
+    }
+
+    const updatedAt = new Date(row.updatedAt);
+    if (Number.isNaN(updatedAt.getTime())) {
+      continue;
+    }
+    const updatedKey = formatUtcDateKey(updatedAt);
+    if (row.status === "rendered" && renderedWindow.counts.has(updatedKey)) {
+      renderedWindow.counts.set(
+        updatedKey,
+        (renderedWindow.counts.get(updatedKey) ?? 0) + 1,
+      );
+    }
+    if (row.status === "failed" && failedWindow.counts.has(updatedKey)) {
+      failedWindow.counts.set(updatedKey, (failedWindow.counts.get(updatedKey) ?? 0) + 1);
+    }
+  }
+
+  const rawProjectTrendPoints = toTrendPoints(projectsWindow.dates, projectsWindow.counts);
+  const rawRenderedTrendPoints = toTrendPoints(renderedWindow.dates, renderedWindow.counts);
+  const rawFailedTrendPoints = toTrendPoints(failedWindow.dates, failedWindow.counts);
+  const projectTrendPoints =
+    range === "all"
+      ? toCompressedAllTimeTrendPoints(projectsWindow.dates, projectsWindow.counts)
+      : rawProjectTrendPoints;
+  const renderedTrendPoints =
+    range === "all"
+      ? toCompressedAllTimeTrendPoints(renderedWindow.dates, renderedWindow.counts)
+      : rawRenderedTrendPoints;
+  const failedTrendPoints =
+    range === "all"
+      ? toCompressedAllTimeTrendPoints(failedWindow.dates, failedWindow.counts)
+      : rawFailedTrendPoints;
+
+  return {
+    totals,
+    diffs: {
+      projects: buildStatDiff(projectTrendPoints),
+      rendered: buildStatDiff(renderedTrendPoints),
+      failed: buildStatDiff(failedTrendPoints, { upIsPositive: false }),
+    },
+    trends: {
+      projects: projectTrendPoints,
+      rendered: renderedTrendPoints,
+      failed: failedTrendPoints,
+    },
+    windowDays: range === "all" ? projectsWindow.dates.length : resolvedWindowDays,
+  };
+}
+
 export async function getContentItem(userId: string, id: string) {
   return withContentDb({
     pg: async ({ db, table }) => {

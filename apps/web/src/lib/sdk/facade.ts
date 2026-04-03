@@ -1,4 +1,5 @@
 import { contentSdk } from "@/lib/sdk/domains/content";
+import { dashboardSdk } from "@/lib/sdk/domains/dashboard";
 import { metaSdk } from "@/lib/sdk/domains/meta";
 import { notificationsSdk } from "@/lib/sdk/domains/notifications";
 import { publishSdk } from "@/lib/sdk/domains/publish";
@@ -8,6 +9,7 @@ import { userSdk } from "@/lib/sdk/domains/user";
 
 export class Sdk {
   readonly content = contentSdk;
+  readonly dashboard = dashboardSdk;
   readonly uploads = uploadsSdk;
   readonly user = userSdk;
   readonly publish = publishSdk;

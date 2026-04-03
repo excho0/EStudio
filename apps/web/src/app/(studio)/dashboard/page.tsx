@@ -1,68 +1,27 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { Button } from "@/components/ui/button";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { useContentList } from "@/components/studio/use-content-list";
+import { useDashboardStats } from "@/components/studio/use-dashboard-stats";
 import type { ContentItem } from "@/types";
 import { useRenderProgress } from "@/components/studio/use-render-progress";
 import {
-  Activity,
-  CircleCheck,
-  TriangleAlert,
   Film,
   Music,
   SlidersHorizontal,
   Send,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-
-const CardHeaderRow = ({
-  label,
-  icon,
-  iconClassName,
-}: {
-  label: string;
-  icon: ReactNode;
-  iconClassName?: string;
-}) => (
-  <div className="flex items-center justify-between">
-    <p className="text-xs uppercase tracking-[0.25em] text-slate-500 dark:text-zinc-400">
-      {label}
-    </p>
-    <span
-      className={[
-        "rounded-full border border-slate-200 p-2 text-slate-600 dark:border-white/10 dark:text-zinc-300",
-        iconClassName,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {icon}
-    </span>
-  </div>
-);
-
-const ValueWithSkeleton = ({
-  loading,
-  value,
-  skeletonClassName,
-}: {
-  loading: boolean;
-  value: ReactNode;
-  skeletonClassName: string;
-}) => (
-  <div className="mt-3 text-3xl font-semibold">
-    {loading ? <Skeleton className={skeletonClassName} /> : value}
-  </div>
-);
+import { StatsDisplay } from "@/components/tool-ui/stats-display";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 export default function DashboardOverviewPage() {
   const { items, loading } = useContentList();
+  const { data: dashboardStats, loading: statsLoading } = useDashboardStats("all");
   const renderProgress = useRenderProgress();
   const getEffectiveStatus = (item: ContentItem) =>
     renderProgress[item.id] ? "rendering" : item.status;
@@ -78,45 +37,55 @@ export default function DashboardOverviewPage() {
     (item: ContentItem) => getEffectiveStatus(item) === "failed"
   ).length;
   const recent = items.slice(0, 3);
+  const overviewStats = [
+    {
+      key: "total-projects",
+      label: "Total Projects",
+      value: statsLoading ? "..." : dashboardStats?.totals.total ?? items.length,
+      format: { kind: "number" as const },
+      diff: dashboardStats?.diffs.projects,
+      sparkline: dashboardStats
+        ? { data: dashboardStats.trends.projects.map((point) => point.value) }
+        : undefined,
+    },
+    {
+      key: "rendered-projects",
+      label: "Rendered",
+      value: statsLoading ? "..." : dashboardStats?.totals.rendered ?? rendered,
+      format: { kind: "number" as const },
+      diff: dashboardStats?.diffs.rendered,
+      sparkline: dashboardStats
+        ? {
+            data: dashboardStats.trends.rendered.map((point) => point.value),
+            color: "rgb(16 185 129)",
+          }
+        : undefined,
+    },
+    {
+      key: "failed-projects",
+      label: "Failed",
+      value: statsLoading ? "..." : dashboardStats?.totals.failed ?? failed,
+      format: { kind: "number" as const },
+      diff: dashboardStats?.diffs.failed,
+      sparkline: dashboardStats
+        ? {
+            data: dashboardStats.trends.failed.map((point) => point.value),
+            color: "rgb(244 63 94)",
+          }
+        : undefined,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
-          <CardHeaderRow
-            label="Total Projects"
-            icon={<Activity className="h-4 w-4" />}
-          />
-          <ValueWithSkeleton
-            loading={loading}
-            value={items.length}
-            skeletonClassName="h-8 w-16"
-          />
-        </Card>
-        <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
-          <CardHeaderRow
-            label="Rendered"
-            icon={<CircleCheck className="h-4 w-4" />}
-            iconClassName="border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-          />
-          <ValueWithSkeleton
-            loading={loading}
-            value={rendered}
-            skeletonClassName="h-8 w-16"
-          />
-        </Card>
-        <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
-          <CardHeaderRow
-            label="Failed"
-            icon={<TriangleAlert className="h-4 w-4" />}
-            iconClassName="border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-          />
-          <ValueWithSkeleton
-            loading={loading}
-            value={failed}
-            skeletonClassName="h-8 w-16"
-          />
-        </Card>
+      <section>
+        <StatsDisplay
+          id="dashboard-overview-stats"
+          // title="Overview"
+          // description="Snapshot of your current project pipeline."
+          stats={overviewStats}
+          className="max-w-none"
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(420px,1fr)_minmax(280px,500px)]">

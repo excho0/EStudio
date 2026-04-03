@@ -29,6 +29,7 @@ export type {
 } from "./studio/publishes";
 export type { RenderItem, RenderListResponse } from "./studio/renders";
 export type { SettingsResponse } from "./settings";
+export type { DashboardStatsResponse } from "./dashboard";
 export type { ProfilePayload, ConnectionsResponse } from "./user/profile";
 export type { ProviderConnectionState } from "./publishing/connections";
 export type { AssetCacheEntry } from "./api/asset";
