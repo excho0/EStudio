@@ -83,8 +83,11 @@ services:
       NODE_ENV: production
       PORT: 3000
 
-      # AuthJS runtime defaults (override via host env for production)
-      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      # Public origin served through Traefik.
+      AUTH_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
+      NEXTAUTH_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
+      NEXT_PUBLIC_APP_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
+      APP_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
       NEXTAUTH_SECRET:
 
@@ -100,12 +103,23 @@ services:
 
       # Keep uploaded/media assets in the shared bind-mounted storage root.
       STORAGE_BASE_DIR: /app/data
-    ports:
-      # Host port for studio/API access.
-      - "3000:3000"
+    expose:
+      # Only Traefik should reach the web runtime directly.
+      - "3000"
     volumes:
       # Persist generated/app runtime data in local repo storage.
       - ${ESTUDIO_WEB_STORAGE_ROOT:-./data/apps/web}:/app/data
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.estudio.rule: Host(`${ESTUDIO_HOST:-studio.example.com}`)
+      traefik.http.routers.estudio.entrypoints: websecure
+      traefik.http.routers.estudio.tls: "true"
+      traefik.http.routers.estudio.tls.certresolver: stepca
+      traefik.http.services.estudio.loadbalancer.server.port: "3000"
     command: ["pnpm", "start"]
     healthcheck:
       test:
@@ -177,9 +191,9 @@ services:
       WHISPERX_CACHE_DIR: /app/data/cache/whisperx
       HF_HOME: /app/data/cache/huggingface
       TORCH_HOME: /app/data/cache/torch
-    ports:
-      # Host port used by web runtime when targeting remote captions backend.
-      - "8010:8010"
+    expose:
+      # Internal-only service used by web + worker over compose networking.
+      - "8010"
     volumes:
       # Persist service data/artifacts locally.
       - ${ESTUDIO_DATA_ROOT:-./data}/apps/captions-api:/app/data
@@ -192,3 +206,8 @@ services:
       interval: 20s
       timeout: 5s
       retries: 10
+
+networks:
+  proxy:
+    external: true
+    name: proxy
