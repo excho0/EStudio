@@ -132,6 +132,13 @@ const buildPushUrl = (payload: NotificationPersistPayload) => {
   return `/edit/${payload.contentId}/captions`;
 };
 
+const buildPushImage = (payload: NotificationPersistPayload) => {
+  if (!payload.contentId) {
+    return undefined;
+  }
+  return `/api/content/${payload.contentId}/asset?type=thumbnail`;
+};
+
 const normalizeProgress = (value?: number) => {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   const normalized = value > 1 ? value / 100 : value;
@@ -182,6 +189,7 @@ const flushBatch = async (entries: NotificationPersistPayload[]) => {
             title: buildPushTitle(payload),
             body: buildPushBody(payload),
             url: buildPushUrl(payload),
+            image: buildPushImage(payload),
             tag: payload.key,
             data: {
               contentId: payload.contentId,

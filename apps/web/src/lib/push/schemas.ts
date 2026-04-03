@@ -39,6 +39,7 @@ export const webPushPayloadSchema = z.object({
   body: z.string().optional(),
   icon: z.url().optional(),
   badge: z.url().optional(),
+  image: z.url().optional(),
   url: z.string().optional(),
   tag: z.string().optional(),
   data: z.record(z.string(), z.unknown()).optional(),

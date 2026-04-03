@@ -78,7 +78,8 @@ self.addEventListener("push", (event) => {
       const title = payload?.title || "EStudio";
       const body = payload?.body;
       const icon = payload?.icon || "/icons/pwa-192.png";
-      const badge = payload?.badge || "/icons/pwa-192.png";
+      // const badge = payload?.badge;
+      const image = payload?.image;
       const tag = payload?.tag;
       const data = {
         ...(payload?.data && typeof payload.data === "object" ? payload.data : {}),
@@ -88,7 +89,8 @@ self.addEventListener("push", (event) => {
       await self.registration.showNotification(title, {
         body,
         icon,
-        badge,
+        // ...(badge ? { badge } : {}),
+        ...(image ? { image } : {}),
         tag,
         data,
       });
