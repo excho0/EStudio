@@ -16,6 +16,7 @@ import { getCaptionQueue, enqueueCaptionJob } from "@/lib/queue/caption-queue";
 import { getPublishQueue, enqueuePublishQueueJob } from "@/lib/queue/publish-queue";
 import {
   emitCaptionUpdate,
+  emitContentUpdate,
   emitPublishUpdate,
   emitRenderQueued,
 } from "@/lib/socket/manager";
@@ -23,6 +24,7 @@ import {
   listActiveJobActivities,
   updateJobActivityStateById,
 } from "@/lib/data/notifications";
+import { updateContentItem } from "@/lib/data/content";
 import type { NotificationItem } from "@/types";
 
 const redisUrl =
@@ -516,6 +518,54 @@ renderWorker.on("failed", (job, error) => {
     },
     "Job failed."
   );
+
+  if (!job?.data?.id || !job.data?.userId || !job.data?.jobId) {
+    return;
+  }
+
+  const contentId = String(job.data.id);
+  const userId = String(job.data.userId);
+  const jobId = String(job.data.jobId);
+  const maxAttempts =
+    typeof job.opts.attempts === "number" ? Math.max(1, job.opts.attempts) : 1;
+  const attemptsMade = Math.max(1, job.attemptsMade ?? 1);
+
+  if (attemptsMade < maxAttempts) {
+    logger.warn(
+      {
+        queue: "content-render",
+        jobId: job.id,
+        userId,
+        contentId,
+        attempt: attemptsMade,
+        maxAttempts,
+      },
+      "Render attempt failed; queue will retry."
+    );
+    return;
+  }
+
+  void (async () => {
+    await updateContentItem(userId, contentId, { status: "failed" });
+    emitContentUpdate({
+      userId,
+      type: "content.status",
+      id: contentId,
+      jobId,
+      status: "failed",
+    });
+  })().catch((cause) => {
+    logger.error(
+      {
+        queue: "content-render",
+        jobId,
+        userId,
+        contentId,
+        error: cause instanceof Error ? cause.message : String(cause),
+      },
+      "Failed to persist final render failure state."
+    );
+  });
 });
 
 publishWorker.on("failed", (job, error) => {

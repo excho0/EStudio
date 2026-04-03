@@ -101,6 +101,11 @@ services:
       # Internal captions API URL for compose networking.
       CAPTION_REMOTE_CAPTIONS_API_URL: ${CAPTION_REMOTE_CAPTIONS_API_URL:-http://captions-api:8010}
 
+      # Shader rendering requires an explicit Chromium GL backend in containerized environments.
+      REMOTION_RENDER_GL: ${REMOTION_RENDER_GL:-angle}
+      REMOTION_BROWSER_EXECUTABLE: ${REMOTION_BROWSER_EXECUTABLE:-/usr/local/bin/chromium-headless-angle}
+      REMOTION_RENDER_BROWSER_EXECUTABLE: ${REMOTION_RENDER_BROWSER_EXECUTABLE:-/usr/local/bin/chromium-headless-angle}
+
       # Keep uploaded/media assets in the shared bind-mounted storage root.
       STORAGE_BASE_DIR: /app/data
     expose:
@@ -166,6 +171,11 @@ services:
 
       # Internal base URL for worker->web asset fetches during rendering.
       RENDER_ASSET_BASE_URL: ${RENDER_ASSET_BASE_URL:-http://web:3000}
+
+      # Shader rendering requires an explicit Chromium GL backend in containerized environments.
+      REMOTION_RENDER_GL: ${REMOTION_RENDER_GL:-angle}
+      REMOTION_BROWSER_EXECUTABLE: ${REMOTION_BROWSER_EXECUTABLE:-/usr/local/bin/chromium-headless-angle}
+      REMOTION_RENDER_BROWSER_EXECUTABLE: ${REMOTION_RENDER_BROWSER_EXECUTABLE:-/usr/local/bin/chromium-headless-angle}
 
       # Keep uploaded/media assets in the shared bind-mounted storage root.
       STORAGE_BASE_DIR: /app/data
