@@ -94,9 +94,14 @@ const updateAccountTokens = async (
     );
 };
 
+type OAuthClientCredentialsCarrier = {
+  credentials: Auth.Credentials;
+  setCredentials: (credentials: Auth.Credentials) => void;
+};
+
 const persistAndApplyCredentials = async (
   userId: string,
-  oauth2Client: Auth.OAuth2Client,
+  oauth2Client: OAuthClientCredentialsCarrier,
   credentials: Auth.Credentials
 ) => {
   oauth2Client.setCredentials({

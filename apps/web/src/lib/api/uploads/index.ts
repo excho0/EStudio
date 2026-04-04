@@ -8,6 +8,15 @@ const DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
 const storage = getStorage();
 const getDraftBaseDir = (userId: string) =>
   storageKey(getUserUploadsDir(userId), "drafts");
+const getUploadsBaseDir = (userId: string) => getUserUploadsDir(userId);
+
+const mimeByExtension: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
 
 const ensureDraftDirs = async (userId: string) => {
   const draftBaseDir = getDraftBaseDir(userId);
@@ -93,4 +102,35 @@ export const handleDeleteDraft = async (request: Request, userId: string) => {
   }
   await storage.deleteFile(body.path);
   return NextResponse.json({ ok: true });
+};
+
+export const handleReadDraft = async (request: Request, userId: string) => {
+  const { searchParams } = new URL(request.url);
+  const targetPath = searchParams.get("path");
+  if (!targetPath) {
+    return NextResponse.json({ error: "Missing path." }, { status: 400 });
+  }
+
+  const uploadsBaseDir = getUploadsBaseDir(userId);
+  if (!targetPath.startsWith(uploadsBaseDir)) {
+    return NextResponse.json({ error: "Invalid path." }, { status: 400 });
+  }
+
+  const stats = await storage.stat(targetPath);
+  if (!stats) {
+    return NextResponse.json({ error: "Draft not found." }, { status: 404 });
+  }
+
+  const buffer = await storage.readFile(targetPath);
+  const extension = path.extname(targetPath).toLowerCase();
+  const contentType = mimeByExtension[extension] ?? "application/octet-stream";
+
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(stats.size),
+      "Cache-Control": "private, max-age=60",
+    },
+  });
 };

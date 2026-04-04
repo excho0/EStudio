@@ -9,6 +9,10 @@ import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { getProviderAdapter } from "@/lib/publishing";
 import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 import { emitPublishUpdate } from "@/lib/socket/manager";
+import { getStorage } from "@/lib/storage";
+import { getUserPublishesDir } from "@/lib/content/store";
+
+const storage = getStorage();
 
 const getSessionEmail = (session: Session | null) => session?.user?.email ?? null;
 
@@ -72,6 +76,27 @@ const fetchPublish = async (userId: string, contentId: string, publishId: string
   return publish ?? null;
 };
 
+const parsePublishMetadata = (metadata: string | null) => {
+  if (!metadata) return null;
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const deletePublishThumbnailAsset = async (userId: string, metadata: string | null) => {
+  const parsed = parsePublishMetadata(metadata);
+  const thumbnailAssetPath =
+    typeof parsed?.thumbnailAssetPath === "string"
+      ? parsed.thumbnailAssetPath
+      : null;
+  if (!thumbnailAssetPath) return;
+  const publishAssetsRoot = getUserPublishesDir(userId);
+  if (!thumbnailAssetPath.startsWith(publishAssetsRoot)) return;
+  await storage.deleteFile(thumbnailAssetPath).catch(() => {});
+};
+
 const resolveAuthAndPublish = async (contentId: string, publishId: string) => {
   const session = await auth();
   const email = getSessionEmail(session);
@@ -104,6 +129,7 @@ export const handleDeletePublish = async (contentId: string, publishId: string) 
     publish.providerAssetId.startsWith("pending-");
 
   if (publish.status === "deleted") {
+    await deletePublishThumbnailAsset(user.id, publish.metadata ?? null);
     if (isPostgres) {
       await (db as PostgresDrizzleDb)
         .delete(schema.publishes)
@@ -191,6 +217,8 @@ export const handleDeletePublish = async (contentId: string, publishId: string) 
       .where(eq(sqliteSchema.publishes.id, publishId));
   }
 
+  await deletePublishThumbnailAsset(user.id, publish.metadata ?? null);
+
   return NextResponse.json({ deleted: true });
 };
 
@@ -218,16 +246,9 @@ export const handleRetryPublish = async (contentId: string, publishId: string) =
   }
 
   enqueuePublishJob(publishId);
-  const parsedMetadata =
-    typeof publish.metadata === "string"
-      ? (() => {
-          try {
-            return JSON.parse(publish.metadata) as { title?: unknown };
-          } catch {
-            return null;
-          }
-        })()
-      : null;
+  const parsedMetadata = parsePublishMetadata(publish.metadata ?? null) as
+    | { title?: unknown }
+    | null;
   const metadataTitle =
     typeof parsedMetadata?.title === "string" && parsedMetadata.title.trim().length > 0
       ? parsedMetadata.title.trim()

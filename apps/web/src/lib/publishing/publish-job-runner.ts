@@ -189,6 +189,11 @@ export const runPublishJob = async (job: PublishJob) => {
     typeof publishMetadata.options === "object" && publishMetadata.options !== null
       ? (publishMetadata.options as Record<string, unknown>)
       : {};
+  const customThumbnailKey =
+    typeof publishMetadata.thumbnailAssetPath === "string" &&
+    publishMetadata.thumbnailAssetPath.trim().length > 0
+      ? publishMetadata.thumbnailAssetPath
+      : null;
 
   const renderKey = getContentRenderPath(
     publish.userId,
@@ -219,13 +224,14 @@ export const runPublishJob = async (job: PublishJob) => {
     });
     return;
   }
-  const thumbnailRelative = await findContentAssetPath(
+  const contentThumbnailKey = await findContentAssetPath(
     publish.userId,
     publish.contentId,
     "thumbnail"
   );
-  const thumbnailPath = thumbnailRelative
-    ? resolveContentPath(storageKey(thumbnailRelative))
+  const thumbnailKey = customThumbnailKey ?? contentThumbnailKey;
+  const thumbnailPath = thumbnailKey
+    ? storage.resolvePath(thumbnailKey)
     : null;
 
   try {
@@ -241,7 +247,7 @@ export const runPublishJob = async (job: PublishJob) => {
       renderId: publish.renderId,
       renderKey,
       renderPath,
-      thumbnailKey: thumbnailRelative,
+      thumbnailKey,
       thumbnailPath,
       metadata: {
         title,
@@ -261,6 +267,7 @@ export const runPublishJob = async (job: PublishJob) => {
             : undefined,
         scheduleAt:
           typeof options.scheduleAt === "string" ? options.scheduleAt : undefined,
+        containsSyntheticMedia: options.containsSyntheticMedia === true,
       },
       onProgress: (progress) => {
         const percent =

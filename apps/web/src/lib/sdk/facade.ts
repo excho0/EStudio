@@ -8,16 +8,16 @@ import { uploadsSdk } from "@/lib/sdk/domains/uploads";
 import { userSdk } from "@/lib/sdk/domains/user";
 import { userPreferencesSdk } from "@/lib/sdk/domains/user-preferences";
 
-export class Sdk {
-  readonly content = contentSdk;
-  readonly dashboard = dashboardSdk;
-  readonly uploads = uploadsSdk;
-  readonly user = userSdk;
-  readonly userPreferences = userPreferencesSdk;
-  readonly publish = publishSdk;
-  readonly notifications = notificationsSdk;
-  readonly settings = settingsSdk;
-  readonly meta = metaSdk;
-}
+export const sdk = {
+  content: contentSdk,
+  dashboard: dashboardSdk,
+  uploads: uploadsSdk,
+  user: userSdk,
+  userPreferences: userPreferencesSdk,
+  publish: publishSdk,
+  notifications: notificationsSdk,
+  settings: settingsSdk,
+  meta: metaSdk,
+} as const;
 
-export const sdk = new Sdk();
+export type Sdk = typeof sdk;

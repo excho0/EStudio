@@ -39,6 +39,7 @@ export type ProviderCapabilities = {
   privacyOptions?: Array<"public" | "unlisted" | "private">;
   supportsTags?: boolean;
   supportsCategories?: boolean;
+  supportsSyntheticMediaDisclosure?: boolean;
 };
 
 export type ProviderDefinition = {

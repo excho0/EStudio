@@ -3,13 +3,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
+  DndContext,
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   CalendarClock,
   CheckCircle2,
   Film,
   Globe,
+  GripVertical,
   Link2,
   Lock,
   PencilLine,
+  RotateCcw,
+  Sparkles,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -24,8 +43,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { SelectableCard } from "@/components/ui/selectable-card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  TagsInput,
+  TagsInputInput,
+  TagsInputItem,
+  TagsInputItemDelete,
+  TagsInputItemText,
+  TagsInputList,
+} from "@/components/ui/tags-input";
 import DatePickerStandard2 from "@/components/controls/date-picker-standard-2";
 import { IconSelect, type IconSelectOption } from "@/components/ui/icon-select";
 import {
@@ -53,6 +81,7 @@ import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { Link } from "@/components/navigation/route-transition";
+import { cn } from "@/lib/shared/utils";
 
 type PublishTarget = {
   id: string;
@@ -82,6 +111,7 @@ type ProviderState = {
     privacyOptions?: Array<"public" | "unlisted" | "private">;
     supportsTags?: boolean;
     supportsCategories?: boolean;
+    supportsSyntheticMediaDisclosure?: boolean;
   };
 };
 
@@ -211,6 +241,50 @@ const SelectableCardSkeletons = ({
   </motion.div>
 );
 
+const SortableTagItem = ({ value }: { value: string }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: value });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={cn("touch-none", isDragging && "z-10 opacity-70")}
+    >
+      <TagsInputItem
+        value={value}
+        className={cn(
+          "min-h-9 items-center gap-2 border-slate-200/80 bg-white/90 pl-2 pr-1.5 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white/85",
+          isDragging && "opacity-80"
+        )}
+      >
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          className="inline-flex size-4 shrink-0 cursor-grab items-center justify-center self-center rounded-sm text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:text-white/40 dark:hover:text-white/70"
+          aria-label={`Reorder tag ${value}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5 shrink-0" />
+        </button>
+        <TagsInputItemText className="min-w-0 flex-1">{value}</TagsInputItemText>
+        <TagsInputItemDelete />
+      </TagsInputItem>
+    </div>
+  );
+};
+
 export function PublishDrawer({
   contentId,
   trigger,
@@ -228,15 +302,19 @@ export function PublishDrawer({
   const [selectedRender, setSelectedRender] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [contentTitle, setContentTitle] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [thumbnailCacheBust, setThumbnailCacheBust] = useState<number | null>(
     null
   );
+  const [thumbnailAssetPath, setThumbnailAssetPath] = useState<string | null>(null);
+  const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [visibility, setVisibility] = useState<
     "public" | "unlisted" | "private" | "scheduled"
   >("private");
   const [scheduleAt, setScheduleAt] = useState<Date | undefined>(undefined);
+  const [containsSyntheticMedia, setContainsSyntheticMedia] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activePublishId, setActivePublishId] = useState<string | null>(null);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
@@ -246,8 +324,18 @@ export function PublishDrawer({
     uploaded?: number;
     total?: number;
   } | null>(null);
+  const thumbnailFileInputRef = useRef<HTMLInputElement | null>(null);
+  const preserveDraftThumbnailRef = useRef(false);
   const renderScrollRef = useRef<HTMLDivElement | null>(null);
   const { socket } = useSocketIO();
+  const tagSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
+  );
   const canLoadData = open && status === "authenticated" && Boolean(contentId);
 
   const publishTargetsQuery = useQuery<ProviderState[]>({
@@ -411,6 +499,54 @@ export function PublishDrawer({
       ].join(", "),
     } satisfies React.CSSProperties;
   }, [reviewPalette]);
+  const isCustomThumbnail = Boolean(thumbnailAssetPath);
+  const resolvedThumbnailUrl = useMemo(() => {
+    if (!thumbnailUrl) return null;
+    if (!thumbnailCacheBust) return thumbnailUrl;
+    const separator = thumbnailUrl.includes("?") ? "&" : "?";
+    return `${thumbnailUrl}${separator}v=${thumbnailCacheBust}`;
+  }, [thumbnailCacheBust, thumbnailUrl]);
+
+  const cleanupDraftThumbnail = async (path: string | null) => {
+    if (!path) return;
+    try {
+      await sdk.uploads.deleteDraft(path);
+    } catch {
+      // Best effort cleanup for abandoned draft thumbnails.
+    }
+  };
+
+  const handleRevertThumbnail = async () => {
+    const pathToDelete = thumbnailAssetPath;
+    setThumbnailAssetPath(null);
+    setThumbnailUrl(contentSummaryQuery.data?.thumbnailUrl ?? null);
+    setThumbnailCacheBust(Date.now());
+    await cleanupDraftThumbnail(pathToDelete);
+  };
+
+  const handleThumbnailFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setThumbnailUploading(true);
+    try {
+      const uploaded = await sdk.uploads.uploadDraft(file, "thumbnail");
+      const previousDraftPath = thumbnailAssetPath;
+      setThumbnailAssetPath(uploaded.path);
+      setThumbnailUrl(sdk.uploads.assetUrl(uploaded.path, String(uploaded.expiresAt)));
+      setThumbnailCacheBust(Date.now());
+      await cleanupDraftThumbnail(previousDraftPath);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to upload thumbnail."
+      );
+    } finally {
+      setThumbnailUploading(false);
+    }
+  };
 
   const resetState = () => {
     setStepId(steps[0].id);
@@ -418,11 +554,15 @@ export function PublishDrawer({
     setSelectedRender(null);
     setTitle("");
     setDescription("");
+    setTags([]);
     setContentTitle(null);
     setThumbnailUrl(null);
     setThumbnailCacheBust(null);
+    setThumbnailAssetPath(null);
+    setThumbnailUploading(false);
     setVisibility("private");
     setScheduleAt(undefined);
+    setContainsSyntheticMedia(false);
   };
 
   const publishMutation = useMutation({
@@ -447,20 +587,45 @@ export function PublishDrawer({
         metadata: {
           title: title.trim(),
           description: description.trim(),
+          tags:
+            selectedProviderData?.capabilities?.supportsTags && tags.length > 0
+              ? tags
+              : undefined,
           options: {
             privacy: selectedProviderData?.capabilities?.supportsPrivacy
               ? privacyValue
               : undefined,
             scheduleAt: scheduleValue || undefined,
+            containsSyntheticMedia:
+              selectedProviderData?.capabilities?.supportsSyntheticMediaDisclosure
+                ? containsSyntheticMedia
+                : undefined,
           },
           thumbnailUrl: thumbnailUrl ?? undefined,
+          thumbnailAssetPath: thumbnailAssetPath ?? undefined,
         },
       });
       return payload.publish?.id ?? null;
     },
   });
 
+  const handleTagSortEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setTags((current) => {
+      const oldIndex = current.indexOf(String(active.id));
+      const newIndex = current.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return arrayMove(current, oldIndex, newIndex);
+    });
+  };
+
   const openDrawer = (nextOpen: boolean) => {
+    if (!nextOpen && !preserveDraftThumbnailRef.current) {
+      void cleanupDraftThumbnail(thumbnailAssetPath);
+    }
+    if (!nextOpen) {
+      preserveDraftThumbnailRef.current = false;
+    }
     setOpen(nextOpen);
     if (!nextOpen) {
       resetState();
@@ -521,9 +686,10 @@ export function PublishDrawer({
   useEffect(() => {
     if (!open) return;
     if (!contentSummaryQuery.data?.thumbnailUrl) return;
+    if (thumbnailAssetPath) return;
     setThumbnailUrl(contentSummaryQuery.data.thumbnailUrl);
     setThumbnailCacheBust(Date.now());
-  }, [contentSummaryQuery.data?.thumbnailUrl, open]);
+  }, [contentSummaryQuery.data?.thumbnailUrl, open, thumbnailAssetPath]);
 
   useEffect(() => {
     if (!open) return;
@@ -576,6 +742,7 @@ export function PublishDrawer({
     if (!selectedProvider || !selectedRender || !canContinueDetails) return;
     setSubmitting(true);
     try {
+      preserveDraftThumbnailRef.current = true;
       const publishId = await publishMutation.mutateAsync();
       if (publishId) {
         setActivePublishId(publishId);
@@ -584,6 +751,7 @@ export function PublishDrawer({
       }
       openDrawer(false);
     } catch (error) {
+      preserveDraftThumbnailRef.current = false;
       toast.error(
         error instanceof Error ? error.message : "Unable to publish."
       );
@@ -883,15 +1051,17 @@ export function PublishDrawer({
                             Thumbnail
                           </label>
                           <Card className="flex p-3">
-
+                            <input
+                              ref={thumbnailFileInputRef}
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={handleThumbnailFileChange}
+                            />
                             <div className="flex w-full gap-4">
-                              {thumbnailUrl ? (
+                              {resolvedThumbnailUrl ? (
                                 <ImageWithSkeleton
-                                  src={
-                                    thumbnailCacheBust
-                                      ? `${thumbnailUrl}&v=${thumbnailCacheBust}`
-                                      : thumbnailUrl
-                                  }
+                                  src={resolvedThumbnailUrl}
                                   alt={contentTitle ?? "Content thumbnail"}
                                   className="h-16 w-28 rounded-md object-cover"
                                   wrapperClassName="h-16 w-28 rounded-md shrink-0"
@@ -899,15 +1069,50 @@ export function PublishDrawer({
                               ) : (
                                 <div className="h-16 w-28 shrink-0 rounded-md bg-muted" />
                               )}
-                              <div className="flex flex-col justify-center">
-                                <p className="text-sm font-medium text-slate-900 dark:text-white">
-                                  Using content thumbnail
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Derived from the main content item.
-                                </p>
+                              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                    {isCustomThumbnail
+                                      ? "Custom thumbnail selected"
+                                      : "Using content thumbnail"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isCustomThumbnail
+                                      ? "This upload will use your custom thumbnail instead of the content default."
+                                      : "Derived from the main content item. You can replace it just for this publish."}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {isCustomThumbnail ? (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="outline"
+                                      className="size-9 rounded-full"
+                                      onClick={() => void handleRevertThumbnail()}
+                                      disabled={thumbnailUploading || submitting}
+                                      aria-label="Revert to content thumbnail"
+                                    >
+                                      <RotateCcw className="size-4 shrink-0" />
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className="size-9 rounded-full"
+                                    onClick={() => thumbnailFileInputRef.current?.click()}
+                                    disabled={thumbnailUploading || submitting}
+                                    aria-label={
+                                      isCustomThumbnail
+                                        ? "Change custom thumbnail"
+                                        : "Change thumbnail"
+                                    }
+                                  >
+                                    <PencilLine className="size-4 shrink-0" />
+                                  </Button>
+                                </div>
                               </div>
-
                             </div>
                           </Card>
                         </div>
@@ -923,6 +1128,68 @@ export function PublishDrawer({
                             rows={4}
                           />
                         </div>
+                        {selectedProviderData?.capabilities?.supportsTags ? (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-900 dark:text-white">
+                              Tags
+                            </label>
+                            <p className="text-sm text-muted-foreground">
+                              Add keywords to help organize this upload. Drag to reorder and click a tag to edit it.
+                            </p>
+                            <TagsInput
+                              value={tags}
+                              onValueChange={setTags}
+                              onValidate={(value) => {
+                                const normalized = value.trim();
+                                return (
+                                  normalized.length >= 2 &&
+                                  normalized.length <= 30 &&
+                                  !tags.some(
+                                    (tag) =>
+                                      tag.toLowerCase() === normalized.toLowerCase()
+                                  )
+                                );
+                              }}
+                              onInvalid={() => {
+                                toast.error(
+                                  "Tags must be unique and between 2 and 30 characters."
+                                );
+                              }}
+                              editable
+                              addOnPaste
+                              addOnTab
+                              blurBehavior="add"
+                              delimiter=","
+                              max={12}
+                              className="w-full gap-3"
+                            >
+                              <DndContext
+                                sensors={tagSensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleTagSortEnd}
+                              >
+                                <SortableContext
+                                  items={tags}
+                                  strategy={rectSortingStrategy}
+                                >
+                                  <TagsInputList className="min-h-12 gap-2  border-slate-200/80 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-white/5">
+                                    {tags.map((tag) => (
+                                      <SortableTagItem key={tag} value={tag} />
+                                    ))}
+                                    <TagsInputInput
+                                      placeholder={
+                                        tags.length === 0
+                                          ? "Add tags and press Enter…"
+                                          : "Add another tag…"
+                                      }
+                                      className="min-w-32"
+                                    />
+                                  </TagsInputList>
+                                </SortableContext>
+                              </DndContext>
+                            </TagsInput>
+                          </div>
+                        ) : null}
                       </div>
                     )}
 
@@ -1000,6 +1267,33 @@ export function PublishDrawer({
                             </motion.div>
                           ) : null}
                         </AnimatePresence>
+
+                        {selectedProviderData?.capabilities?.supportsSyntheticMediaDisclosure ? (
+                          <Card className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 shadow-none dark:border-white/10 dark:bg-white/3">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex min-w-0 items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/80 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white/80">
+                                  <Sparkles className="h-4 w-4 shrink-0" />
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                    Synthetic media disclosure
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Tell {providerName} if this upload includes realistic AI-generated or significantly altered media.
+                                  </p>
+                                </div>
+                              </div>
+                              <Switch
+                                checked={containsSyntheticMedia}
+                                onCheckedChange={(checked) =>
+                                  setContainsSyntheticMedia(Boolean(checked))
+                                }
+                                className="shrink-0"
+                              />
+                            </div>
+                          </Card>
+                        ) : null}
                       </div>
                     )}
 
@@ -1018,9 +1312,9 @@ export function PublishDrawer({
 
                             <div className="grid gap-2.5 min-[720px]:grid-cols-[minmax(0,1fr)_minmax(12rem,0.34fr)]">
                               <div className="relative aspect-[16/10] min-h-[12rem] w-full overflow-hidden rounded-[1.4rem] shadow-[0_24px_48px_-30px_rgba(0,0,0,0.56)] min-[480px]:aspect-[1.5] min-[480px]:min-h-[14rem] min-[720px]:aspect-[1.65] min-[720px]:min-h-[16rem]">
-                                {thumbnailUrl ? (
+                                {resolvedThumbnailUrl ? (
                                   <ImageWithSkeleton
-                                    src={`${thumbnailUrl}${thumbnailCacheBust ? `&v=${thumbnailCacheBust}` : ""}`}
+                                    src={resolvedThumbnailUrl}
                                     alt={contentTitle ?? title}
                                     className="absolute inset-0 h-full w-full object-cover"
                                     wrapperClassName="absolute inset-0 h-full w-full"

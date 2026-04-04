@@ -22,6 +22,7 @@
     "@shadcnblocks": "https://shadcnblocks.com/r/{name}.json",
     "@reui": "https://reui.io/r/{name}.json",
     "@efferd": "https://efferd.com/r/{name}.json",
-    "@tool-ui": "https://www.tool-ui.com/r/{name}.json"
+    "@tool-ui": "https://www.tool-ui.com/r/{name}.json",
+    "@diceui": "https://diceui.com/r/{name}.json"
   }
 }

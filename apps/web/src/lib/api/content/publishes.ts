@@ -13,8 +13,11 @@ import { enqueuePublishJob } from "@/lib/publishing/publish-queue";
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
+import { getPublishThumbnailPath } from "@/lib/content/store";
+import { getStorage } from "@/lib/storage";
 
 const publishApiLogger = getLogger("publish-api");
+const storage = getStorage();
 
 const getSessionEmail = (session: Session | null) =>
   session?.user?.email ?? null;
@@ -158,6 +161,26 @@ const createDeterministicPublishId = (
     )
     .digest("hex")
     .slice(0, 32);
+
+const finalizePublishThumbnail = async (
+  userId: string,
+  contentId: string,
+  publishId: string,
+  draftPath: string
+) => {
+  if (!(await storage.exists(draftPath))) {
+    throw new Error("Custom thumbnail draft is missing.");
+  }
+  const extension = (draftPath.split(".").pop() ?? "bin").trim();
+  const targetPath = getPublishThumbnailPath(
+    userId,
+    contentId,
+    publishId,
+    extension || ".bin"
+  );
+  await storage.move(draftPath, targetPath);
+  return targetPath;
+};
 
 const failStalePublishes = async (
   userId: string,
@@ -409,8 +432,24 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   const metadataPayload: Record<string, unknown> = payload.data.metadata
     ? { ...payload.data.metadata }
     : {};
+  if (typeof metadataPayload.thumbnailAssetPath === "string") {
+    metadataPayload.thumbnailAssetPath = metadataPayload.thumbnailAssetPath.trim();
+  }
   if (idempotencyKey) {
     metadataPayload.idempotencyKey = idempotencyKey;
+  }
+  if (
+    typeof metadataPayload.thumbnailAssetPath === "string" &&
+    metadataPayload.thumbnailAssetPath.length > 0
+  ) {
+    const assetPath = await finalizePublishThumbnail(
+      user.id,
+      contentId,
+      id,
+      metadataPayload.thumbnailAssetPath
+    );
+    metadataPayload.thumbnailAssetPath = assetPath;
+    metadataPayload.thumbnailUrl = `${getRequestBaseUrl(request)}/api/uploads?path=${encodeURIComponent(assetPath)}`;
   }
   const metadata =
     Object.keys(metadataPayload).length > 0 ? JSON.stringify(metadataPayload) : null;

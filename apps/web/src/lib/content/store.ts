@@ -24,6 +24,9 @@ export const getUserRoot = (userId: string) => storageKey("users", userId);
 export const getUserUploadsDir = (userId: string) =>
   storageKey(getUserRoot(userId), "uploads");
 
+export const getUserPublishesDir = (userId: string) =>
+  storageKey(getUserUploadsDir(userId), "publishes");
+
 export const getUserVideosDir = (userId: string) =>
   storageKey(getUserUploadsDir(userId), "videos");
 
@@ -64,6 +67,27 @@ export function getContentRenderPath(
 
 export function getContentRenderDir(userId: string, id: string) {
   return storageKey(getUserRendersRootDir(userId), id);
+}
+
+export function getPublishAssetDir(
+  userId: string,
+  contentId: string,
+  publishId: string
+) {
+  return storageKey(getUserPublishesDir(userId), contentId, publishId);
+}
+
+export function getPublishThumbnailPath(
+  userId: string,
+  contentId: string,
+  publishId: string,
+  extension: string
+) {
+  const safeExtension = extension.startsWith(".") ? extension : `.${extension}`;
+  return storageKey(
+    getPublishAssetDir(userId, contentId, publishId),
+    `thumbnail${safeExtension || ".bin"}`
+  );
 }
 
 export async function findLatestRenderPath(userId: string, id: string) {

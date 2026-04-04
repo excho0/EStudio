@@ -9,6 +9,7 @@ export const publishPrivacySchema = z
 export const publishOptionsSchema = z.object({
   privacy: publishPrivacySchema.optional(),
   scheduleAt: z.string().nullable().optional(),
+  containsSyntheticMedia: z.boolean().optional(),
 }).describe("Publish options.");
 
 // Payload metadata sent to providers.
@@ -23,7 +24,9 @@ export const publishMetadataSchema = z.object({
 export const studioPublishMetadataSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   thumbnailUrl: z.string().optional(),
+  thumbnailAssetPath: z.string().optional(),
   options: publishOptionsSchema
     .extend({
       privacy: z.string().optional(),

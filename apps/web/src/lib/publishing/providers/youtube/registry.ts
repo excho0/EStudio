@@ -29,5 +29,6 @@ export const youtubeProviderDefinition: ProviderDefinition = {
     privacyOptions: ["public", "unlisted", "private"],
     supportsTags: true,
     supportsCategories: true,
+    supportsSyntheticMediaDisclosure: true,
   },
 };

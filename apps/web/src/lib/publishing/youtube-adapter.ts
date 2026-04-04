@@ -1,5 +1,6 @@
 import { Readable } from "stream";
 import sharp from "sharp";
+import type { youtube_v3 } from "googleapis";
 
 import type { PublishPayload, PublishResult, ProviderAdapter } from "@/types";
 import { getGoogleYoutubeClient } from "@/lib/publishing/google-youtube";
@@ -28,27 +29,37 @@ export const youtubeAdapter: ProviderAdapter = {
     const description = payload.metadata.description?.trim() || undefined;
     const requestedPrivacy = payload.options?.privacy ?? "private";
     const scheduleAt = payload.options?.scheduleAt ?? undefined;
+    const containsSyntheticMedia =
+      payload.options?.containsSyntheticMedia === true;
     const privacy = scheduleAt ? "private" : requestedPrivacy;
     const publishAt = scheduleAt ?? undefined;
 
     payload.onProgress?.({ stage: "uploading", progress: 0 });
 
-    const response = await youtube.videos.insert(
+    const requestBody: Partial<youtube_v3.Schema$Video> & {
+      status?: Partial<youtube_v3.Schema$VideoStatus> & {
+        containsSyntheticMedia?: boolean;
+      };
+    } = {
+      snippet: {
+        title,
+        description,
+        tags: payload.metadata.tags,
+        categoryId: payload.metadata.categoryId,
+      },
+      // The API accepts this field before the generated googleapis types do.
+      status: {
+        privacyStatus: privacy,
+        publishAt,
+        selfDeclaredMadeForKids: false,
+        containsSyntheticMedia,
+      },
+    };
+
+    const response = (await youtube.videos.insert(
       {
         part: ["snippet", "status"],
-        requestBody: {
-          snippet: {
-            title,
-            description,
-            tags: payload.metadata.tags,
-            categoryId: payload.metadata.categoryId,
-          },
-          status: {
-            privacyStatus: privacy,
-            publishAt,
-            selfDeclaredMadeForKids: false,
-          },
-        },
+        requestBody: requestBody as youtube_v3.Schema$Video,
         media: {
           body: storage.createReadStream(payload.renderKey),
         },
@@ -66,9 +77,9 @@ export const youtubeAdapter: ProviderAdapter = {
           });
         },
       }
-    );
+    )) as { data?: { id?: string | null } };
 
-    const videoId = response.data.id ?? null;
+    const videoId = response.data?.id ?? null;
     if (!videoId) {
       throw new Error("YouTube upload failed to return a video id.");
     }

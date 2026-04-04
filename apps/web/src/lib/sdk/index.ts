@@ -1,5 +1,6 @@
 export { ApiClient } from "@/lib/sdk/client";
-export { Sdk, sdk } from "@/lib/sdk/facade";
+export { sdk } from "@/lib/sdk/facade";
+export type { Sdk } from "@/lib/sdk/facade";
 export { contentSdk } from "@/lib/sdk/domains/content";
 export { dashboardSdk } from "@/lib/sdk/domains/dashboard";
 export { uploadsSdk } from "@/lib/sdk/domains/uploads";
