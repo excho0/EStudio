@@ -226,6 +226,12 @@ const ProviderSection = ({
       item.providerAccountId && connectedAccountIds.has(item.providerAccountId)
     );
     const hasProviderAsset = Boolean(item.providerAssetId);
+    const supportsDeleteAsset = Boolean(
+      definition?.capabilities?.supportsDeleteAsset
+    );
+    const canRemoveRecord = item.status === "deleted";
+    const canDeleteFromProvider =
+      isConnected && hasProviderAsset && supportsDeleteAsset && item.status !== "deleted";
     const items: ActionItem[] = [
       ...(providerUrl
         ? [
@@ -262,21 +268,30 @@ const ProviderSection = ({
             },
           ]
         : []),
-      ...(isConnected
+      ...(canDeleteFromProvider || canRemoveRecord
         ? [
             {
               type: "confirm" as const,
-              label:
-                item.status === "deleted" || !hasProviderAsset
-                  ? "Remove record"
-                  : "Delete from provider",
+              label: canRemoveRecord ? "Remove record" : `Delete from ${label}`,
               icon: Trash2,
-              description:
-                item.status === "deleted" || !hasProviderAsset
-                  ? "This removes the local publish record."
-                  : "This deletes the published asset from the provider.",
+              description: canRemoveRecord
+                ? "This removes the local publish record."
+                : `This deletes the published asset from ${label} and then removes the local record.`,
               destructive: true,
               onConfirm: () => onDelete(item),
+            },
+          ]
+        : []),
+      ...((!canRemoveRecord || canDeleteFromProvider)
+        ? [
+            {
+              type: "confirm" as const,
+              label: "Remove record",
+              icon: Trash2,
+              description:
+                "This removes the local publish record only and leaves the provider asset untouched.",
+              destructive: true,
+              onConfirm: () => onDelete(item, { localOnly: true }),
             },
           ]
         : []),
@@ -516,12 +531,66 @@ export default function PublishesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (publishId: string) => {
+    mutationFn: async ({
+      publishId,
+      localOnly,
+    }: {
+      publishId: string;
+      localOnly?: boolean;
+    }) => {
       if (!id) return;
-      await sdk.content.deletePublish(id, publishId);
+      await sdk.content.deletePublish(id, publishId, { localOnly });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: publishQueryKey });
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.publishesBase });
+      const previousEntries = queryClient.getQueriesData<PublishListResponse | undefined>({
+        queryKey: queryKeys.publishesBase,
+      });
+      if (variables.localOnly) {
+        queryClient.setQueriesData<PublishListResponse | undefined>(
+          { queryKey: queryKeys.publishesBase },
+          (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              publishes: current.publishes.filter(
+                (publish) => publish.id !== variables.publishId
+              ),
+            };
+          }
+        );
+      }
+      return { previousEntries };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousEntries) {
+        for (const [key, value] of context.previousEntries) {
+          queryClient.setQueryData(key, value);
+        }
+      }
+    },
+    onSuccess: (_data, variables) => {
+      if (!variables.localOnly) {
+        queryClient.setQueriesData<PublishListResponse | undefined>(
+          { queryKey: queryKeys.publishesBase },
+          (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              publishes: current.publishes.map((publish) =>
+                publish.id === variables.publishId
+                  ? {
+                      ...publish,
+                      status: "deleted",
+                      providerAssetId: null,
+                    }
+                  : publish
+              ),
+            };
+          }
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
     },
   });
 
@@ -585,16 +654,24 @@ export default function PublishesPage() {
     toast.error(message);
   }, [error]);
 
-  const handleDelete = async (item: PublishRecord) => {
+  const handleDelete = async (
+    item: PublishRecord,
+    options?: { localOnly?: boolean }
+  ) => {
     if (!id) return;
     try {
-      await toast.promise(deleteMutation.mutateAsync(item.id), {
+      await toast.promise(
+        deleteMutation.mutateAsync({
+          publishId: item.id,
+          localOnly: options?.localOnly,
+        }),
+        {
         loading:
-          item.status === "deleted"
+          options?.localOnly || item.status === "deleted"
             ? "Removing publish record..."
             : "Deleting publish...",
         success: () => {
-          return item.status === "deleted"
+          return options?.localOnly || item.status === "deleted"
             ? "Publish removed."
             : "Publish deleted from provider.";
         },

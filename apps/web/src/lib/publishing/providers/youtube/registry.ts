@@ -30,5 +30,6 @@ export const youtubeProviderDefinition: ProviderDefinition = {
     supportsTags: true,
     supportsCategories: true,
     supportsSyntheticMediaDisclosure: true,
+    supportsDeleteAsset: true,
   },
 };

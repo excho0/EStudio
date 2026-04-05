@@ -217,9 +217,18 @@ export const contentSdk = {
       createPublishResponseSchema
     );
   },
-  deletePublish(id: string, publishId: string): Promise<void> {
+  deletePublish(
+    id: string,
+    publishId: string,
+    opts?: { localOnly?: boolean }
+  ): Promise<void> {
+    const searchParams = new URLSearchParams();
+    if (opts?.localOnly) {
+      searchParams.set("mode", "record");
+    }
+    const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
     return client.del(
-      `/api/content/${id}/publishes/${publishId}`,
+      `/api/content/${id}/publishes/${publishId}${suffix}`,
       "Failed to delete publish"
     );
   },

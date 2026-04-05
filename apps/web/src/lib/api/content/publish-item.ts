@@ -117,18 +117,24 @@ const resolveAuthAndPublish = async (contentId: string, publishId: string) => {
   return { user, publish };
 };
 
-export const handleDeletePublish = async (contentId: string, publishId: string) => {
+export const handleDeletePublish = async (
+  request: Request,
+  contentId: string,
+  publishId: string
+) => {
   const resolved = await resolveAuthAndPublish(contentId, publishId);
   if ("error" in resolved) return resolved.error;
   const { user, publish } = resolved;
 
   const db = getDrizzleDb();
   const now = new Date();
+  const mode = new URL(request.url).searchParams.get("mode");
+  const removeRecordOnly = mode === "record";
   const pendingAsset =
     typeof publish.providerAssetId === "string" &&
     publish.providerAssetId.startsWith("pending-");
 
-  if (publish.status === "deleted") {
+  if (publish.status === "deleted" || removeRecordOnly) {
     await deletePublishThumbnailAsset(user.id, publish.metadata ?? null);
     if (isPostgres) {
       await (db as PostgresDrizzleDb)
@@ -149,7 +155,7 @@ export const handleDeletePublish = async (contentId: string, publishId: string) 
           )
         );
     }
-    return NextResponse.json({ deleted: true, removed: true });
+    return NextResponse.json({ deleted: true, removed: true, localOnly: removeRecordOnly });
   }
 
   if (pendingAsset) {

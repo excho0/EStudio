@@ -6,11 +6,11 @@ import {
 export const runtime = "nodejs";
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string; publishId: string }> }
 ) {
   const params = await context.params;
-  return handleDeletePublish(params.id, params.publishId);
+  return handleDeletePublish(request, params.id, params.publishId);
 }
 
 export async function POST(

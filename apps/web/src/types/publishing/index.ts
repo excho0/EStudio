@@ -40,6 +40,7 @@ export type ProviderCapabilities = {
   supportsTags?: boolean;
   supportsCategories?: boolean;
   supportsSyntheticMediaDisclosure?: boolean;
+  supportsDeleteAsset?: boolean;
 };
 
 export type ProviderDefinition = {

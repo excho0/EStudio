@@ -16,5 +16,8 @@ export type ProviderSectionProps = {
   isMobile: boolean;
   contentId: string;
   onViewError: (item: PublishRecord) => void;
-  onDelete: (item: PublishRecord) => void;
+  onDelete: (
+    item: PublishRecord,
+    options?: { localOnly?: boolean }
+  ) => void;
 };
