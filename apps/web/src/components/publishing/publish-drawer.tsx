@@ -73,15 +73,17 @@ import {
   StepperShell,
 } from "@/components/controls/animated-stepper";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
+import { useSimpleContentRenders } from "@/hooks/use-content";
 import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
+import { invalidateAuthQueries } from "@/lib/auth/client-sync";
 
 type PublishTarget = {
   id: string;
@@ -117,8 +119,6 @@ type ProviderState = {
 
 type PublishProvidersPayload = Awaited<ReturnType<typeof sdk.publish.providers>>;
 type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
-type ContentRendersPayload = Awaited<ReturnType<typeof sdk.content.renders>>;
-
 type PublishDrawerProps = {
   contentId: string;
   trigger?: React.ReactNode;
@@ -293,6 +293,7 @@ export function PublishDrawer({
   onOpenChange,
 }: PublishDrawerProps) {
   const { status } = useSession();
+  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -337,6 +338,11 @@ export function PublishDrawer({
     })
   );
   const canLoadData = open && status === "authenticated" && Boolean(contentId);
+
+  useEffect(() => {
+    if (!open || status !== "authenticated") return;
+    void invalidateAuthQueries(queryClient);
+  }, [open, queryClient, status]);
 
   const publishTargetsQuery = useQuery<ProviderState[]>({
     queryKey: queryKeys.publishProviders,
@@ -419,18 +425,10 @@ export function PublishDrawer({
     },
   });
 
-  const rendersQuery = useQuery<RenderItem[]>({
-    queryKey: queryKeys.contentRendersSimple(contentId),
+  const rendersQuery = useSimpleContentRenders({
+    id: contentId,
     enabled: canLoadData,
-    staleTime: 15_000,
-    queryFn: async () => {
-      const payload = (await sdk.content.renders(
-        contentId,
-        1,
-        50
-      )) as ContentRendersPayload;
-      return payload.items as RenderItem[];
-    },
+    limit: 50,
   });
 
   const renders = rendersQuery.data ?? [];

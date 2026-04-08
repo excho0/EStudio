@@ -10,13 +10,19 @@ import {
 } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import type { MetricsPayload } from "@/types";
 import { toast } from "sonner";
 import { notifyOSAppEvent } from "@/lib/notifications";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
+import {
+  syncContentQueries,
+  syncDashboardStatsQueries,
+  syncProfileQueries,
+  syncPublishQueries,
+  syncSettingsQueries,
+} from "@/lib/http/query-sync";
 
 type SocketIOContextValue = {
   connected: boolean;
@@ -139,7 +145,7 @@ export function SocketIOProvider({
     }
     const handleUpdate = () => {
       setEventToken((current) => current + 1);
-      queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+      void syncContentQueries(queryClient);
     };
 
     const resolveContentLabel = async (id: string) => {
@@ -263,17 +269,19 @@ export function SocketIOProvider({
     };
 
     const invalidatePublishes = () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
-      queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+      void syncPublishQueries(queryClient);
     };
 
     const invalidateSettings = () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      void syncSettingsQueries(queryClient);
     };
 
     const invalidateProfile = () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.profile });
-      queryClient.invalidateQueries({ queryKey: queryKeys.profileConnections });
+      void syncProfileQueries(queryClient);
+    };
+
+    const invalidateDashboardStats = () => {
+      void syncDashboardStatsQueries(queryClient);
     };
 
     const handleRenderProgressToast = (payload: {
@@ -508,6 +516,10 @@ export function SocketIOProvider({
       { event: SocketEvents.userProfile.updated, handler: invalidateProfile },
       { event: SocketEvents.providerConnection.created, handler: invalidateProfile },
       { event: SocketEvents.providerConnection.deleted, handler: invalidateProfile },
+      { event: SocketEvents.content.update, handler: invalidateDashboardStats },
+      { event: SocketEvents.content.created, handler: invalidateDashboardStats },
+      { event: SocketEvents.content.deleted, handler: invalidateDashboardStats },
+      { event: SocketEvents.content.statusChanged, handler: invalidateDashboardStats },
       { event: SocketEvents.metricsUpdate, handler: handleMetricsUpdate },
     ] as const;
 

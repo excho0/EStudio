@@ -31,6 +31,7 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
   const timeoutRef = useRef<number | null>(null);
   const safetyTimeoutRef = useRef<number | null>(null);
   const activeRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
 
   useEffect(() => {
     if (timeoutRef.current) {
@@ -42,10 +43,14 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
       safetyTimeoutRef.current = null;
     }
     const reset = window.setTimeout(() => {
+      if (pendingRefreshRef.current) {
+        router.refresh();
+        pendingRefreshRef.current = false;
+      }
       setIsTransitioning(false);
     }, 0);
     return () => window.clearTimeout(reset);
-  }, [pathname]);
+  }, [pathname, router]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -75,6 +80,7 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
     }
     setIsTransitioning(true);
     activeRef.current = true;
+    pendingRefreshRef.current = true;
     const resolvedOptions = options ?? {};
     timeoutRef.current = window.setTimeout(() => {
       if (resolvedOptions.replace) {
@@ -88,6 +94,7 @@ export function RouteTransitionProvider({ children }: { children: React.ReactNod
       setIsTransitioning(false);
       safetyTimeoutRef.current = null;
       activeRef.current = false;
+      pendingRefreshRef.current = false;
     }, 1200);
   };
 
@@ -112,6 +119,7 @@ export function Link({
   href,
   replace,
   scroll,
+  prefetch = false,
   onClick,
   children,
   ...rest
@@ -125,6 +133,7 @@ export function Link({
         href={href}
         replace={replace}
         scroll={scroll}
+        prefetch={prefetch}
         onClick={onClick}
         {...rest}
       >
@@ -140,6 +149,7 @@ export function Link({
       href={href}
       replace={replace}
       scroll={scroll}
+      prefetch={prefetch}
       onClick={(event) => {
         if (
           event.defaultPrevented ||

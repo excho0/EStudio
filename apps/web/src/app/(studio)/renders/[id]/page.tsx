@@ -30,11 +30,11 @@ import {
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
-import type { RenderListResponse } from "@/types";
+import { useContentRenders } from "@/hooks/use-content";
+import { removeRenderFromCachedPages } from "@/lib/http/query-cache";
 
 type RenderPreviewItem = {
   name: string;
@@ -167,17 +167,7 @@ export default function RendersPage() {
   const isHydrated = true;
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
-  const rendersQuery = useQuery<RenderListResponse>({
-    queryKey: queryKeys.contentRenders(id, page, limit),
-    enabled: Boolean(id),
-    staleTime: 15_000,
-    queryFn: async () => {
-      if (!id) {
-        return { page, limit, total: 0, items: [] };
-      }
-      return sdk.content.renders(id, page, limit);
-    },
-  });
+  const rendersQuery = useContentRenders({ id, page, limit });
   const items = useMemo(() => rendersQuery.data?.items ?? [], [rendersQuery.data]);
   const loading = rendersQuery.isLoading || rendersQuery.isFetching;
   const desktopScrollRef = useRef<HTMLDivElement | null>(null);
@@ -237,18 +227,7 @@ export default function RendersPage() {
     },
     onSuccess: (name) => {
       if (!id || !name) return;
-      queryClient.setQueryData<RenderListResponse | undefined>(
-        queryKeys.contentRenders(id, page, limit),
-        (current) => {
-          if (!current) return current;
-          const nextItems = current.items.filter((item) => item.name !== name);
-          return {
-            ...current,
-            total: Math.max(0, current.total - 1),
-            items: nextItems,
-          };
-        }
-      );
+      removeRenderFromCachedPages({ queryClient, contentId: id, renderName: name });
       toast.success("Render deleted.");
     },
     onError: (error) => {

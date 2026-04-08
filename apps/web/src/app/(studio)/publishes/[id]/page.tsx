@@ -45,18 +45,21 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/http/query-keys";
+import {
+  optimisticallyDeletePublishRecord,
+  rollbackOptimisticQueryUpdate,
+  reconcileQuery,
+  updatePublishListRecord,
+} from "@/lib/http/query-cache";
 import { sdk } from "@/lib/sdk";
 import { getProviderDefinition } from "@/lib/publishing/providers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { ConnectionsResponse } from "@/types";
-import type {
-  PublishListResponse,
-  PublishRecord,
-  ProviderSectionProps,
-  StudioPublishMetadata,
-} from "@/types";
+import { useContentPublishes } from "@/hooks/use-content";
+import { useProfileConnections } from "@/hooks/use-profile";
+import type { PublishRecord, ProviderSectionProps, StudioPublishMetadata } from "@/types";
+import { syncContentQueries } from "@/lib/http/query-sync";
 
 const formatDateTime = (value?: number | string | Date | null) => {
   if (!value) return "—";
@@ -501,34 +504,17 @@ export default function PublishesPage() {
   const queryClient = useQueryClient();
 
   const publishQueryKey = useMemo(() => queryKeys.publishes(id), [id]);
-  type ConnectionsPayload = Awaited<ReturnType<typeof sdk.user.connections>>;
-
-  const connectionsQuery = useQuery<ConnectionsResponse>({
-    queryKey: queryKeys.profileConnections,
-    staleTime: 60_000,
-    queryFn: async () => (await sdk.user.connections()) as ConnectionsPayload,
-  });
+  const connectionsQuery = useProfileConnections();
   const connectedAccountIds = useMemo(() => {
-    const connections = (connectionsQuery.data?.connections ?? []) as ConnectionsPayload["connections"];
+    const connections = connectionsQuery.data?.connections ?? [];
     return new Set<string>(
       connections
-        .map((connection: ConnectionsPayload["connections"][number]) => connection.providerAccountId)
+        .map((connection) => connection.providerAccountId)
         .filter((value: string | null): value is string => Boolean(value))
     );
   }, [connectionsQuery.data]);
 
-  const { data, isLoading, isFetching, error } = useQuery<PublishListResponse, Error>({
-    queryKey: publishQueryKey,
-    queryFn: async () => {
-      if (!id) {
-        return { publishes: [] };
-      }
-      const payload = await sdk.content.listPublishes(id);
-      return { publishes: payload.publishes as PublishRecord[] };
-    },
-    enabled: Boolean(id),
-    placeholderData: (previous) => previous,
-  });
+  const { data, isLoading, isFetching, error } = useContentPublishes({ id });
 
   const deleteMutation = useMutation({
     mutationFn: async ({
@@ -541,56 +527,19 @@ export default function PublishesPage() {
       if (!id) return;
       await sdk.content.deletePublish(id, publishId, { localOnly });
     },
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.publishesBase });
-      const previousEntries = queryClient.getQueriesData<PublishListResponse | undefined>({
-        queryKey: queryKeys.publishesBase,
-      });
-      if (variables.localOnly) {
-        queryClient.setQueriesData<PublishListResponse | undefined>(
-          { queryKey: queryKeys.publishesBase },
-          (current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              publishes: current.publishes.filter(
-                (publish) => publish.id !== variables.publishId
-              ),
-            };
-          }
-        );
-      }
-      return { previousEntries };
-    },
+    onMutate: async (variables) =>
+      optimisticallyDeletePublishRecord({
+        queryClient,
+        queryKey: publishQueryKey,
+        publishId: variables.publishId,
+        localOnly: variables.localOnly,
+      }),
     onError: (_error, _variables, context) => {
-      if (context?.previousEntries) {
-        for (const [key, value] of context.previousEntries) {
-          queryClient.setQueryData(key, value);
-        }
-      }
+      rollbackOptimisticQueryUpdate({ queryClient, queryKey: publishQueryKey, context });
     },
-    onSuccess: (_data, variables) => {
-      if (!variables.localOnly) {
-        queryClient.setQueriesData<PublishListResponse | undefined>(
-          { queryKey: queryKeys.publishesBase },
-          (current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              publishes: current.publishes.map((publish) =>
-                publish.id === variables.publishId
-                  ? {
-                      ...publish,
-                      status: "deleted",
-                      providerAssetId: null,
-                    }
-                  : publish
-              ),
-            };
-          }
-        );
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.publishesBase });
+    onSettled: () => {
+      void reconcileQuery({ queryClient, queryKey: publishQueryKey });
+      void syncContentQueries(queryClient);
     },
   });
 
@@ -600,7 +549,15 @@ export default function PublishesPage() {
       await sdk.content.retryPublish(id, publishId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: publishQueryKey });
+      updatePublishListRecord({
+        queryClient,
+        queryKey: publishQueryKey,
+        updater: (publish) =>
+          publish.status === "failed" || publish.status === "published_with_warning"
+            ? { ...publish, status: "queued", error: null }
+            : publish,
+      });
+      void reconcileQuery({ queryClient, queryKey: publishQueryKey });
     },
   });
 
@@ -609,7 +566,8 @@ export default function PublishesPage() {
     const start = (page - 1) * limit;
     return allItems.slice(start, start + limit);
   }, [allItems, page, limit]);
-  const isBusy = isLoading || isFetching;
+  const isInitialLoading = isLoading && !data;
+  const isRefreshing = isFetching && !!data;
 
   const grouped = useMemo(() => {
     const map = new Map<string, PublishRecord[]>();
@@ -733,7 +691,7 @@ export default function PublishesPage() {
 
       {!isHydrated ? (
         <></>
-      ) : isBusy ? (
+      ) : isInitialLoading ? (
         isMobile ? (
           <MobileSkeletonCards />
         ) : (
@@ -768,7 +726,7 @@ export default function PublishesPage() {
                     <PaginationPrevious
                       className="border border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
                       onClick={() => setPage((current) => Math.max(1, current - 1))}
-                      aria-disabled={!canGoBack || isBusy}
+                      aria-disabled={!canGoBack || isRefreshing}
                     />
                   </PaginationItem>
                   {getPageItems().flatMap((pageNumber, index, list) => {
@@ -786,7 +744,7 @@ export default function PublishesPage() {
                         <PaginationLink
                           isActive={pageNumber === page}
                           onClick={() => setPage(pageNumber)}
-                          aria-disabled={isBusy}
+                          aria-disabled={isRefreshing}
                         >
                           {pageNumber}
                         </PaginationLink>
@@ -800,7 +758,7 @@ export default function PublishesPage() {
                       onClick={() =>
                         setPage((current) => Math.min(totalPages, current + 1))
                       }
-                      aria-disabled={!canGoNext || isBusy}
+                      aria-disabled={!canGoNext || isRefreshing}
                     />
                   </PaginationItem>
                 </PaginationContent>

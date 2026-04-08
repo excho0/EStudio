@@ -49,8 +49,17 @@ import {
   ResponsiveDrawerTitle,
 } from "@/components/ui/responsive-drawer";
 import { queryKeys } from "@/lib/http/query-keys";
+import {
+  optimisticallyUnlinkProfileConnection,
+  rollbackOptimisticQueryUpdate,
+  reconcileQuery,
+} from "@/lib/http/query-cache";
 import { sdk } from "@/lib/sdk";
-import type { ConnectionsResponse, ProfilePayload } from "@/types";
+import type { ProfilePayload } from "@/types";
+import { invalidateAuthQueries, notifyAuthChanged } from "@/lib/auth/client-sync";
+import { syncProfileQueries } from "@/lib/http/query-sync";
+import { useProfile } from "@/hooks/use-profile";
+import { useProfileConnections } from "@/hooks/use-profile";
 
 const allProviders = [
   {
@@ -149,6 +158,7 @@ export default function ProfileSettingsPage() {
   const [pendingUnlink, setPendingUnlink] = useState<
     (typeof allProviders)[number] | null
   >(null);
+  const [didRefreshAuthedState, setDidRefreshAuthedState] = useState(false);
 
   const initials = useMemo(() => {
     const parts = (draft.name || session?.user?.name || "")
@@ -192,18 +202,16 @@ export default function ProfileSettingsPage() {
     [enabledProviders]
   );
 
-  const profileQuery = useQuery<ProfilePayload>({
-    queryKey: queryKeys.profile,
-    enabled: status === "authenticated",
-    staleTime: 60_000,
-    queryFn: async () => sdk.user.profile(),
-  });
+  useEffect(() => {
+    if (status !== "authenticated" || didRefreshAuthedState) return;
+    setDidRefreshAuthedState(true);
+    void invalidateAuthQueries(queryClient);
+  }, [didRefreshAuthedState, queryClient, status]);
 
-  const connectionsQuery = useQuery<ConnectionsResponse>({
-    queryKey: queryKeys.profileConnections,
+  const profileQuery = useProfile({ enabled: status === "authenticated" });
+
+  const connectionsQuery = useProfileConnections({
     enabled: status === "authenticated",
-    staleTime: 60_000,
-    queryFn: async () => sdk.user.connections(),
   });
 
   const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
@@ -293,6 +301,7 @@ export default function ProfileSettingsPage() {
           image: payload.image ?? undefined,
         });
       }
+      notifyAuthChanged();
       toast.success("Profile updated.");
     },
     onError: (error) => {
@@ -310,6 +319,7 @@ export default function ProfileSettingsPage() {
       applyProfileState(payload);
       sessionStorage.removeItem("profile-email-confirmed");
       setEmailDrawerOpen(false);
+      notifyAuthChanged();
       toast.warning("Check your inbox to confirm the new email.");
     },
     onError: (error) => {
@@ -338,6 +348,32 @@ export default function ProfileSettingsPage() {
   const saving = updateNameMutation.isPending;
   const sendingVerification = emailChangeMutation.isPending;
   const isBusy = saving || sendingVerification;
+
+  const unlinkProviderMutation = useMutation({
+    mutationFn: async (providerId: string) => sdk.user.unlinkProvider(providerId),
+    onMutate: async (providerId) =>
+      optimisticallyUnlinkProfileConnection({ queryClient, providerId }),
+    onSuccess: () => {
+      notifyAuthChanged();
+      toast.success("Provider unlinked.");
+      window.dispatchEvent(new Event("profile:connections-updated"));
+    },
+    onError: (error, _providerId, context) => {
+      rollbackOptimisticQueryUpdate({
+        queryClient,
+        queryKey: queryKeys.profileConnections,
+        context,
+      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to unlink provider."
+      );
+    },
+    onSettled: () => {
+      void reconcileQuery({ queryClient, queryKey: queryKeys.profileConnections });
+    },
+  });
 
   useEffect(() => {
     const fallbackProfile: ProfilePayload = {
@@ -372,8 +408,7 @@ export default function ProfileSettingsPage() {
         toast.success("Email confirmed. Your profile is updated.");
         sessionStorage.setItem("profile-email-confirmed", "true");
       }
-      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
-      void queryClient.refetchQueries({ queryKey: queryKeys.profile });
+      void syncProfileQueries(queryClient);
       if (update) {
         void update();
       }
@@ -390,8 +425,7 @@ export default function ProfileSettingsPage() {
 
     const syncProfileState = () => {
       if (document.visibilityState !== "visible") return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
-      void queryClient.refetchQueries({ queryKey: queryKeys.profile });
+      void syncProfileQueries(queryClient);
       if (update) {
         void update();
       }
@@ -834,18 +868,9 @@ export default function ProfileSettingsPage() {
               onClick={async () => {
                 if (!pendingUnlink) return;
                 try {
-                  await sdk.user.unlinkProvider(pendingUnlink.id);
-                  await queryClient.invalidateQueries({
-                    queryKey: queryKeys.profileConnections,
-                  });
-                  toast.success("Provider unlinked.");
-                  window.dispatchEvent(new Event("profile:connections-updated"));
+                  await unlinkProviderMutation.mutateAsync(pendingUnlink.id);
                 } catch (error) {
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : "Unable to unlink provider."
-                  );
+                  void error;
                 } finally {
                   setPendingUnlink(null);
                 }

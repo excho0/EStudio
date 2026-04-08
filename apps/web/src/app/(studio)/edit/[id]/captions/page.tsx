@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { captionDocumentSchema, type CaptionDocument, type ContentItem } from "@/types";
+import { captionDocumentSchema, type CaptionDocument } from "@/types";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
-import { useCaptionProgress } from "@/components/studio/use-caption-progress";
+import { useCaptionProgress } from "@/hooks/use-progress";
+import { useContentItem } from "@/hooks/use-content";
+import { useContentUpdateMutation } from "@/hooks/use-content";
+import { reconcileQuery } from "@/lib/http/query-cache";
 import {
   DEFAULT_CONTENT_MODE,
   getOutputDefaultsForMode,
@@ -73,12 +76,7 @@ export default function EditCaptionsPage() {
     []
   );
 
-  const contentQuery = useQuery<ContentItem>({
-    queryKey: queryKeys.contentItem(params.id),
-    enabled: Boolean(params.id),
-    refetchOnMount: "always",
-    queryFn: async () => sdk.content.get(params.id),
-  });
+  const contentQuery = useContentItem(params.id);
 
   const item = contentQuery.data ?? null;
   const mode = item?.mode ?? DEFAULT_CONTENT_MODE;
@@ -174,10 +172,12 @@ export default function EditCaptionsPage() {
     [previewComponent, previewOutput.fps, previewOutput.height, previewOutput.width, previewProps, safeDurationInFrames]
   );
 
-  const saveMutation = useMutation({
+  const saveMutation = useContentUpdateMutation<{
+    next: CaptionDocument;
+    source?: "manual" | "autosave";
+  }>({
     mutationFn: async ({
       next,
-      source = "manual",
     }: {
       next: CaptionDocument;
       source?: "manual" | "autosave";
@@ -186,10 +186,10 @@ export default function EditCaptionsPage() {
       const updated = await sdk.content.update(item.id, {
         settings: buildSettingsWithSharedCaptions(mode, item.settings ?? {}, next),
       });
-      return { updated, source };
+      return updated;
     },
-    onSuccess: ({ updated, source }) => {
-      queryClient.setQueryData(queryKeys.contentItem(updated.id), updated);
+    onSuccess: (_updated, variables) => {
+      const source = variables.source ?? "manual";
       if (source === "manual") {
         toast.success("Captions saved.");
       }
@@ -210,9 +210,9 @@ export default function EditCaptionsPage() {
     onSuccess: async (response) => {
       if (!item) return;
       if (response.status === "done") {
-        await queryClient.invalidateQueries({
+        await reconcileQuery({
+          queryClient,
           queryKey: queryKeys.contentItem(item.id),
-          exact: true,
         });
         await contentQuery.refetch();
         setGenerationWatch(null);
@@ -241,9 +241,9 @@ export default function EditCaptionsPage() {
       if (payload.id !== activeGenerationContentId) return;
       if (payload.status === "completed") {
         void (async () => {
-          await queryClient.invalidateQueries({
+          await reconcileQuery({
+            queryClient,
             queryKey: queryKeys.contentItem(activeGenerationContentId),
-            exact: true,
           });
           await contentQuery.refetch();
           setGenerationWatch(null);
@@ -281,9 +281,9 @@ export default function EditCaptionsPage() {
     void (async () => {
       completionRefreshInFlightRef.current = true;
       try {
-        await queryClient.invalidateQueries({
+        await reconcileQuery({
+          queryClient,
           queryKey: queryKeys.contentItem(activeGenerationContentId),
-          exact: true,
         });
         const refreshed = await contentQuery.refetch();
         const nextCaptionsData = parseSharedCaptionsData(refreshed.data?.settings ?? null);

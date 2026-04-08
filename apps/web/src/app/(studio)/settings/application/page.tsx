@@ -4,24 +4,20 @@ import { useEffect, useState } from "react";
 import { Cloud, HardDrive, Server, Settings2 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { IconSelect } from "@/components/ui/icon-select";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { settingsCaptionBackendSchema } from "@/lib/data/settings/schemas";
-import type { SettingsResponse } from "@/types";
+import { syncSettingsQueries } from "@/lib/http/query-sync";
+import { useAppSettings } from "@/hooks/use-settings";
 
 type CaptionBackend = z.infer<typeof settingsCaptionBackendSchema>;
 
 export default function ApplicationSettingsPage() {
   const queryClient = useQueryClient();
-  const settingsQuery = useQuery<SettingsResponse>({
-    queryKey: queryKeys.settings,
-    staleTime: 30_000,
-    queryFn: async () => sdk.settings.get(),
-  });
+  const settingsQuery = useAppSettings();
   const updateSettingsMutation = useMutation({
     mutationFn: async (backend: CaptionBackend) =>
       sdk.settings.update({
@@ -29,7 +25,7 @@ export default function ApplicationSettingsPage() {
       }),
     onSuccess: async () => {
       toast.success("Caption backend updated.");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      await syncSettingsQueries(queryClient);
     },
     onError: (error) => {
       toast.error(

@@ -2,9 +2,10 @@
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSocketIO } from "./socketIO-provider";
+import { useSocketIO } from "@/components/studio/socketIO-provider";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
+import { syncDashboardStatsQueries } from "@/lib/http/query-sync";
 
 export const useDashboardStats = (range: number | "all" = 7) => {
   const { eventToken } = useSocketIO();
@@ -14,14 +15,11 @@ export const useDashboardStats = (range: number | "all" = 7) => {
   const query = useQuery({
     queryKey,
     queryFn: () => sdk.dashboard.stats(range),
-    placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
     if (eventToken > 0) {
-      void queryClient.invalidateQueries({
-        predicate: ({ queryKey: key }) => Array.isArray(key) && key[0] === "dashboard-stats",
-      });
+      void syncDashboardStatsQueries(queryClient);
     }
   }, [eventToken, queryClient]);
 

@@ -32,8 +32,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
-import { useCaptionProgress } from "@/components/studio/use-caption-progress";
-import { usePublishProgress } from "@/components/studio/use-publish-progress";
+import { useCaptionProgress } from "@/hooks/use-progress";
+import { usePublishProgress } from "@/hooks/use-progress";
 import { sdk } from "@/lib/sdk";
 import { Separator } from "@/components/ui/separator";
 import type { LucideIcon } from "lucide-react";
@@ -155,6 +155,26 @@ const pickPreferredJob = (left: ActivityJob, right: ActivityJob): ActivityJob =>
   return right;
 };
 
+const pickCanonicalJob = (left: ActivityJob, right: ActivityJob): ActivityJob => {
+  const leftTerminal = isTerminalStatus(left.status);
+  const rightTerminal = isTerminalStatus(right.status);
+
+  if (leftTerminal !== rightTerminal) {
+    // Prefer terminal state over stale active snapshots unless we are clearly seeing
+    // a fresh requeue/restart attempt for the same key.
+    if (!leftTerminal && rightTerminal) {
+      return right;
+    }
+    if (leftTerminal && !rightTerminal) {
+      const isFreshRestart =
+        right.status === "queued" && right.updatedAt > left.updatedAt;
+      return isFreshRestart ? right : left;
+    }
+  }
+
+  return pickPreferredJob(left, right);
+};
+
 const dedupeJobs = (items: ActivityJob[]) => {
   const map = new Map<string, ActivityJob>();
   for (const item of items) {
@@ -182,6 +202,19 @@ const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
       continue;
     }
     map.set(subjectKey, pickPreferredJob(existing, item));
+  }
+  return Array.from(map.values()).sort(compareJobsByRecency);
+};
+
+const dedupeCanonicalJobs = (items: ActivityJob[]) => {
+  const map = new Map<string, ActivityJob>();
+  for (const item of items) {
+    const existing = map.get(item.key);
+    if (!existing) {
+      map.set(item.key, item);
+      continue;
+    }
+    map.set(item.key, pickCanonicalJob(existing, item));
   }
   return Array.from(map.values()).sort(compareJobsByRecency);
 };
@@ -778,7 +811,6 @@ export function NotificationCenterDrawer() {
     // Socket updates are appended last so they win during dedupe ties.
     return dedupeJobs([...fromBootstrap, ...fromSocket]);
   }, [bootstrapQuery.data, jobs]);
-  const sortedJobs = combinedJobs;
   const activeCaptionJobs = useMemo(() => {
     return Object.values(captionProgressMap)
       .map((entry) => ({
@@ -792,7 +824,7 @@ export function NotificationCenterDrawer() {
         progress: entry.progress,
         error: entry.error,
         metadata: entry.metadata,
-        updatedAt: entry.updatedAt ?? Date.now(),
+        updatedAt: entry.updatedAt ?? 0,
       }))
       .sort(compareJobsByRecency);
   }, [captionProgressMap]);
@@ -809,31 +841,30 @@ export function NotificationCenterDrawer() {
         stage: entry.stage,
         error: entry.error,
         metadata: entry.metadata,
-        updatedAt: entry.updatedAt ?? Date.now(),
+        updatedAt: entry.updatedAt ?? 0,
       }))
       .sort(compareJobsByRecency);
   }, [publishProgressMap]);
+  const canonicalJobs = useMemo(() => {
+    return dedupeCanonicalJobs([
+      ...combinedJobs,
+      ...activePublishJobs,
+      ...activeCaptionJobs,
+    ]);
+  }, [activeCaptionJobs, activePublishJobs, combinedJobs]);
+
   const activeJobs = useMemo(() => {
     return dedupeActiveJobsBySubject(
-      [
-        ...sortedJobs.filter(
-          (job) =>
-            job.kind !== "caption" &&
-            job.kind !== "publish" &&
-            isActiveStatus(job.status)
-        ),
-        ...activePublishJobs,
-        ...activeCaptionJobs,
-      ]
+      canonicalJobs.filter((job) => isActiveStatus(job.status))
     );
-  }, [activeCaptionJobs, activePublishJobs, sortedJobs]);
+  }, [canonicalJobs]);
 
   const recentJobs = useMemo(() => {
-    return sortedJobs
+    return canonicalJobs
       .filter((job) => !isActiveStatus(job.status))
       .sort(compareJobsByRecency)
       .slice(0, 20);
-  }, [sortedJobs]);
+  }, [canonicalJobs]);
   const showLoadingSkeleton =
     open &&
     bootstrapQuery.isLoading &&
@@ -867,7 +898,7 @@ export function NotificationCenterDrawer() {
       >
         <Bell className="h-4 w-4" />
       </Button>
-      <DrawerContent className="w-screen max-w-none data-[vaul-drawer-direction=right]:w-screen data-[vaul-drawer-direction=right]:max-w-none sm:min-w-[520px] sm:max-w-[620px] sm:data-[vaul-drawer-direction=right]:w-[620px]">
+      <DrawerContent className="w-screen max-w-none data-[vaul-drawer-direction=right]:w-screen data-[vaul-drawer-direction=right]:max-w-none sm:min-w-130 sm:max-w-155 sm:data-[vaul-drawer-direction=right]:w-155">
         <DrawerHeader className="pb-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">

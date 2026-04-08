@@ -51,16 +51,16 @@ import { toast } from "sonner";
 import { Player } from "@remotion/player";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useContentItem } from "@/hooks/use-content";
+import { useContentUpdateMutation } from "@/hooks/use-content";
 import { HexPicker } from "@/components/ui/hex-color-picker";
 import { Switch } from "@/components/ui/switch";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   type ContentItem,
   type EditFormValues,
   type PaletteMode,
 } from "@/types";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
@@ -254,14 +254,7 @@ export default function EditContentPage() {
     paletteMode: PaletteMode;
     paletteState: string[];
   } | null>(null);
-  const queryClient = useQueryClient();
-  const contentQuery = useQuery<ContentItem>({
-    queryKey: queryKeys.contentItem(params.id),
-    enabled: Boolean(params.id),
-    queryFn: async () => {
-      return sdk.content.get(params.id);
-    },
-  });
+  const contentQuery = useContentItem(params.id);
   const loading = contentQuery.isLoading || contentQuery.isFetching;
   const resolvedItem = contentQuery.data ?? null;
   const loadError = contentQuery.error
@@ -352,7 +345,7 @@ export default function EditContentPage() {
       setInitialSnapshot(nextSnapshot);
     });
   }, [contentQuery.data, initialSnapshot, resolvedItem?.id]);
-  const saveMutation = useMutation({
+  const saveMutation = useContentUpdateMutation<void>({
     mutationFn: async () => {
       if (!resolvedItem) {
         throw new Error("No content item loaded.");
@@ -404,7 +397,6 @@ export default function EditContentPage() {
         setThumbnailVersion(Date.now());
       }
       setInitialSnapshot(buildSnapshotFromItem(updated));
-      queryClient.setQueryData(queryKeys.contentItem(params.id), updated);
       toast.success("Content updated.");
     },
     onError: (err) => {

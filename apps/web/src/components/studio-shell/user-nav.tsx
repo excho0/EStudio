@@ -5,10 +5,10 @@ import { LogOut, UserRoundPen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/http/query-keys";
+import { useQueryClient } from "@tanstack/react-query";
 import { sdk } from "@/lib/sdk";
-import type { ConnectionsResponse } from "@/types";
+import { syncProfileQueries } from "@/lib/http/query-sync";
+import { useProfileConnections } from "@/hooks/use-profile";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,11 +45,8 @@ export function UserNav() {
   const queryClient = useQueryClient();
   const initials = getInitials(user?.name, user?.email);
 
-  const connectionsQuery = useQuery<ConnectionsResponse>({
-    queryKey: queryKeys.profileConnections,
+  const connectionsQuery = useProfileConnections({
     enabled: status === "authenticated",
-    staleTime: 60_000,
-    queryFn: async () => sdk.user.connections(),
   });
 
   const avatarProvider = useMemo(() => {
@@ -72,7 +69,7 @@ export function UserNav() {
   useEffect(() => {
     if (status !== "authenticated") return;
     const handler = () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.profileConnections });
+      void syncProfileQueries(queryClient);
     };
     window.addEventListener("profile:connections-updated", handler);
     return () => {

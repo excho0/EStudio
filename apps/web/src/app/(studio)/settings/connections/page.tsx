@@ -10,6 +10,12 @@ import { hashString } from "@estudio/utils";
 
 import { PROVIDER_REGISTRY } from "@/lib/publishing/providers";
 import { queryKeys } from "@/lib/http/query-keys";
+import {
+  optimisticallyDisconnectPublishProvider,
+  rollbackOptimisticQueryUpdate,
+  reconcileQuery,
+  reconcileResourceFamily,
+} from "@/lib/http/query-cache";
 import { sdk } from "@/lib/sdk";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +33,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { ProviderConnectionState, ProviderDefinition } from "@/types";
+import { invalidateAuthQueries, notifyAuthChanged } from "@/lib/auth/client-sync";
+import { syncProfileQueries } from "@/lib/http/query-sync";
 
 const buildProviderState = (providers: ProviderDefinition[]) =>
   Object.fromEntries(
@@ -41,7 +49,6 @@ const buildProviderState = (providers: ProviderDefinition[]) =>
       } satisfies ProviderConnectionState,
     ])
   ) as Record<string, ProviderConnectionState>;
-
 
 type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
 
@@ -91,6 +98,7 @@ export default function ConnectionsSettingsPage() {
   }, [providers]);
   const [unlinkTarget, setUnlinkTarget] = useState<ProviderDefinition | null>(null);
   const queryClient = useQueryClient();
+  const [didRefreshAuthedState, setDidRefreshAuthedState] = useState(false);
 
   const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
     queryKey: queryKeys.metaProviders,
@@ -143,6 +151,12 @@ export default function ConnectionsSettingsPage() {
   }, [connections, providers]);
 
   useEffect(() => {
+    if (status !== "authenticated" || didRefreshAuthedState) return;
+    setDidRefreshAuthedState(true);
+    void invalidateAuthQueries(queryClient);
+  }, [didRefreshAuthedState, queryClient, status]);
+
+  useEffect(() => {
     connectionQueries.forEach((query, index) => {
       if (!query?.error) return;
       const provider = providers[index];
@@ -158,16 +172,32 @@ export default function ConnectionsSettingsPage() {
     mutationFn: async (providerId: string) => {
       await sdk.publish.unlinkProvider(providerId);
     },
+    onMutate: async (providerId) =>
+      optimisticallyDisconnectPublishProvider({ queryClient, providerId }),
     onSuccess: async (_data, providerId) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.publishProvider(providerId),
-      });
+      notifyAuthChanged();
+      void syncProfileQueries(queryClient);
       toast.success(`${providerId} disconnected.`);
     },
-    onError: (error) => {
+    onError: (error, providerId, context) => {
+      rollbackOptimisticQueryUpdate({
+        queryClient,
+        queryKey: queryKeys.publishProvider(providerId),
+        context,
+      });
       toast.error(
         error instanceof Error ? error.message : "Unable to unlink provider."
       );
+    },
+    onSettled: async (_data, _error, providerId) => {
+      await reconcileQuery({
+        queryClient,
+        queryKey: queryKeys.publishProvider(providerId),
+      });
+      await reconcileResourceFamily({
+        queryClient,
+        queryKey: queryKeys.publishProviders,
+      });
     },
   });
 

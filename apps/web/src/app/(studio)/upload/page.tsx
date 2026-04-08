@@ -34,7 +34,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { LabelWithTooltip } from "@/components/content-settings/label-with-tooltip";
 import { IconSelect } from "@/components/ui/icon-select";
-import { useContentList } from "@/components/studio/use-content-list";
 import { toast } from "sonner";
 import { cn } from "@/lib/shared/utils";
 import { isFieldInvalid } from "@/lib/shared/validation";
@@ -67,6 +66,7 @@ import {
   resolveFieldActionState,
 } from "@/lib/content/modes/ui-helpers";
 import { sdk } from "@/lib/sdk";
+import { useCreateContentMutation } from "@/hooks/use-content";
 
 type UploadFormValues = {
   title: string;
@@ -129,7 +129,7 @@ const getMediaDuration = (file: File, kind: "audio" | "video") =>
 export default function DashboardUploadPage() {
   const methods = stepper.useStepper();
   const pathname = usePathname();
-  const { refresh } = useContentList();
+  const createContentMutation = useCreateContentMutation();
   const [submitting, setSubmitting] = useState(false);
   const [formValues, setFormValues] = useState<UploadFormValues>(initialForm);
   const [draftPaths, setDraftPaths] = useState<{
@@ -567,7 +567,7 @@ export default function DashboardUploadPage() {
     };
     setSubmitting(true);
     try {
-      await sdk.content.create(payload);
+      await createContentMutation.mutateAsync(payload);
     } catch {
       setError("Upload failed. Please check the files and try again.");
       toast.error("Upload failed. Please check the files and try again.");
@@ -578,7 +578,6 @@ export default function DashboardUploadPage() {
     setDraftPaths({});
     setMediaFiles([]);
     setUploadKey((current) => current + 1);
-    await refresh();
     toast.success("Upload saved.");
     methods.goTo("success");
 

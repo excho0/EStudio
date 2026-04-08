@@ -4,19 +4,15 @@ import { useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, HardDrive, RotateCcw, Globe } from "lucide-react";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
-import type { SettingsResponse } from "@/types";
+import { syncSettingsQueries } from "@/lib/http/query-sync";
+import { useAppSettings } from "@/hooks/use-settings";
 
 export default function DashboardSettingsPage() {
   const queryClient = useQueryClient();
-  const settingsQuery = useQuery<SettingsResponse>({
-    queryKey: queryKeys.settings,
-    staleTime: 30_000,
-    queryFn: async () => sdk.settings.get(),
-  });
+  const settingsQuery = useAppSettings();
   const rescanMutation = useMutation({
     mutationFn: async () => sdk.content.rescan(),
     onSuccess: async (result) => {
@@ -27,7 +23,7 @@ export default function DashboardSettingsPage() {
           `Rescan completed: ${result.created} restored, ${result.skipped} skipped.`
         );
       }
-      await queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      await syncSettingsQueries(queryClient);
     },
     onError: (error) => {
       toast.error(

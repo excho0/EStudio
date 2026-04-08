@@ -3,10 +3,10 @@
 import { Link } from "@/components/navigation/route-transition";
 import { Button } from "@/components/ui/button";
 import { ImageWithSkeleton } from "@/components/ui/image-with-skeleton";
-import { useContentList } from "@/components/studio/use-content-list";
-import { useDashboardStats } from "@/components/studio/use-dashboard-stats";
+import { useContentList } from "@/hooks/use-content";
+import { useDashboardStats } from "@/hooks/use-dashboard";
 import type { ContentItem } from "@/types";
-import { useRenderProgress } from "@/components/studio/use-render-progress";
+import { useRenderProgress } from "@/hooks/use-progress";
 import {
   Film,
   Music,

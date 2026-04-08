@@ -33,10 +33,10 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useContentList } from "@/components/studio/use-content-list";
+import { useContentList } from "@/hooks/use-content";
 import type { ContentStatus } from "@/lib/data/content";
 import type { ContentItem } from "@/types";
-import { useRenderProgress } from "@/components/studio/use-render-progress";
+import { useRenderProgress } from "@/hooks/use-progress";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import { ResponsiveActionMenu } from "@/components/controls/responsive-action-menu";
@@ -73,6 +73,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
 import React from "react";
 import { queryKeys } from "@/lib/http/query-keys";
+import {
+  reconcileResourceFamily,
+  updateCachedContentLists,
+} from "@/lib/http/query-cache";
 import { sdk } from "@/lib/sdk";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import type { ContentColumnMeta } from "@/types";
@@ -81,6 +85,7 @@ import {
   contentModeUiRegistry,
   getContentModeDefinition,
 } from "@/lib/content/modes/ui-registry";
+import { useDeleteContentMutation } from "@/hooks/use-content";
 
 const stateTransition = {
   initial: { opacity: 0, y: 10, filter: "blur(2px)" },
@@ -102,6 +107,7 @@ export default function LibraryPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const limit = 20;
   const queryClient = useQueryClient();
+  const deleteContentMutation = useDeleteContentMutation();
   const { items, loading, total } = useContentList({
     query: debouncedQuery,
     page,
@@ -167,23 +173,21 @@ export default function LibraryPage() {
     overscan: 12,
     getItemKey: (index) => items[index]?.id ?? index,
   });
-  const mobileVirtualizer = useVirtualizer({
-    count: items.length,
-    getScrollElement: () => mobileScrollRef.current,
-    estimateSize: () => 164,
-    overscan: 12,
-    getItemKey: (index) => items[index]?.id ?? index,
-  });
   useEffect(() => {
     desktopVirtualizer.measure();
-    mobileVirtualizer.measure();
-  }, [desktopVirtualizer, mobileVirtualizer, isMobile, items.length, pageState]);
+  }, [desktopVirtualizer, isMobile, items.length, pageState, page]);
   const renderMutation = useMutation({
     mutationFn: async ({ id, mode }: { id: string; mode?: string }) => {
       await sdk.content.triggerRender(id, mode ? { mode } : undefined);
+      return { id };
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+    onSuccess: ({ id }) => {
+      updateCachedContentLists({
+        queryClient,
+        updater: (item) =>
+          item.id === id ? { ...item, status: "queued" } : item,
+      });
+      void reconcileResourceFamily({ queryClient, queryKey: queryKeys.contentListBase });
     },
     onError: (error) => {
       const message =
@@ -227,7 +231,12 @@ export default function LibraryPage() {
           `Queued ${modes.length - failed.length}/${modes.length} modes. ${reason}`
         );
       }
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+      updateCachedContentLists({
+        queryClient,
+        updater: (entry) =>
+          entry.id === item.id ? { ...entry, status: "queued" } : entry,
+      });
+      void reconcileResourceFamily({ queryClient, queryKey: queryKeys.contentListBase });
     },
     [getConfiguredRenderModes, queryClient]
   );
@@ -266,40 +275,27 @@ export default function LibraryPage() {
     return Array.from(pages).sort((a, b) => a - b);
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: async ({
-      id,
-      keepRenders,
-    }: {
-      id: string;
-      keepRenders?: boolean;
-    }) => {
-      const params = new URLSearchParams();
-      if (keepRenders) {
-        params.set("keepRenders", "1");
-      }
-      await sdk.content.remove(id, keepRenders);
-    },
-    onSuccess: () => {
+  const handleDelete = useCallback(async (id: string, keepRenders?: boolean) => {
+    try {
+      await deleteContentMutation.mutateAsync({ id, keepRenders });
       toast.success("Item deleted.");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
-    },
-    onError: (error) => {
+    } catch (error) {
       const message =
         error instanceof Error ? error.message : "Delete failed. Please try again.";
       toast.error(message);
-    },
-  });
-
-  const handleDelete = useCallback(async (id: string, keepRenders?: boolean) => {
-    await deleteMutation.mutateAsync({ id, keepRenders });
-  }, [deleteMutation]);
+    }
+  }, [deleteContentMutation]);
 
   const handleCancelRender = useCallback(
     async (item: ContentItem) => {
       try {
         await sdk.content.cancelRender(item.id);
-        void queryClient.invalidateQueries({ queryKey: queryKeys.contentListBase });
+        updateCachedContentLists({
+          queryClient,
+          updater: (entry) =>
+            entry.id === item.id ? { ...entry, status: "uploaded" } : entry,
+        });
+        void reconcileResourceFamily({ queryClient, queryKey: queryKeys.contentListBase });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Failed to cancel render.";
@@ -499,8 +495,6 @@ export default function LibraryPage() {
     getRowId: (row) => row.id,
   });
   const desktopVirtualItems = desktopVirtualizer.getVirtualItems();
-  const mobileVirtualItems = mobileVirtualizer.getVirtualItems();
-
   const filtersPanel = (
     <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-3">
       <div className="space-y-1.5">
@@ -957,98 +951,46 @@ export default function LibraryPage() {
                 viewportRef={mobileScrollRef}
               >
                 <div
-                  className={cn(mobileVirtualItems.length > 0 && "relative")}
-                  style={
-                    mobileVirtualItems.length > 0
-                      ? { height: mobileVirtualizer.getTotalSize() }
-                      : undefined
-                  }
+                  className="grid gap-3"
                 >
-                  {mobileVirtualItems.length > 0
-                    ? mobileVirtualItems.map((virtualRow) => {
-                    const item = items[virtualRow.index];
-                    if (!item) return null;
-                    return (
-                      <div
-                        key={item.id}
-                        data-index={virtualRow.index}
-                        ref={mobileVirtualizer.measureElement}
-                        className="absolute left-0 top-0 w-full px-1 py-1"
-                        style={{
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <Card
+                  {items.map((item) => (
+                    <div key={item.id} className="w-full">
+                      <Card
                           animateHeight={false}
                           progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
                           progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
                           className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex min-w-0 flex-1 gap-3">
-                              <ImageWithSkeleton
-                                src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
-                                  item.updatedAt
-                                )}`}
-                                alt={`${item.title} thumbnail`}
-                                className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                                wrapperClassName="h-16 w-20 rounded-md"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-semibold">
-                                  {item.title}
-                                </div>
-                                <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
-                                  {formatDate(item.createdAt)}
-                                </div>
-                                <div className="mt-2">
-                                  {<JobStatusBadge status={getEffectiveStatus(item)} progress={renderProgress[item.id]?.progress} />}
-                                </div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <ImageWithSkeleton
+                              src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
+                                item.updatedAt
+                              )}`}
+                              alt={`${item.title} thumbnail`}
+                              className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
+                              wrapperClassName="h-16 w-20 rounded-md"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold">{item.title}</div>
+                              <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
+                                {formatDate(item.createdAt)}
                               </div>
-                            </div>
-                            <div className="flex shrink-0 items-start justify-end">
-                              <ResponsiveActionMenu items={getActionItems(item)} />
+                              <div className="mt-2">
+                                <JobStatusBadge
+                                  status={getEffectiveStatus(item)}
+                                  progress={renderProgress[item.id]?.progress}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </Card>
-                      </div>
-                    );
-                  })
-                    : items.map((item) => (
-                        <div key={item.id} className="w-full px-1 py-1">
-                          <Card
-                          animateHeight={false}
-                          progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
-                          progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
-                          className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
-                        >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex min-w-0 flex-1 gap-3">
-                                <ImageWithSkeleton
-                                  src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
-                                    item.updatedAt
-                                  )}`}
-                                  alt={`${item.title} thumbnail`}
-                                  className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
-                                  wrapperClassName="h-16 w-20 rounded-md"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm font-semibold">{item.title}</div>
-                                  <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
-                                    {formatDate(item.createdAt)}
-                                  </div>
-                                  <div className="mt-2">
-                                    {<JobStatusBadge status={getEffectiveStatus(item)} progress={renderProgress[item.id]?.progress} />}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex shrink-0 items-start justify-end">
-                                <ResponsiveActionMenu items={getActionItems(item)} />
-                              </div>
-                            </div>
-                          </Card>
+                          <div className="flex shrink-0 items-start justify-end">
+                            <ResponsiveActionMenu items={getActionItems(item)} />
+                          </div>
                         </div>
-                      ))}
+                      </Card>
+                    </div>
+                  ))}
                 </div>
               </ScrollArea>
             </div>
