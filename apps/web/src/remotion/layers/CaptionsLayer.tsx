@@ -10,7 +10,7 @@ import {
 import type { CaptionBlock } from "../../types/captions";
 
 const CAPTION_FONT_STACK =
-  "Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+  "'Estudio Geist', Geist, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 type CaptionsLayerProps = {
   captionsEnabled: boolean;
@@ -713,13 +713,16 @@ export const CaptionsLayer: React.FC<CaptionsLayerProps> = ({
                     alignSelf: "center",
                     fontSize: 42 * captionScale,
                     fontWeight: 900,
+                    fontVariationSettings: '"wght" 900',
                     lineHeight: 1.12,
                     letterSpacing: 0.2,
                     fontFamily: CAPTION_FONT_STACK,
                     fontSynthesis: "none",
+                    textRendering: "geometricPrecision",
                     textAlign: baseLayoutStyle.textAlign,
                     textTransform: "capitalize",
-                    textShadow: "0 2px 0 rgba(0,0,0,0.74), 0 0 1px rgba(0,0,0,0.9)",
+                    textShadow:
+                      "0 1px 0 rgba(8,10,14,0.88), 0 2px 0 rgba(0,0,0,0.76), 0 0 1px rgba(0,0,0,0.94), 0 0 10px rgba(255,255,255,0.06)",
                     opacity: pageOpacity,
                     transform: pageTransform,
                     transformOrigin: "center bottom",
