@@ -9,25 +9,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { sdk } from "@/lib/sdk";
 import { syncProfileQueries } from "@/lib/http/query-sync";
 import { useProfileConnections } from "@/hooks/use-profile";
+import {
+  ResponsiveActionMenu,
+  type ActionItem,
+} from "@/components/controls/responsive-action-menu";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider
-} from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 
 const getInitials = (name?: string | null, email?: string | null) => {
   const base = name?.trim() || email?.split("@")[0]?.trim() || "User";
@@ -44,6 +33,7 @@ export function UserNav() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const initials = getInitials(user?.name, user?.email);
+  const [loadedAvatarSrc, setLoadedAvatarSrc] = useState<string | null>(null);
 
   const connectionsQuery = useProfileConnections({
     enabled: status === "authenticated",
@@ -65,6 +55,27 @@ export function UserNav() {
     }
     return user?.image ?? undefined;
   }, [avatarProvider, connectionsQuery.dataUpdatedAt, user?.image]);
+  const avatarLoaded = Boolean(avatarSrc) && loadedAvatarSrc === avatarSrc;
+
+  const menuItems = useMemo<ActionItem[]>(
+    () => [
+      {
+        label: "Edit Profile",
+        icon: UserRoundPen,
+        href: "/settings/profile",
+      },
+      { type: "separator" },
+      {
+        label: "Sign out",
+        icon: LogOut,
+        destructive: true,
+        onSelect: () => {
+          signOut({ callbackUrl: "/login" });
+        },
+      },
+    ],
+    []
+  );
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -85,7 +96,7 @@ export function UserNav() {
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ duration: 1, ease: "easeInOut" }}
+          transition={{ duration: 1, delay: 0.3, ease: "easeInOut" }}
         >
           <Skeleton className="h-9 w-9 rounded-full animate-pulse" />
         </motion.div>
@@ -95,7 +106,7 @@ export function UserNav() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.5, ease: "easeInOut" }}
+          transition={{ duration: 0.5, delay: 0.3, ease: "easeInOut" }}
         >
           <Button asChild variant="outline" className="h-9 rounded-4xl">
             <Link href="/login">Sign in</Link>
@@ -107,73 +118,55 @@ export function UserNav() {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.98 }}
-          transition={{ duration: 1, ease: "easeInOut" }}
+          transition={{ duration: 1, delay: 0.3, ease: "easeInOut" }}
           className="flex items-center justify-center"
         >
-          <DropdownMenu open={open} onOpenChange={setOpen}>
-            <TooltipProvider disableHoverableContent>
-              <Tooltip delayDuration={100} disableMobileDrawer >
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="relative h-9 w-9 rounded-full border-white/10 bg-gradient-to-br from-white/10 via-transparent to-white/5 shadow-sm"
-                    >
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={avatarSrc} alt={user.name ?? "Avatar"} />
-                        <AvatarFallback className="bg-transparent text-xs font-semibold">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Profile</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {user.name ?? "Signed in"}
-                  </p>
-                  {user.email ? (
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user.email}
-                    </p>
-                  ) : null}
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  className="hover:cursor-pointer"
-                  asChild
-                >
-                  <Link
-                    href="/settings/profile"
-                    className="flex items-center"
-                    onClick={() => setOpen(false)}
-                  >
-                    <UserRoundPen className="w-4 h-4 mr-3 text-muted-foreground" />
-                    Edit Profile
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="hover:cursor-pointer"
-                onClick={() => {
-                  setOpen(false);
-                  signOut({ callbackUrl: "/login" });
-                }}
+          <ResponsiveActionMenu
+            open={open}
+            onOpenChange={setOpen}
+            title="Account"
+            items={menuItems}
+            trigger={
+              <Button
+                variant="outline"
+                className="relative h-9 w-9 rounded-full border-white/10 bg-linear-to-br from-white/10 via-transparent to-white/5 shadow-sm"
               >
-                <LogOut className="w-4 h-4 mr-3 text-muted-foreground" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <Avatar className="h-9 w-9">
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt={user.name ?? "Avatar"}
+                    onLoad={() => setLoadedAvatarSrc(avatarSrc ?? null)}
+                    className={avatarLoaded ? "opacity-100 transition-opacity duration-300" : "opacity-0 transition-opacity duration-300"}
+                  />
+                  <AvatarFallback className="bg-transparent text-xs font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            }
+            contentHeader={
+              <div className="px-3 py-2 lg:px-2 lg:py-1">
+                <div className="flex flex-col items-center gap-4 text-center lg:flex-row lg:items-center lg:justify-center lg:gap-3 lg:text-left">
+                  <Avatar className="h-16 w-16 border-3 border-white shadow-lg lg:h-14 lg:w-14 dark:border-slate-900">
+                    <AvatarImage src={avatarSrc} alt={user.name ?? "Avatar"} />
+                    <AvatarFallback className="bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 space-y-1.5 lg:space-y-1">
+                    <p className="truncate text-base font-semibold leading-none lg:text-sm">
+                      {user.name ?? "Signed in"}
+                    </p>
+                    {user.email ? (
+                      <p className="truncate text-sm leading-none text-muted-foreground lg:text-xs">
+                        {user.email}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            }
+          />
         </motion.div>
       )}
     </AnimatePresence>

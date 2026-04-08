@@ -50,8 +50,8 @@ function StudioShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <NotificationCenterDrawer />
             <UserNav />
+            <NotificationCenterDrawer />
           </div>
         </div>
       </header>

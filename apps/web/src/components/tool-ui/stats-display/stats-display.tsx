@@ -109,11 +109,24 @@ interface DeltaValueProps {
   diff: StatDiff;
 }
 
+function formatDeltaPercentage(value: number, decimals: number) {
+  const rounded = Number(value.toFixed(decimals));
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  }).format(rounded);
+}
+
 function DeltaValue({ diff }: DeltaValueProps) {
   const { value, decimals = 1, upIsPositive = true, label } = diff;
+  const roundedValue = Number(value.toFixed(decimals));
 
-  const isPositive = value > 0;
-  const isNegative = value < 0;
+  if (roundedValue === 0) {
+    return null;
+  }
+
+  const isPositive = roundedValue > 0;
+  const isNegative = roundedValue < 0;
 
   const isGood = upIsPositive ? isPositive : isNegative;
   const isBad = upIsPositive ? isNegative : isPositive;
@@ -130,7 +143,7 @@ function DeltaValue({ diff }: DeltaValueProps) {
       ? "bg-red-500/10 dark:bg-red-500/15"
       : "bg-muted";
 
-  const formatted = Math.abs(value).toFixed(decimals);
+  const formatted = formatDeltaPercentage(Math.abs(roundedValue), decimals);
   const sign = isNegative ? "−" : "+";
   const display = `${sign}${formatted}%`;
 

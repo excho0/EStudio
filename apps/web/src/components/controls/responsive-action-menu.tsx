@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -71,6 +72,8 @@ export function ResponsiveActionMenu({
   title = "Actions",
   triggerClassName,
   triggerIcon: TriggerIcon = MoreHorizontal,
+  trigger,
+  contentHeader,
   open,
   onOpenChange,
 }: {
@@ -79,6 +82,8 @@ export function ResponsiveActionMenu({
   triggerLabel?: string;
   triggerClassName?: string;
   triggerIcon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  trigger?: React.ReactNode;
+  contentHeader?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -102,18 +107,19 @@ export function ResponsiveActionMenu({
   const startTransition =
     transition?.startTransition ?? ((href: string) => router.push(href));
 
-  const triggerButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      className={cn(
-        "border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10",
-        triggerClassName
-      )}
-    >
-      <TriggerIcon className="h-4 w-4" />
-    </Button>
-  );
+  const triggerButton =
+    trigger ?? (
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn(
+          "border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10",
+          triggerClassName
+        )}
+      >
+        <TriggerIcon className="h-4 w-4" />
+      </Button>
+    );
 
 
   if (isCompactLayout) {
@@ -130,6 +136,11 @@ export function ResponsiveActionMenu({
             <DrawerTitle>{title}</DrawerTitle>
           </DrawerHeader>
           <div className="flex flex-col gap-2 px-6 pb-6">
+            {contentHeader ? (
+              <div className="pb-2">
+                {contentHeader}
+              </div>
+            ) : null}
             {items.map((item, index) => {
               if (item.type === "separator") {
                 return (
@@ -272,7 +283,15 @@ export function ResponsiveActionMenu({
       }}
     >
       <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-64">
+        {contentHeader ? (
+          <>
+            <DropdownMenuLabel className="font-normal">
+              {contentHeader}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {items.map((item, index) => {
           if (item.type === "separator") {
             return <DropdownMenuSeparator key={`separator-${index}`} />;

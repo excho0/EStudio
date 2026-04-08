@@ -236,22 +236,29 @@ export function NotificationCenterDrawer() {
 
   return (
     <Drawer open={open} onOpenChange={setOpen} direction="right">
-      <Button
-        variant="outline"
-        size="icon"
-        className="relative rounded-full"
-        onClick={() => setOpen(true)}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 1, ease: "easeInOut" }}
       >
-        <Bell className="h-4 w-4" />
-        {activeJobs.length > 0 ? (
-          <Badge
-            variant="destructive"
-            className="absolute -right-1 -top-1 size-5 rounded-full px-0 text-[10px]"
-          >
-            {Math.min(activeJobs.length, 9)}
-          </Badge>
-        ) : null}
-      </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative rounded-full"
+          onClick={() => setOpen(true)}
+        >
+          <Bell className="h-4 w-4" />
+          {activeJobs.length > 0 ? (
+            <Badge
+              variant="destructive"
+              className="absolute -right-1.25 -top-1.25 size-4.5 rounded-full text-[10px]"
+            >
+              {Math.min(activeJobs.length, 9)}
+            </Badge>
+          ) : null}
+        </Button>
+      </motion.div>
       <DrawerContent className="w-screen max-w-none data-[vaul-drawer-direction=right]:w-screen data-[vaul-drawer-direction=right]:max-w-none sm:min-w-130 sm:max-w-155 sm:data-[vaul-drawer-direction=right]:w-155">
         <DrawerHeader className="flex flex-row items-center justify-between gap-3 border-b">
           <div className="space-y-1 text-left">
