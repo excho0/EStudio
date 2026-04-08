@@ -1,6 +1,6 @@
 "use client";
 
-import { JSX, useEffect, useMemo, useRef, useState } from "react";
+import { JSX, useEffect, useRef, useState } from "react";
 import { Link } from "@/components/navigation/route-transition";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Download, Eye, Film, List, Trash2 } from "lucide-react";
@@ -30,11 +30,8 @@ import {
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/shared/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { sdk } from "@/lib/sdk";
-import { useContentRenders } from "@/hooks/use-content";
-import { removeRenderFromCachedPages } from "@/lib/http/query-cache";
+import { useContentRenderPage } from "@/hooks/use-content";
 
 type RenderPreviewItem = {
   name: string;
@@ -166,10 +163,8 @@ export default function RendersPage() {
   const limit = 20;
   const isHydrated = true;
   const isMobile = useIsMobile();
-  const queryClient = useQueryClient();
-  const rendersQuery = useContentRenders({ id, page, limit });
-  const items = useMemo(() => rendersQuery.data?.items ?? [], [rendersQuery.data]);
-  const loading = rendersQuery.isLoading || rendersQuery.isFetching;
+  const { rendersQuery, items, loading, totalPages, deleteRender } =
+    useContentRenderPage({ id, page, limit });
   const desktopScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -188,10 +183,6 @@ export default function RendersPage() {
     getItemKey: (index) => items[index]?.name ?? index,
   });
 
-  const totalPages = useMemo(() => {
-    if (!rendersQuery.data) return 1;
-    return Math.max(1, Math.ceil(rendersQuery.data.total / rendersQuery.data.limit));
-  }, [rendersQuery.data]);
   const canGoBack = page > 1;
   const canGoNext = page < totalPages;
 
@@ -219,26 +210,15 @@ export default function RendersPage() {
     toast.error(message);
   }, [rendersQuery.error]);
 
-  const deleteRenderMutation = useMutation({
-    mutationFn: async (name: string) => {
-      if (!id) return;
-      await sdk.content.deleteRender(id, name);
-      return name;
-    },
-    onSuccess: (name) => {
-      if (!id || !name) return;
-      removeRenderFromCachedPages({ queryClient, contentId: id, renderName: name });
+  const handleDeleteRender = async (name: string) => {
+    try {
+      await deleteRender(name);
       toast.success("Render deleted.");
-    },
-    onError: (error) => {
+    } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to delete render.";
       toast.error(message);
-    },
-  });
-
-  const handleDeleteRender = async (name: string) => {
-    await deleteRenderMutation.mutateAsync(name);
+    }
   };
 
   useEffect(() => {

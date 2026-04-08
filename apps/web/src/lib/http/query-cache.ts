@@ -141,6 +141,32 @@ export const insertCreatedContentIntoCachedLists = (params: {
   });
 };
 
+const seedCanonicalContentListCache = (params: {
+  queryClient: QueryClient;
+  item: ContentItem;
+  limit: number;
+}) => {
+  const { queryClient, item, limit } = params;
+  const queryKey = queryKeys.contentList({
+    query: "",
+    page: 1,
+    limit,
+    status: "all",
+    sortBy: "createdAt",
+    sortDir: "desc",
+  });
+
+  const existing = queryClient.getQueryData<ContentListResponse>(queryKey);
+  if (existing) return;
+
+  queryClient.setQueryData<ContentListResponse>(queryKey, {
+    items: [item],
+    total: 1,
+    page: 1,
+    limit,
+  });
+};
+
 export const updateCachedContentLists = (params: {
   queryClient: QueryClient;
   updater: (item: ContentItem) => ContentItem;
@@ -225,6 +251,9 @@ export const commitUpdatedContentToCaches = (params: {
       });
     }
   });
+
+  seedCanonicalContentListCache({ queryClient, item, limit: 20 });
+  seedCanonicalContentListCache({ queryClient, item, limit: 50 });
 };
 
 export const removeContentFromCachedLists = async (params: {
@@ -252,6 +281,38 @@ export const removeContentFromCachedLists = async (params: {
   });
 
   return { previousEntries } satisfies MultiQueryOptimisticUpdateContext<ContentListResponse>;
+};
+
+export const clearDeletedContentCaches = (params: {
+  queryClient: QueryClient;
+  contentId: string;
+}) => {
+  const { queryClient, contentId } = params;
+
+  queryClient.removeQueries({
+    queryKey: queryKeys.contentItem(contentId),
+    exact: true,
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.contentSummary(contentId),
+    exact: true,
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.contentRendersSimple(contentId),
+    exact: true,
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.contentRenders(contentId, 1, 20),
+    exact: false,
+  });
+  queryClient.removeQueries({
+    queryKey: ["renders", contentId],
+    exact: false,
+  });
+  queryClient.removeQueries({
+    queryKey: queryKeys.publishes(contentId),
+    exact: true,
+  });
 };
 
 export const reconcileResourceFamily = async (params: {

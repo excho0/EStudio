@@ -1,4 +1,4 @@
-const CACHE_NAME = "estudio-v2";
+const CACHE_NAME = "estudio-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/pwa-192.png", "/icons/pwa-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -26,6 +26,11 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(fetch(request));
     return;
   }
 

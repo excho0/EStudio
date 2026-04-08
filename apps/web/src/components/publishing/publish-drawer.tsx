@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSession } from "next-auth/react";
 import {
   DndContext,
   closestCenter,
@@ -73,52 +72,16 @@ import {
   StepperShell,
 } from "@/components/controls/animated-stepper";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSocketIO } from "@/components/studio/socketIO-provider";
-import { SocketEvents } from "@/lib/socket/events";
-import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
-import { useSimpleContentRenders } from "@/hooks/use-content";
+import {
+  type RenderItem,
+  useCreatePublishMutation,
+  usePublishProgressTracker,
+  usePublishTargets,
+} from "@/hooks/use-publishing";
 import { Link } from "@/components/navigation/route-transition";
 import { cn } from "@/lib/shared/utils";
-import { invalidateAuthQueries } from "@/lib/auth/client-sync";
-
-type PublishTarget = {
-  id: string;
-  label: string;
-  status?: string;
-  connectionId?: string | null;
-};
-
-type RenderItem = {
-  name: string;
-  assetUrl: string;
-  size: number;
-  mtimeMs: number;
-  thumbnailUrl?: string | null;
-};
-
-type ProviderState = {
-  id: string;
-  label: string;
-  status?: string;
-  connected: boolean;
-  connectionId?: string | null;
-  channel?: { title: string | null; thumbnail: string | null } | null;
-  capabilities?: {
-    supportsSchedule?: boolean;
-    supportsPrivacy?: boolean;
-    privacyOptions?: Array<"public" | "unlisted" | "private">;
-    supportsTags?: boolean;
-    supportsCategories?: boolean;
-    supportsSyntheticMediaDisclosure?: boolean;
-  };
-};
-
-type PublishProvidersPayload = Awaited<ReturnType<typeof sdk.publish.providers>>;
-type PublishProviderPayload = Awaited<ReturnType<typeof sdk.publish.provider>>;
 type PublishDrawerProps = {
   contentId: string;
   trigger?: React.ReactNode;
@@ -292,8 +255,6 @@ export function PublishDrawer({
   open: controlledOpen,
   onOpenChange,
 }: PublishDrawerProps) {
-  const { status } = useSession();
-  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -317,18 +278,9 @@ export function PublishDrawer({
   const [scheduleAt, setScheduleAt] = useState<Date | undefined>(undefined);
   const [containsSyntheticMedia, setContainsSyntheticMedia] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [activePublishId, setActivePublishId] = useState<string | null>(null);
-  const [publishStatus, setPublishStatus] = useState<string | null>(null);
-  const [publishStage, setPublishStage] = useState<string | null>(null);
-  const [publishProgress, setPublishProgress] = useState<number | null>(null);
-  const [publishBytes, setPublishBytes] = useState<{
-    uploaded?: number;
-    total?: number;
-  } | null>(null);
   const thumbnailFileInputRef = useRef<HTMLInputElement | null>(null);
   const preserveDraftThumbnailRef = useRef(false);
   const renderScrollRef = useRef<HTMLDivElement | null>(null);
-  const { socket } = useSocketIO();
   const tagSensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
@@ -337,99 +289,26 @@ export function PublishDrawer({
       activationConstraint: { delay: 250, tolerance: 5 },
     })
   );
-  const canLoadData = open && status === "authenticated" && Boolean(contentId);
-
-  useEffect(() => {
-    if (!open || status !== "authenticated") return;
-    void invalidateAuthQueries(queryClient);
-  }, [open, queryClient, status]);
-
-  const publishTargetsQuery = useQuery<ProviderState[]>({
-    queryKey: queryKeys.publishProviders,
-    enabled: canLoadData,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const payload = (await sdk.publish.providers()) as PublishProvidersPayload;
-      const publishTargets = payload.publishTargets ?? [];
-      return publishTargets.map((target: PublishProvidersPayload["publishTargets"][number]) => ({
-        ...(target as PublishTarget & {
-          connected?: boolean;
-          channel?: ProviderState["channel"];
-        }),
-        connected: Boolean(target.connected),
-        channel:
-          (target as { channel?: ProviderState["channel"] }).channel ?? null,
-        connectionId: target.connectionId ?? null,
-      }));
-    },
-  });
-
-  const providerDetailQueries = useQueries({
-    queries: (publishTargetsQuery.data ?? []).map((target) => {
-      const definition = getProviderDefinition(target.id);
-      const endpoint = definition?.connectionEndpoint;
-      return {
-        queryKey: queryKeys.publishProvider(target.id),
-        enabled: canLoadData && Boolean(endpoint),
-        staleTime: 60_000,
-        queryFn: async () => {
-          if (!endpoint) return null;
-          return sdk.publish.provider(target.id);
-        },
-      };
-    }),
-  });
-
-  const targets = useMemo(() => {
-    const base = publishTargetsQuery.data ?? [];
-    if (providerDetailQueries.length === 0) return base;
-    return base.map((target, index) => {
-      const detail = providerDetailQueries[index]?.data as
-        | PublishProviderPayload
-        | null
-        | undefined;
-      if (!detail) return target;
-      return {
-        ...target,
-        connected: detail.connected,
-        channel: detail.channel ?? null,
-        status: detail.connected ? "active" : target.status,
-      };
-    });
-  }, [publishTargetsQuery.data, providerDetailQueries]);
-  const connectedTargets = useMemo(
-    () => targets.filter((target) => target.connected),
-    [targets]
-  );
+  const {
+    connectedTargets,
+    publishTargetsQuery,
+    contentSummaryQuery,
+    rendersQuery,
+  } = usePublishTargets({ contentId, open });
+  const publishMutation = useCreatePublishMutation(contentId);
+  const [activePublishId, setActivePublishId] = useState<string | null>(null);
+  const {
+    publishStatus,
+    setPublishStatus,
+    publishStage,
+    publishProgress,
+    publishBytes,
+  } = usePublishProgressTracker(activePublishId);
 
   const selectedProviderData = useMemo(
     () => connectedTargets.find((target) => target.id === selectedProvider) ?? null,
     [connectedTargets, selectedProvider]
   );
-
-  const contentSummaryQuery = useQuery<{
-    title?: string;
-    thumbnailUrl: string;
-    colorPalette?: string[] | null;
-  }>({
-    queryKey: queryKeys.contentSummary(contentId),
-    enabled: canLoadData,
-    staleTime: 30_000,
-    queryFn: async () => {
-      const payload = await sdk.content.get(contentId);
-      return {
-        title: payload.title,
-        thumbnailUrl: sdk.content.assetUrl(contentId, "thumbnail"),
-        colorPalette: payload.colorPalette ?? null,
-      };
-    },
-  });
-
-  const rendersQuery = useSimpleContentRenders({
-    id: contentId,
-    enabled: canLoadData,
-    limit: 50,
-  });
 
   const renders = rendersQuery.data ?? [];
   const loading = publishTargetsQuery.isLoading || publishTargetsQuery.isFetching;
@@ -563,50 +442,6 @@ export function PublishDrawer({
     setContainsSyntheticMedia(false);
   };
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedProvider || !selectedRender || !canContinueDetails) {
-        throw new Error("Missing publish details.");
-      }
-      const scheduleEnabled =
-        selectedProviderData?.capabilities?.supportsSchedule &&
-        visibility === "scheduled";
-      const scheduleValue = scheduleEnabled ? scheduleAt?.toISOString() : null;
-      const privacyValue = visibility === "scheduled" ? "private" : visibility;
-      const connectionId = selectedProviderData?.connectionId ?? null;
-      if (!connectionId) {
-        throw new Error("Missing provider connection.");
-      }
-      const payload = await sdk.content.createPublish(contentId, {
-        provider: selectedProvider,
-        renderId: selectedRender,
-        connectionId,
-        status: "draft",
-        metadata: {
-          title: title.trim(),
-          description: description.trim(),
-          tags:
-            selectedProviderData?.capabilities?.supportsTags && tags.length > 0
-              ? tags
-              : undefined,
-          options: {
-            privacy: selectedProviderData?.capabilities?.supportsPrivacy
-              ? privacyValue
-              : undefined,
-            scheduleAt: scheduleValue || undefined,
-            containsSyntheticMedia:
-              selectedProviderData?.capabilities?.supportsSyntheticMediaDisclosure
-                ? containsSyntheticMedia
-                : undefined,
-          },
-          thumbnailUrl: thumbnailUrl ?? undefined,
-          thumbnailAssetPath: thumbnailAssetPath ?? undefined,
-        },
-      });
-      return payload.publish?.id ?? null;
-    },
-  });
-
   const handleTagSortEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
     setTags((current) => {
@@ -628,49 +463,8 @@ export function PublishDrawer({
     if (!nextOpen) {
       resetState();
       setActivePublishId(null);
-      setPublishStatus(null);
-      setPublishStage(null);
-      setPublishProgress(null);
-      setPublishBytes(null);
     }
   };
-
-  useEffect(() => {
-    if (!socket) return;
-    if (!activePublishId) return;
-    const handleProgress = (payload: {
-      id: string;
-      stage?: string;
-      progress?: number;
-      bytesUploaded?: number;
-      bytesTotal?: number;
-    }) => {
-      if (payload.id !== activePublishId) return;
-      setPublishStage(payload.stage ?? null);
-      setPublishProgress(
-        typeof payload.progress === "number" ? payload.progress : null
-      );
-      setPublishBytes({
-        uploaded: payload.bytesUploaded,
-        total: payload.bytesTotal,
-      });
-    };
-    const handleUpdate = (payload: {
-      id: string;
-      status?: string;
-      providerAssetId?: string;
-      error?: string;
-    }) => {
-      if (payload.id !== activePublishId) return;
-      if (payload.status) {
-        setPublishStatus(payload.status);
-      }
-    };
-    return attachSocketSubscriptions(socket, [
-      { event: SocketEvents.publish.progress, handler: handleProgress },
-      { event: SocketEvents.publish.update, handler: handleUpdate },
-    ] as const);
-  }, [socket, activePublishId]);
 
   useEffect(() => {
     if (!open) return;
@@ -741,7 +535,40 @@ export function PublishDrawer({
     setSubmitting(true);
     try {
       preserveDraftThumbnailRef.current = true;
-      const publishId = await publishMutation.mutateAsync();
+      const scheduleEnabled =
+        selectedProviderData?.capabilities?.supportsSchedule &&
+        visibility === "scheduled";
+      const scheduleValue = scheduleEnabled ? scheduleAt?.toISOString() : null;
+      const privacyValue = visibility === "scheduled" ? "private" : visibility;
+      const connectionId = selectedProviderData?.connectionId ?? null;
+      if (!connectionId) {
+        throw new Error("Missing provider connection.");
+      }
+      const publishId = await publishMutation.mutateAsync({
+        provider: selectedProvider,
+        renderId: selectedRender,
+        connectionId,
+        metadata: {
+          title: title.trim(),
+          description: description.trim(),
+          tags:
+            selectedProviderData?.capabilities?.supportsTags && tags.length > 0
+              ? tags
+              : undefined,
+          options: {
+            privacy: selectedProviderData?.capabilities?.supportsPrivacy
+              ? privacyValue
+              : undefined,
+            scheduleAt: scheduleValue || undefined,
+            containsSyntheticMedia:
+              selectedProviderData?.capabilities?.supportsSyntheticMediaDisclosure
+                ? containsSyntheticMedia
+                : undefined,
+          },
+          thumbnailUrl: thumbnailUrl ?? undefined,
+          thumbnailAssetPath: thumbnailAssetPath ?? undefined,
+        },
+      });
       if (publishId) {
         setActivePublishId(publishId);
         setPublishStatus("queued");

@@ -1,6 +1,4 @@
 "use client";
-
-import { useEffect, useState } from "react";
 import {
   Bell,
   ChevronRight,
@@ -20,40 +18,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
-import {
-  getCurrentPushSubscription,
-  isWebPushSupported,
-  requestNotificationPermission,
-  setNotificationEnabled,
-  subscribeToWebPush,
-  unsubscribeFromWebPush,
-} from "@/lib/notifications";
-import { sdk } from "@/lib/sdk";
 import { cn } from "@/lib/shared/utils";
-
-type NotificationPreferences = {
-  push: {
-    enabled: boolean;
-    groups: {
-      content: {
-        enabled: boolean;
-        items: Record<string, { enabled: boolean }>;
-      };
-    };
-  };
-};
-
-type NotificationPreferencesPatch = {
-  push?: {
-    enabled?: boolean;
-    groups?: {
-      content?: {
-        enabled?: boolean;
-        items?: Record<string, { enabled: boolean }>;
-      };
-    };
-  };
-};
+import { useNotificationPreferences } from "@/hooks/use-notifications";
 
 type NotificationLeafKey = "render" | "publish" | "caption";
 type NotificationRegistryNode =
@@ -106,22 +72,6 @@ const notificationRegistry: NotificationRegistryNode[] = [
   },
 ];
 
-const notificationLeafKeys: NotificationLeafKey[] = ["render", "publish", "caption"];
-
-const defaultPreferences: NotificationPreferences = {
-  push: {
-    enabled: true,
-    groups: {
-      content: {
-        enabled: true,
-        items: Object.fromEntries(
-          notificationLeafKeys.map((key) => [key, { enabled: true }])
-        ) as Record<NotificationLeafKey, { enabled: boolean }>,
-      },
-    },
-  },
-};
-
 const depthPaddingClassName = (depth: number) => {
   if (depth <= 0) return "pl-1";
   if (depth === 1) return "pl-4";
@@ -129,194 +79,52 @@ const depthPaddingClassName = (depth: number) => {
   return "pl-10";
 };
 
-const mergePreferences = (
-  current: NotificationPreferences,
-  patch: NotificationPreferencesPatch
-): NotificationPreferences => ({
-  push: {
-    enabled: patch.push?.enabled ?? current.push.enabled,
-    groups: {
-      ...current.push.groups,
-      content: {
-        enabled:
-          patch.push?.groups?.content?.enabled ?? current.push.groups.content.enabled,
-        items: {
-          ...current.push.groups.content.items,
-          ...(patch.push?.groups?.content?.items ?? {}),
-        },
-      },
-    },
-  },
-});
-
-const normalizePreferences = (
-  patch?: NotificationPreferencesPatch | null
-): NotificationPreferences => mergePreferences(defaultPreferences, patch ?? {});
-
 export default function NotificationsSettingsPage() {
-  const [deviceSubscribed, setDeviceSubscribed] = useState(false);
-  const [preferences, setPreferences] = useState<NotificationPreferences>(
-    defaultPreferences
-  );
-  const [loading, setLoading] = useState(true);
-  const [deviceBusy, setDeviceBusy] = useState(false);
-  const [groupBusy, setGroupBusy] = useState(false);
-  const [savingCategory, setSavingCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const [subscription, response] = await Promise.all([
-          getCurrentPushSubscription().catch(() => null),
-          sdk.userPreferences.notifications().catch(() => null),
-        ]);
-
-        if (cancelled) return;
-
-        const subscribed = Boolean(subscription);
-        setDeviceSubscribed(subscribed);
-        setNotificationEnabled(subscribed);
-
-        if (response) {
-          setPreferences(normalizePreferences(response.preferences as NotificationPreferencesPatch));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    preferences,
+    loading,
+    deviceSubscribed,
+    deviceBusy,
+    groupBusy,
+    savingCategory,
+    isWebPushSupported,
+    toggleDeviceSubscription,
+    toggleCategory,
+    toggleContentGroup,
+  } = useNotificationPreferences();
 
   const permissionLabel = (() => {
-    if (!isWebPushSupported()) return "Web Push not supported";
+    if (!isWebPushSupported) return "Web Push not supported";
     if (typeof window === "undefined" || !("Notification" in window)) {
       return "Notifications unavailable";
     }
     return `Permission: ${Notification.permission}`;
   })();
 
-  const toggleDeviceSubscription = async (checked: boolean) => {
-    setDeviceBusy(true);
+  const handleToggleDeviceSubscription = async (checked: boolean) => {
     try {
-      if (!checked) {
-        await unsubscribeFromWebPush();
-        setNotificationEnabled(false);
-        setDeviceSubscribed(false);
-        toast.message("Push notifications disabled on this device.");
-        return;
-      }
-
-      const permission = await requestNotificationPermission();
-      if (permission !== "granted") {
-        if (permission === "denied") {
-          toast.error("Browser notifications are blocked.");
-        } else {
-          toast.error("Notifications are not supported in this browser.");
-        }
-        return;
-      }
-
-      await subscribeToWebPush();
-      setNotificationEnabled(true);
-      setDeviceSubscribed(true);
-      toast.success("Push notifications enabled on this device.");
-    } catch {
-      toast.error("Failed to update device subscription.");
-    } finally {
-      setDeviceBusy(false);
+      const result = await toggleDeviceSubscription(checked);
+      toast[checked ? "success" : "message"](result.message);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update device subscription."
+      );
     }
   };
 
-  const toggleCategory = async (key: NotificationLeafKey, enabled: boolean) => {
-    const previous = preferences;
-    const next = mergePreferences(previous, {
-      push: {
-        groups: {
-          content: {
-            enabled: previous.push.groups.content.enabled,
-            items: {
-              [key]: { enabled },
-            },
-          },
-        },
-      },
-    });
-
-    setPreferences(next);
-    setSavingCategory(key);
+  const handleToggleCategory = async (key: NotificationLeafKey, enabled: boolean) => {
     try {
-      const response = await sdk.userPreferences.updateNotifications({
-        notifications: {
-          push: {
-            groups: {
-              content: {
-                items: {
-                  [key]: { enabled },
-                },
-              },
-            },
-          },
-        },
-      });
-      setPreferences(
-        normalizePreferences(
-          (response.preferences as NotificationPreferencesPatch | undefined) ?? next
-        )
-      );
+      await toggleCategory(key, enabled);
     } catch {
-      setPreferences(previous);
       toast.error("Failed to update notification preference.");
-    } finally {
-      setSavingCategory(null);
     }
   };
 
-  const toggleContentGroup = async (enabled: boolean) => {
-    const previous = preferences;
-    const next = mergePreferences(previous, {
-      push: {
-        groups: {
-          content: {
-            items: previous.push.groups.content.items,
-            enabled,
-          },
-        },
-      },
-    });
-
-    setPreferences(next);
-    setGroupBusy(true);
+  const handleToggleContentGroup = async (enabled: boolean) => {
     try {
-      const response = await sdk.userPreferences.updateNotifications({
-        notifications: {
-          push: {
-            groups: {
-              content: {
-                enabled,
-              },
-            },
-          },
-        },
-      });
-      setPreferences(
-        normalizePreferences(
-          (response.preferences as NotificationPreferencesPatch | undefined) ?? next
-        )
-      );
+      await toggleContentGroup(enabled);
     } catch {
-      setPreferences(previous);
       toast.error("Failed to update notification group.");
-    } finally {
-      setGroupBusy(false);
     }
   };
 
@@ -356,7 +164,7 @@ export default function NotificationsSettingsPage() {
               savingCategory === node.key
             }
             loading={savingCategory === node.key}
-            onCheckedChange={(next) => void toggleCategory(node.key, next)}
+            onCheckedChange={(next) => void handleToggleCategory(node.key, next)}
           />
         </div>
       );
@@ -398,7 +206,7 @@ export default function NotificationsSettingsPage() {
               className="my-auto shrink-0"
               disabled={loading || groupBusy || !deviceSubscribed}
               loading={groupBusy}
-              onCheckedChange={(checked) => void toggleContentGroup(checked)}
+              onCheckedChange={(checked) => void handleToggleContentGroup(checked)}
             />
           </div>
         </div>
@@ -451,9 +259,9 @@ export default function NotificationsSettingsPage() {
             <Switch
               checked={deviceSubscribed}
               className="my-auto shrink-0"
-              disabled={loading || deviceBusy || !isWebPushSupported()}
+              disabled={loading || deviceBusy || !isWebPushSupported}
               loading={deviceBusy}
-              onCheckedChange={(checked) => void toggleDeviceSubscription(checked)}
+              onCheckedChange={(checked) => void handleToggleDeviceSubscription(checked)}
             />
           </div>
 

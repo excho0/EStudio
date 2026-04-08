@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSocketIO } from "@/components/studio/socketIO-provider";
 import type { ContentStatus } from "@/lib/data/content";
 import { queryKeys } from "@/lib/http/query-keys";
 import { sdk } from "@/lib/sdk";
 import {
+  clearDeletedContentCaches,
   commitUpdatedContentToCaches,
   removeContentFromCachedLists,
+  removeRenderFromCachedPages,
   rollbackMultiQueryOptimisticUpdate,
 } from "@/lib/http/query-cache";
 import { syncContentQueries } from "@/lib/http/query-sync";
@@ -205,10 +207,59 @@ export const useDeleteContentMutation = () => {
     onError: (_error, _variables, context) => {
       rollbackMultiQueryOptimisticUpdate({ queryClient, context });
     },
-    onSettled: async () => {
+    onSuccess: async ({ id }) => {
+      clearDeletedContentCaches({ queryClient, contentId: id });
+    },
+  });
+};
+
+export const useDeleteRenderMutation = (contentId?: string | null) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (name: string) => {
+      if (!contentId) {
+        throw new Error("Content id is required.");
+      }
+      await sdk.content.deleteRender(contentId, name);
+      return name;
+    },
+    onSuccess: async (name) => {
+      if (!contentId) return;
+      removeRenderFromCachedPages({ queryClient, contentId, renderName: name });
       await syncContentQueries(queryClient);
     },
   });
+};
+
+export const useContentRenderPage = (params: {
+  id?: string | null;
+  page?: number;
+  limit?: number;
+}) => {
+  const { id, page = 1, limit = 20 } = params;
+  const rendersQuery = useContentRenders({ id, page, limit });
+  const deleteRenderMutation = useDeleteRenderMutation(id);
+
+  const items = useMemo(() => rendersQuery.data?.items ?? [], [rendersQuery.data]);
+  const loading = rendersQuery.isLoading || rendersQuery.isFetching;
+  const totalPages = useMemo(() => {
+    if (!rendersQuery.data) return 1;
+    return Math.max(1, Math.ceil(rendersQuery.data.total / rendersQuery.data.limit));
+  }, [rendersQuery.data]);
+
+  const deleteRender = async (name: string) => {
+    await deleteRenderMutation.mutateAsync(name);
+  };
+
+  return {
+    rendersQuery,
+    items,
+    loading,
+    totalPages,
+    deleteRender,
+    deleteRenderMutation,
+  };
 };
 
 export const useContentUpdateMutation = <TVariables>(params: {
