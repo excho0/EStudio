@@ -950,17 +950,15 @@ export default function LibraryPage() {
                 className="h-[clamp(20rem,56svh,68svh)]"
                 viewportRef={mobileScrollRef}
               >
-                <div
-                  className="grid gap-3"
-                >
+                <div className="grid min-w-0 grid-cols-1 gap-3">
                   {items.map((item) => (
                     <div key={item.id} className="w-full">
                       <Card
-                          animateHeight={false}
-                          progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
-                          progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
-                          className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
-                        >
+                        animateHeight={false}
+                        progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
+                        progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
+                        className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
+                      >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex min-w-0 flex-1 gap-3">
                             <ImageWithSkeleton
