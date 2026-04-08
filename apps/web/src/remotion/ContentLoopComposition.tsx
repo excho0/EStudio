@@ -303,8 +303,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     captionBlocks,
     captionPages,
     hasActiveCaption,
-    captionOpacity,
-    captionTransform,
     captionBlur,
   } = useMemo(
     () =>
@@ -318,6 +316,8 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
         timelineMs,
         rangeStartMs: (rangeStartFrames / fps) * 1000,
         rangeEndMs: (rangeEndFrames / fps) * 1000,
+        compositionWidth: width,
+        compositionHeight: height,
       }),
     [
       captionsAnimationPreset,
@@ -327,9 +327,11 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
       captionsWordsPerPage,
       captionsStyle,
       fps,
+      height,
       rangeEndFrames,
       rangeStartFrames,
       timelineMs,
+      width,
     ]
   );
   const segmentCount = useMemo(() => {
@@ -417,17 +419,18 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     captionsOffsetX,
     captionsOffsetY,
     captionsScalePercent,
+    captionsAnimationPreset,
     effectiveCaptionsStyle,
     captionBlocks,
     captionPages,
     hasActiveCaption,
     fps,
     timelineMs,
-    captionOpacity,
-    captionTransform,
     captionBlur,
     captionHighlightColor,
     layerOpacity: contentLayerOpacity,
+    compositionWidth: width,
+    compositionHeight: height,
   };
 
   return (

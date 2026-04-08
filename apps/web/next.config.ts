@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false,
   transpilePackages: ["@estudio/audio-core", "@estudio/utils"],
   async headers() {
     return [

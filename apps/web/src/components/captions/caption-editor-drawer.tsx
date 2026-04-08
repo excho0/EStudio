@@ -813,29 +813,13 @@ export function CaptionEditor({
     const nextRequestedOffset = Number.parseInt(globalOffsetMsInput.trim(), 10);
     if (!Number.isFinite(nextRequestedOffset)) return;
     const previousOffset = Math.round(draftRef.current.globalOffsetMs ?? 0);
-    let delta = nextRequestedOffset - previousOffset;
-    if (delta === 0) return;
-    const minStartMs = sortedSegmentsRef.current.reduce(
-      (min, segment) => Math.min(min, segment.startMs),
-      Number.POSITIVE_INFINITY
-    );
-    const maxNegativeDelta =
-      Number.isFinite(minStartMs) && minStartMs > 0 ? -minStartMs : 0;
-    if (delta < maxNegativeDelta) {
-      delta = maxNegativeDelta;
-    }
-    if (delta === 0) return;
-    const appliedOffset = previousOffset + delta;
+    if (nextRequestedOffset === previousOffset) return;
+    const appliedOffset = nextRequestedOffset;
     applyDraftUpdate((current) => ({
       ...current,
       globalOffsetMs: appliedOffset,
       segments: current.segments,
     }));
-    // Keep input and effective draft offset aligned when clamping occurs.
-    if (nextRequestedOffset !== appliedOffset) {
-      suppressOffsetInputEffectRef.current = true;
-      setGlobalOffsetMsInput(String(appliedOffset));
-    }
   }, [applyDraftUpdate, globalOffsetMsInput]);
 
   useEffect(() => {

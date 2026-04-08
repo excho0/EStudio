@@ -235,7 +235,7 @@ export const buildContentLoopPropsFromItem = (
       item.captionsScalePercent ??
       CONTENT_LOOP_DEFAULTS.captionsScalePercent,
     captionsAnimationPreset:
-      getSetting<"smooth" | "cinematic" | "punch" | "minimal">(
+      getSetting<"smooth" | "cinematic" | "punch" | "minimal" | "cascade">(
         "captionsAnimationPreset"
       ) ??
       item.captionsAnimationPreset ??

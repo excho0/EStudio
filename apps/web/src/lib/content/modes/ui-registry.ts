@@ -384,6 +384,7 @@ const videoLoopSections: ContentModeSection[] = [
           { label: "Smooth", value: "smooth", icon: Sparkles },
           { label: "Cinematic", value: "cinematic", icon: Film },
           { label: "Punch", value: "punch", icon: Zap },
+          { label: "Cascade", value: "cascade", icon: ArrowDown },
           { label: "Minimal", value: "minimal", icon: Minus },
         ],
         disabledWhen: {

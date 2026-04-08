@@ -61,7 +61,7 @@ export const videoLoopSettingsSchema = z
     captionsOffsetY: z.number().min(-1200).max(1200).default(0),
     captionsScalePercent: z.number().min(50).max(200).default(100),
     captionsAnimationPreset: z
-      .enum(["smooth", "cinematic", "punch", "minimal"])
+      .enum(["smooth", "cinematic", "punch", "minimal", "cascade"])
       .default("smooth"),
     captionsWordsPerPage: z.number().int().min(1).max(12).default(4),
     paletteModeOverride: z.enum(["auto", "manual"]).optional(),
