@@ -11,7 +11,7 @@ import { AtSignIcon, ChevronLeft } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
 import { FloatingPaths } from "@/components/branding/floating-paths";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 // import { Link } from "@/components/navigation/route-transition";
 import { Particles } from "@/components/ui/particles";
 
@@ -26,6 +26,7 @@ type AuthPageProps = {
 	providers: AuthProvider[];
 	onMagicLink: (email: string) => void;
 	showMagicLink?: boolean;
+	loadingProviders?: boolean;
 	showVerificationNotice?: boolean;
 	verificationEmail?: string;
 	loading?: boolean;
@@ -36,6 +37,7 @@ export function AuthPage({
 	providers,
 	onMagicLink,
 	showMagicLink = true,
+	loadingProviders = false,
 	showVerificationNotice = false,
 	verificationEmail,
 	loading = false,
@@ -55,13 +57,9 @@ export function AuthPage({
 	return (
 		<AnimatePresence mode="wait">
 			{showVerificationNotice ? (
-				<motion.main
+				<main
 					key="verify"
 					className="relative flex min-h-screen items-center justify-center px-4 py-12"
-					initial={{ opacity: 0, y: 18 }}
-					animate={{ opacity: 1, y: 0 }}
-					exit={{ opacity: 0, y: -12 }}
-					transition={{ duration: 0.45, ease: "easeOut" }}
 				>
 					<div className="w-full max-w-md text-center">
 						<Logo
@@ -92,15 +90,11 @@ export function AuthPage({
 							</Button>
 						</div>
 					</div>
-				</motion.main>
+				</main>
 			) : (
-				<motion.main
+				<main
 					key="login"
 					className="relative md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2"
-					initial={{ opacity: 0, y: 12 }}
-					animate={{ opacity: 1, y: 0 }}
-					exit={{ opacity: 0, y: 12 }}
-					transition={{ duration: 0.5, ease: "easeOut" }}
 				>
 			<div className="relative hidden h-full flex-col border-r bg-secondary p-10 lg:flex dark:bg-secondary/20">
 				<div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
@@ -164,19 +158,28 @@ export function AuthPage({
 						</p> */}
 					</div>
 					<div className="space-y-2">
-						{providers.map((provider) => (
-							<Button
-								key={provider.id}
-								className="w-full"
-								size="lg"
-								type="button"
-								onClick={provider.onClick}
-								disabled={loading}
-							>
-								{provider.icon ?? null}
-								{provider.label}
-							</Button>
-						))}
+						{loadingProviders ? (
+							Array.from({ length: 3 }).map((_, index) => (
+								<div
+									key={`provider-skeleton-${index}`}
+									className="h-11 w-full animate-pulse rounded-md border border-border bg-muted/60"
+								/>
+							))
+						) : (
+							providers.map((provider) => (
+								<Button
+									key={provider.id}
+									className="w-full"
+									size="lg"
+									type="button"
+									onClick={provider.onClick}
+									disabled={loading}
+								>
+									{provider.icon ?? null}
+									{provider.label}
+								</Button>
+							))
+						)}
 					</div>
 
 					<div className="flex w-full items-center justify-center">
@@ -241,7 +244,7 @@ export function AuthPage({
 				</div>
 				<div></div>
 			</div>
-				</motion.main>
+				</main>
 			)}
 		</AnimatePresence>
 	);

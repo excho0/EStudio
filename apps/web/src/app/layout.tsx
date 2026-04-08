@@ -10,6 +10,7 @@ import { AppSessionProvider } from "@/components/auth/session-provider";
 import { SocketIOProvider } from "@/components/studio/socketIO-provider";
 import { PwaRegister } from "@/components/providers/pwa-register";
 import { APP_NAME } from "@/lib/shared/constants";
+import { auth } from "@/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,11 +40,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -52,7 +55,7 @@ export default function RootLayout({
         <PwaRegister />
         <QueryProvider>
           <SocketIOProvider>
-            <AppSessionProvider>
+            <AppSessionProvider session={session}>
               <ThemeProvider
                 attribute="class"
                 defaultTheme="system"
