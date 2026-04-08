@@ -88,17 +88,17 @@ export default function DashboardOverviewPage() {
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(420px,1fr)_minmax(280px,500px)]">
-        <Card className="border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
-          <div className="flex items-center justify-between">
-            <div>
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(420px,1fr)_minmax(280px,500px)]">
+        <Card className="min-w-0 border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold">Recent Projects</h2>
               <p className="text-sm text-slate-500 dark:text-zinc-400">
                 Latest uploads and render activity.
               </p>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex shrink-0 gap-4">
               {/* <span className="hidden items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 sm:flex">
                 <Sparkles className="h-4 w-4" />
                 Freshly synced
@@ -144,24 +144,29 @@ export default function DashboardOverviewPage() {
                   animateHeight={false}
                   progress={getEffectiveStatus(item) === "rendering" ? Math.round((renderProgress[item.id]?.progress ?? 0) * 100) : null}
                   progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
-                  className="gap-3 border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
+                  className="min-w-0 gap-3 overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
                       <ImageWithSkeleton
                         src={`/api/content/${item.id}/asset?type=thumbnail`}
                         alt={`${item.title} thumbnail`}
                         className="h-12 w-16 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
                         wrapperClassName="h-12 w-16 rounded-md"
                       />
-                      <div>
-                        <div className="text-sm font-semibold">{item.title}</div>
-                        <div className="text-xs text-slate-500 dark:text-zinc-500">
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <div className="truncate text-sm font-semibold">{item.title}</div>
+                        <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                           {formatDate(item.createdAt)}
                         </div>
                       </div>
                     </div>
-                    {<JobStatusBadge status={getEffectiveStatus(item)} showLabel progress={renderProgress[item.id]?.progress} />}
+                    <JobStatusBadge
+                      status={getEffectiveStatus(item)}
+                      showLabel
+                      progress={renderProgress[item.id]?.progress}
+                      className="shrink-0"
+                    />
                   </div>
                 </Card>
               ))}
@@ -169,34 +174,34 @@ export default function DashboardOverviewPage() {
           )}
         </Card>
 
-        <Card className="border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+        <Card className="min-w-0 border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
           <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-50">
             Render Checklist
           </h3>
           <ul className="mt-4 space-y-3">
-            <li className="flex items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_6px_14px_-10px_rgba(15,23,42,0.5)] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
+            <li className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_6px_14px_-10px_rgba(15,23,42,0.5)] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
                 <Film className="h-4 w-4" />
               </span>
-              <span>Upload a clean loopable video clip.</span>
+              <span className="min-w-0">Upload a clean loopable video clip.</span>
             </li>
-            <li className="flex items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-[0_6px_14px_-10px_rgba(16,185,129,0.5)] dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            <li className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-[0_6px_14px_-10px_rgba(16,185,129,0.5)] dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
                 <Music className="h-4 w-4" />
               </span>
-              <span>Confirm song length in seconds.</span>
+              <span className="min-w-0">Confirm song length in seconds.</span>
             </li>
-            <li className="flex items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 shadow-[0_6px_14px_-10px_rgba(245,158,11,0.5)] dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <li className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 shadow-[0_6px_14px_-10px_rgba(245,158,11,0.5)] dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                 <SlidersHorizontal className="h-4 w-4" />
               </span>
-              <span>Adjust fade and segment length.</span>
+              <span className="min-w-0">Adjust fade and segment length.</span>
             </li>
-            <li className="flex items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 shadow-[0_6px_14px_-10px_rgba(59,130,246,0.5)] dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+            <li className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200/70 bg-slate-50 px-3 py-2 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 shadow-[0_6px_14px_-10px_rgba(59,130,246,0.5)] dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
                 <Send className="h-4 w-4" />
               </span>
-              <span>Send to render for output.</span>
+              <span className="min-w-0">Send to render for output.</span>
             </li>
           </ul>
         </Card>

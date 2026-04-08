@@ -959,8 +959,8 @@ export default function LibraryPage() {
                         progressClassName="bg-black/6 ring-black/5 dark:bg-white/8 dark:ring-white/6"
                         className="gap-3 border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex min-w-0 flex-1 gap-3">
+                        <div className="flex min-w-0 items-start justify-between gap-4 overflow-hidden">
+                          <div className="flex min-w-0 flex-1 gap-3 overflow-hidden">
                             <ImageWithSkeleton
                               src={`/api/content/${item.id}/asset?type=thumbnail&v=${encodeURIComponent(
                                 item.updatedAt
@@ -969,15 +969,16 @@ export default function LibraryPage() {
                               className="h-16 w-20 rounded-md object-cover ring-1 ring-slate-200 dark:ring-white/10"
                               wrapperClassName="h-16 w-20 rounded-md"
                             />
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1 overflow-hidden">
                               <div className="truncate text-sm font-semibold">{item.title}</div>
                               <div className="truncate text-xs text-slate-500 dark:text-zinc-500">
                                 {formatDate(item.createdAt)}
                               </div>
-                              <div className="mt-2">
+                              <div className="mt-2 min-w-0 max-w-full overflow-hidden">
                                 <JobStatusBadge
                                   status={getEffectiveStatus(item)}
                                   progress={renderProgress[item.id]?.progress}
+                                  className="max-w-full shrink-0 [&>span]:min-w-0 [&>span]:max-w-full [&>span]:overflow-hidden [&>span]:truncate [&>span>span:first-child]:truncate"
                                 />
                               </div>
                             </div>

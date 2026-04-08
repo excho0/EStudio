@@ -111,16 +111,16 @@ function CollapsibleTrigger({
     >
       {shouldRenderDefault ? (
         <>
-          <div className="flex items-center gap-3 text-left">
+          <div className="flex min-w-0 items-center gap-3 text-left">
             {Icon ? (
-              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
-                <Icon className="h-4 w-4" />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-zinc-300">
+                <Icon className="h-4 w-4 shrink-0" />
               </span>
             ) : null}
-            <div className="flex flex-col items-start">
-              {title ? <span>{title}</span> : null}
+            <div className="flex min-w-0 flex-col items-start">
+              {title ? <span className="truncate">{title}</span> : null}
               {description ? (
-                <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">
+                <span className="truncate text-xs font-normal text-slate-500 dark:text-zinc-400">
                   {description}
                 </span>
               ) : null}
@@ -128,7 +128,7 @@ function CollapsibleTrigger({
           </div>
           <div className="flex items-center gap-3">
             {rightSlot ? <div className="text-sm">{rightSlot}</div> : null}
-            <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
           </div>
         </>
       ) : (
