@@ -65,6 +65,7 @@ import { sdk } from "@/lib/sdk";
 import { ContentLoopComposition } from "@/remotion/ContentLoopComposition";
 import {
   DEFAULT_CONTENT_MODE,
+  deriveModeSettings,
   getOutputDefaultsForMode,
   resolveContentSettings,
   normalizeSettingsMap,
@@ -653,6 +654,15 @@ export default function EditContentPage() {
               return option.value.startsWith("landscape_");
             })
           : (field.options ?? []);
+      const selectValue =
+        field.key === "outputConfig.preset"
+          ? String(
+              getOutputDefaultsForMode(
+                formValues.mode || resolvedItem?.mode,
+                currentSettings
+              ).preset
+            )
+          : String(getFieldValue(field.key) ?? "");
       return (
         <div key={field.key} className="grid gap-2">
           <LabelWithTooltip
@@ -662,7 +672,7 @@ export default function EditContentPage() {
           />
           <IconSelect
             id={field.key}
-            value={String(getFieldValue(field.key) ?? "")}
+            value={selectValue}
             onValueChange={(value) => updateFormValue(field.key, value)}
             triggerClassName={cn("w-full", disabled && "opacity-60")}
             options={selectOptions.map((option) => ({
@@ -1093,7 +1103,11 @@ export default function EditContentPage() {
                           current.settings
                         );
                         if (!settingsMap[value]) {
-                          const defaults = resolveContentSettings(value, {}).settings;
+                          const defaults = deriveModeSettings(
+                            value,
+                            current.mode,
+                            current.settings
+                          );
                           return {
                             ...current,
                             mode: value,

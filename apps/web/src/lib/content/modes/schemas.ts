@@ -12,12 +12,12 @@ export const outputConfigSchema = z
         "portrait_qhd",
         "custom",
       ])
-      .default("landscape_hd"),
+      .default("landscape_fhd"),
     fps: z.number().int().positive().optional(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
   })
-  .default({ preset: "landscape_hd" });
+  .default({ preset: "landscape_fhd" });
 
 export const videoLoopSettingsSchema = z
   .object({
@@ -32,6 +32,7 @@ export const videoLoopSettingsSchema = z
     audioFadeOutSeconds: z.number().nonnegative().default(0),
     audioFadeInOffsetSeconds: z.number().nonnegative().default(0),
     audioFadeOutOffsetSeconds: z.number().nonnegative().default(0),
+    syncAudioFadesWithVideo: z.boolean().default(true),
     scalePercent: z.number().nonnegative().default(100),
     visualizationEnabled: z.boolean().default(true),
     visualizationBars: z.number().int().min(16).max(128).default(128),

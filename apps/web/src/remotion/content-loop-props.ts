@@ -35,6 +35,7 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   audioFadeOutSeconds: 0,
   audioFadeInOffsetSeconds: 0,
   audioFadeOutOffsetSeconds: 0,
+  syncAudioFadesWithVideo: true,
   videoDurationSeconds: null,
   playbackRate: 1,
   captionsEnabled: false,
@@ -131,6 +132,10 @@ export const buildContentLoopPropsFromItem = (
       getSetting<number>("audioFadeOutOffsetSeconds") ??
       item.audioFadeOutOffsetSeconds ??
       CONTENT_LOOP_DEFAULTS.audioFadeOutOffsetSeconds,
+    syncAudioFadesWithVideo:
+      getSetting<boolean>("syncAudioFadesWithVideo") ??
+      item.syncAudioFadesWithVideo ??
+      CONTENT_LOOP_DEFAULTS.syncAudioFadesWithVideo,
     visualizationEnabled:
       getSetting<boolean>("visualizationEnabled") ??
       item.visualizationEnabled ??

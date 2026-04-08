@@ -66,6 +66,17 @@ export type ContentModeField = {
     when: string | number | boolean;
     keys: string[];
   }>;
+  deriveValuesOnValue?: Array<{
+    when: string | number | boolean;
+    mappings: Array<{
+      fromKey: string;
+      toKey: string;
+    }>;
+  }>;
+  syncTargets?: Array<{
+    key: string;
+    when?: ContentModeConditionSet;
+  }>;
   serialize?: (value: unknown) => number | string | boolean;
   deserialize?: (value: number | string | boolean) => unknown;
   action?: {
@@ -147,6 +158,14 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+        syncTargets: [
+          {
+            key: "audioFadeInSeconds",
+            when: {
+              all: [{ key: "syncAudioFadesWithVideo", equals: true }],
+            },
+          },
+        ],
       },
       {
         key: "outroFadeSeconds",
@@ -155,6 +174,14 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+        syncTargets: [
+          {
+            key: "audioFadeOutSeconds",
+            when: {
+              all: [{ key: "syncAudioFadesWithVideo", equals: true }],
+            },
+          },
+        ],
       },
     ],
   },
@@ -163,8 +190,25 @@ const videoLoopSections: ContentModeSection[] = [
     title: "Audio",
     description: "Audio fade controls.",
     icon: AudioLines,
-    layout: "grid",
+    layout: "list",
     fields: [
+      {
+        key: "syncAudioFadesWithVideo",
+        label: "Sync Audio Fades",
+        tooltip:
+          "Keep audio fade in and fade out aligned with the intro and outro fade values.",
+        input: "toggle",
+        defaultValue: true,
+        deriveValuesOnValue: [
+          {
+            when: true,
+            mappings: [
+              { fromKey: "introFadeSeconds", toKey: "audioFadeInSeconds" },
+              { fromKey: "outroFadeSeconds", toKey: "audioFadeOutSeconds" },
+            ],
+          },
+        ],
+      },
       {
         key: "audioFadeInSeconds",
         label: "Fade In (sec)",
@@ -172,6 +216,9 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+        disabledWhen: {
+          all: [{ key: "syncAudioFadesWithVideo", equals: true }],
+        },
       },
       {
         key: "audioFadeOutSeconds",
@@ -180,6 +227,9 @@ const videoLoopSections: ContentModeSection[] = [
         input: "number",
         min: 0,
         step: 0.1,
+        disabledWhen: {
+          all: [{ key: "syncAudioFadesWithVideo", equals: true }],
+        },
       },
       {
         key: "audioFadeInOffsetSeconds",
@@ -677,7 +727,7 @@ const videoLoopSections: ContentModeSection[] = [
         tooltip:
           "Select a predefined output profile. Each preset sets width, height, and default FPS.",
         input: "select",
-        defaultValue: "landscape_hd",
+        defaultValue: "landscape_fhd",
         options: [
           { label: "Landscape HD (1280x720 @60)", value: "landscape_hd" },
           { label: "Landscape FHD (1920x1080 @60)", value: "landscape_fhd" },

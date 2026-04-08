@@ -108,64 +108,6 @@ export const getFieldValue = (
   return field?.input === "toggle" ? false : 0;
 };
 
-export const applyFieldValue = (
-  fieldMap: Record<string, ContentModeField>,
-  settings: Record<string, unknown>,
-  key: string,
-  value: string | number | boolean
-) => {
-  const next = { ...settings };
-  const resetKeysToDefault = (keys: string[]) => {
-    keys.forEach((resetKey) => {
-      const resetField = fieldMap[resetKey];
-      if (resetField?.defaultValue !== undefined) {
-        const resetValue = resetField.deserialize
-          ? resetField.deserialize(resetField.defaultValue)
-          : resetField.defaultValue;
-        setValueAtPath(next, resetKey, resetValue);
-      } else {
-        deleteValueAtPath(next, resetKey);
-      }
-    });
-  };
-  if (typeof value === "string" && value.trim() === "") {
-    deleteValueAtPath(next, key);
-    return next;
-  }
-  const field = fieldMap[key];
-  if (field?.deserialize) {
-    setValueAtPath(next, key, field.deserialize(value));
-    return next;
-  }
-  if (typeof value === "boolean") {
-    setValueAtPath(next, key, value);
-    const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
-    if (resetRule) {
-      resetKeysToDefault(resetRule.keys);
-    }
-    return next;
-  }
-  if (field?.input === "select") {
-    setValueAtPath(next, key, String(value));
-    const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
-    if (resetRule) {
-      resetKeysToDefault(resetRule.keys);
-    }
-    return next;
-  }
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
-    deleteValueAtPath(next, key);
-    return next;
-  }
-  setValueAtPath(next, key, numeric);
-  const resetRule = field?.resetsOnValue?.find((rule) => rule.when === numeric);
-  if (resetRule) {
-    resetKeysToDefault(resetRule.keys);
-  }
-  return next;
-};
-
 const resolveComparableValue = (
   fieldMap: Record<string, ContentModeField>,
   settings: Record<string, unknown>,
@@ -202,6 +144,100 @@ const matchesConditionSet = (
       matchesRule(resolveComparableValue(fieldMap, settings, rule.key), rule)
     );
   return allMatched || anyMatched;
+};
+
+export const applyFieldValue = (
+  fieldMap: Record<string, ContentModeField>,
+  settings: Record<string, unknown>,
+  key: string,
+  value: string | number | boolean
+) => {
+  const next = { ...settings };
+  const resetKeysToDefault = (keys: string[]) => {
+    keys.forEach((resetKey) => {
+      const resetField = fieldMap[resetKey];
+      if (resetField?.defaultValue !== undefined) {
+        const resetValue = resetField.deserialize
+          ? resetField.deserialize(resetField.defaultValue)
+          : resetField.defaultValue;
+        setValueAtPath(next, resetKey, resetValue);
+      } else {
+        deleteValueAtPath(next, resetKey);
+      }
+    });
+  };
+  const applyDerivedValues = (
+    field: ContentModeField | undefined,
+    when: string | number | boolean
+  ) => {
+    const deriveRule = field?.deriveValuesOnValue?.find((rule) => rule.when === when);
+    if (!deriveRule) return;
+    for (const mapping of deriveRule.mappings) {
+      const sourceValue = getValueAtPath(next, mapping.fromKey);
+      if (sourceValue === undefined) {
+        deleteValueAtPath(next, mapping.toKey);
+        continue;
+      }
+      setValueAtPath(next, mapping.toKey, sourceValue);
+    }
+  };
+  const applySyncTargets = (
+    field: ContentModeField | undefined,
+    storedValue: unknown
+  ) => {
+    if (!field?.syncTargets?.length) return;
+    for (const target of field.syncTargets) {
+      if (target.when && !matchesConditionSet(fieldMap, next, target.when)) {
+        continue;
+      }
+      setValueAtPath(next, target.key, storedValue);
+    }
+  };
+  if (typeof value === "string" && value.trim() === "") {
+    deleteValueAtPath(next, key);
+    return next;
+  }
+  const field = fieldMap[key];
+  if (field?.deserialize) {
+    const storedValue = field.deserialize(value);
+    setValueAtPath(next, key, storedValue);
+    applySyncTargets(field, storedValue);
+    applyDerivedValues(field, value);
+    return next;
+  }
+  if (typeof value === "boolean") {
+    setValueAtPath(next, key, value);
+    const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
+    if (resetRule) {
+      resetKeysToDefault(resetRule.keys);
+    }
+    applySyncTargets(field, value);
+    applyDerivedValues(field, value);
+    return next;
+  }
+  if (field?.input === "select") {
+    setValueAtPath(next, key, String(value));
+    const resetRule = field?.resetsOnValue?.find((rule) => rule.when === value);
+    if (resetRule) {
+      resetKeysToDefault(resetRule.keys);
+    }
+    applySyncTargets(field, String(value));
+    applyDerivedValues(field, value);
+    return next;
+  }
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    deleteValueAtPath(next, key);
+    return next;
+  }
+  setValueAtPath(next, key, numeric);
+  const resetRule = field?.resetsOnValue?.find((rule) => rule.when === numeric);
+  if (resetRule) {
+    resetKeysToDefault(resetRule.keys);
+  }
+  applySyncTargets(field, numeric);
+  applyDerivedValues(field, numeric);
+  return next;
 };
 
 export const isFieldDisabled = (

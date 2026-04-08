@@ -57,8 +57,12 @@ export const getOutputDefaultsForMode = (
   const normalizedMode = (mode ?? "").toLowerCase();
   const isShortMode =
     normalizedMode.includes("short") || normalizedMode.includes("portrait");
+  const matchesModePresetFamily = (preset: string) => {
+    if (preset === "custom") return true;
+    return isShortMode ? preset.startsWith("portrait_") : preset.startsWith("landscape_");
+  };
   const fallbackPreset: OutputPresetId =
-    isShortMode ? "portrait_fhd" : "landscape_hd";
+    isShortMode ? "portrait_fhd" : "landscape_fhd";
   const scoped =
     settings && typeof settings === "object" && !Array.isArray(settings)
       ? (settings as Record<string, unknown>)
@@ -71,7 +75,9 @@ export const getOutputDefaultsForMode = (
       : {};
   const presetCandidate = rawOutputConfig.preset;
   const preset =
-    typeof presetCandidate === "string" ? presetCandidate : fallbackPreset;
+    typeof presetCandidate === "string" && matchesModePresetFamily(presetCandidate)
+      ? presetCandidate
+      : fallbackPreset;
   const basePreset =
     preset in OUTPUT_PRESET_DEFAULTS
       ? (preset as OutputPresetId)

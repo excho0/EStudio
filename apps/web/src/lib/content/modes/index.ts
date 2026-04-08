@@ -113,12 +113,14 @@ export const resolveContentSettings = (mode: string | undefined, settings: unkno
   const definition = getContentMode(mode);
   const settingsMap = normalizeSettingsMap(definition.id, settings);
   const scoped = settingsMap[definition.id] ?? {};
-  const cleaned =
-    scoped && typeof scoped === "object"
+  const cleaned = {
+    ...(cloneSettingsValue(definition.defaults) as Record<string, unknown>),
+    ...(scoped && typeof scoped === "object"
       ? {
           ...(scoped as Record<string, unknown>),
         }
-      : {};
+      : {}),
+  };
   delete cleaned.fps;
   delete cleaned.width;
   delete cleaned.height;
@@ -144,6 +146,7 @@ export const mergeContentSettings = (
   const settingsMap = normalizeSettingsMap(definition.id, base);
   const patchMap = normalizeSettingsMap(definition.id, patch);
   const merged = {
+    ...(cloneSettingsValue(definition.defaults) as Record<string, unknown>),
     ...(settingsMap[definition.id] ?? {}),
   } as Record<string, unknown>;
   Object.assign(merged, patchMap[definition.id] ?? {});
@@ -157,5 +160,39 @@ export const mergeContentSettings = (
   return {
     mode: definition.id,
     settings: parsed.data,
+  };
+};
+
+export const deriveModeSettings = (
+  targetMode: string | undefined,
+  sourceMode: string | undefined,
+  settings: unknown
+) => {
+  const targetDefaults = resolveContentSettings(targetMode, {}).settings as Record<
+    string,
+    unknown
+  >;
+  const settingsMap = normalizeSettingsMap(sourceMode, settings);
+  const sourceDefinition = getContentMode(sourceMode);
+  const sourceScoped =
+    settingsMap[sourceDefinition.id] &&
+    typeof settingsMap[sourceDefinition.id] === "object" &&
+    !Array.isArray(settingsMap[sourceDefinition.id])
+      ? cloneSettingsValue(settingsMap[sourceDefinition.id] as Record<string, unknown>)
+      : {};
+
+  const derived = resolveContentSettings(targetMode, sourceScoped).settings as Record<
+    string,
+    unknown
+  >;
+
+  return {
+    ...derived,
+    outputConfig:
+      targetDefaults.outputConfig &&
+      typeof targetDefaults.outputConfig === "object" &&
+      !Array.isArray(targetDefaults.outputConfig)
+        ? cloneSettingsValue(targetDefaults.outputConfig)
+        : derived.outputConfig,
   };
 };
