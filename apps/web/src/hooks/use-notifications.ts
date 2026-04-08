@@ -16,12 +16,14 @@ import { sdk } from "@/lib/sdk";
 import type { UserNotificationPreferencesUpdateRequest } from "@/lib/sdk/domains/user-preferences";
 import { SocketEvents } from "@/lib/socket/events";
 import { attachSocketSubscriptions } from "@/lib/socket/subscriptions";
+import { queryKeys } from "@/lib/http/query-keys";
 import type {
   AppEventMap,
   NotificationItem,
   NotificationKind,
   NotificationStatus,
 } from "@/types";
+import type { ContentItem } from "@/types";
 
 export type NotificationPreferences = {
   push: {
@@ -373,16 +375,47 @@ const dedupeCanonicalJobs = (items: ActivityJob[]) => {
   }
   return Array.from(map.values()).sort(compareJobsByRecency);
 };
+const getActiveJobSubjectKey = (item: ActivityJob) => {
+  const normalizedMode = item.mode?.trim();
+  if (item.kind === "render" || item.kind === "caption") {
+    return `${item.kind}:${item.id}:${normalizedMode ?? "default"}`;
+  }
+  if (item.kind === "publish") {
+    return `${item.kind}:${item.id}:${item.jobId ?? normalizedMode ?? "default"}`;
+  }
+  return item.jobId
+    ? `${item.kind}:${item.id}:${item.jobId}`
+    : `${item.kind}:${item.id}:${normalizedMode ?? "default"}`;
+};
 const dedupeActiveJobsBySubject = (items: ActivityJob[]) => {
   const map = new Map<string, ActivityJob>();
   for (const item of items) {
-    const subjectKey = item.jobId
-      ? item.key
-      : `${item.kind}:${item.id}:${item.mode ?? "default"}`;
+    const subjectKey = getActiveJobSubjectKey(item);
     const existing = map.get(subjectKey);
     map.set(subjectKey, existing ? pickPreferredJob(existing, item) : item);
   }
   return Array.from(map.values()).sort(compareJobsByRecency);
+};
+const findCachedContentTitle = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  contentId: string
+) => {
+  const contentItem = queryClient.getQueryData<ContentItem>(
+    queryKeys.contentItem(contentId)
+  );
+  const directTitle = contentItem?.title?.trim();
+  if (directTitle) return directTitle;
+
+  const contentLists = queryClient.getQueriesData<{ items?: ContentItem[] }>({
+    queryKey: queryKeys.contentListBase,
+  });
+  for (const [, data] of contentLists) {
+    const match = data?.items?.find((item) => item.id === contentId);
+    const title = match?.title?.trim();
+    if (title) return title;
+  }
+
+  return undefined;
 };
 
 const demoNotificationJobs: ActivityJob[] = [
@@ -409,6 +442,7 @@ const demoNotificationJobs: ActivityJob[] = [
 ];
 
 export const useNotificationCenter = (open: boolean) => {
+  const queryClient = useQueryClient();
   const captionProgressMap = useCaptionProgress({ paused: !open });
   const publishProgressMap = usePublishProgress({ paused: !open });
   const [jobs, setJobs] = useState<Record<string, ActivityJob>>(() => {
@@ -656,8 +690,14 @@ export const useNotificationCenter = (open: boolean) => {
     [publishProgressMap]
   );
   const canonicalJobs = useMemo(
-    () => dedupeCanonicalJobs([...combinedJobs, ...activePublishJobs, ...activeCaptionJobs]),
-    [activeCaptionJobs, activePublishJobs, combinedJobs]
+    () =>
+      dedupeCanonicalJobs([...combinedJobs, ...activePublishJobs, ...activeCaptionJobs]).map(
+        (job) => ({
+          ...job,
+          title: job.title?.trim() || findCachedContentTitle(queryClient, job.id),
+        })
+      ),
+    [activeCaptionJobs, activePublishJobs, combinedJobs, queryClient]
   );
   const activeJobs = useMemo(
     () => dedupeActiveJobsBySubject(canonicalJobs.filter((job) => isActiveStatus(job.status))),
