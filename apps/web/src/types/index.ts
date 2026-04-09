@@ -75,12 +75,18 @@ export type {
   CaptionUpdatePayload,
   ContentUpdateType,
   ContentUpdatePayload,
+  MetricsSubscribePayload,
+  MetricsUnsubscribePayload,
+  MetricsUpdateEventPayload,
   RenderProgressPayload,
   RenderCompletePayload,
+  RenderCancelRequestedPayload,
+  RenderCompletedEventPayload,
   PublishUpdatePayload,
   PublishProgressPayload,
   ProviderConnectionPayload,
   SettingsUpdatedPayload,
+  UserRegisterPayload,
   UserProfileUpdatedPayload,
 } from "./events";
 export type { StorageAdapter, StorageStat } from "./storage";

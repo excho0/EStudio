@@ -9,7 +9,7 @@ import si from "systeminformation";
 import { getLogger } from "@/lib/logging";
 import { resolveRedisPoolUrl } from "@/lib/redis/pools";
 import { eventBus } from "@/lib/event-bus";
-import { APP_EVENT_TOPICS } from "@/lib/socket/events";
+import { APP_EVENT_TOPICS, SocketEvents } from "@/lib/socket/events";
 
 declare global {
   // Shared Socket.IO instance for legacy modules that still access global state.
@@ -111,7 +111,7 @@ app
 
     const registerRealtimeBridge = async () => {
       const unsubs = await Promise.all(
-        APP_EVENT_TOPICS.map((topic) =>
+        APP_EVENT_TOPICS.map((topic: keyof import("@/types").AppEventMap) =>
           eventBus.on(topic, ({ payload }) => {
             const room = resolveUserRoom(extractUserId(payload));
             if (room) {
@@ -208,6 +208,10 @@ app
         );
       });
 
+    let metricsSubscriberCount = 0;
+    let metricsInterval: NodeJS.Timeout | null = null;
+    const METRICS_ROOM = "metrics:subscribers";
+
     const emitMetrics = async () => {
       try {
         const [load, memory, graphics, cpuTemp, nvidiaSmi, rocmSmi] = await Promise.all([
@@ -270,7 +274,7 @@ app
           };
         });
 
-        io.emit("metrics.update", {
+        io.to(METRICS_ROOM).emit("metrics.update", {
           cpu: {
             load: load.currentLoad,
             temperature: cpuTemp.main ?? null,
@@ -287,12 +291,23 @@ app
       }
     };
 
-    emitMetrics();
-    setInterval(emitMetrics, 2000);
+    const startMetricsMonitoring = () => {
+      if (metricsInterval) return;
+      void emitMetrics();
+      metricsInterval = setInterval(() => {
+        void emitMetrics();
+      }, 2000);
+    };
+
+    const stopMetricsMonitoring = () => {
+      if (!metricsInterval) return;
+      clearInterval(metricsInterval);
+      metricsInterval = null;
+    };
 
     io.on("connection", (socket) => {
       socket.emit("content.update", { type: "connected" });
-      socket.on("user.register", (payload: unknown) => {
+      socket.on(SocketEvents.user.register, (payload: unknown) => {
         const userId = (() => {
           if (typeof payload === "string") return payload;
           if (
@@ -310,6 +325,28 @@ app
         }
         socket.join(`user:${userId}`);
       });
+
+      const subscribeMetrics = () => {
+        if (socket.data.metricsSubscribed === true) return;
+        socket.data.metricsSubscribed = true;
+        metricsSubscriberCount += 1;
+        socket.join(METRICS_ROOM);
+        startMetricsMonitoring();
+      };
+
+      const unsubscribeMetrics = () => {
+        if (socket.data.metricsSubscribed !== true) return;
+        socket.data.metricsSubscribed = false;
+        metricsSubscriberCount = Math.max(0, metricsSubscriberCount - 1);
+        socket.leave(METRICS_ROOM);
+        if (metricsSubscriberCount === 0) {
+          stopMetricsMonitoring();
+        }
+      };
+
+      socket.on(SocketEvents.metrics.subscribe, subscribeMetrics);
+      socket.on(SocketEvents.metrics.unsubscribe, unsubscribeMetrics);
+      socket.on("disconnect", unsubscribeMetrics);
     });
 
     if (process.env.RENDER_SIMULATE === "true") {

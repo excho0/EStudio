@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { renderBackendSchema } from "@/lib/data/render";
+import { metricsPayloadSchema } from "@/lib/data/metrics";
 import { appSettingsSchema } from "@/lib/data/settings";
 
 /** Generic content update event payload. */
@@ -56,6 +57,39 @@ export const renderCompletePayloadSchema = z.object({
   durationSeconds: z.number().optional(),
   avgFps: z.number().optional(),
 }).describe("Render complete payload.");
+
+/** Render completed event payload. */
+export const renderCompletedEventPayloadSchema = z
+  .union([renderCompletePayloadSchema, contentUpdatePayloadSchema])
+  .describe("Render completed event payload.");
+
+/** Render cancel requested event payload. */
+export const renderCancelRequestedPayloadSchema = z.object({
+  userId: z.string().nullable().optional(),
+  id: z.string(),
+  mode: z.string().optional(),
+  jobId: z.string().optional(),
+}).describe("Render cancel requested payload.");
+
+/** User register socket payload. */
+export const userRegisterPayloadSchema = z.object({
+  userId: z.string(),
+}).describe("User register payload.");
+
+/** Metrics update socket payload. */
+export const metricsUpdateEventPayloadSchema = metricsPayloadSchema.describe(
+  "Metrics update payload."
+);
+
+/** Metrics subscribe socket payload. */
+export const metricsSubscribePayloadSchema = z
+  .undefined()
+  .describe("Metrics subscribe payload.");
+
+/** Metrics unsubscribe socket payload. */
+export const metricsUnsubscribePayloadSchema = z
+  .undefined()
+  .describe("Metrics unsubscribe payload.");
 
 /** Publish update event payload. */
 export const publishUpdatePayloadSchema = z.object({

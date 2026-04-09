@@ -3,13 +3,19 @@ import type {
   contentUpdatePayloadSchema,
   contentUpdateTypeSchema,
   captionUpdatePayloadSchema,
+  metricsSubscribePayloadSchema,
+  metricsUnsubscribePayloadSchema,
+  metricsUpdateEventPayloadSchema,
   providerConnectionPayloadSchema,
   publishProgressPayloadSchema,
   publishUpdatePayloadSchema,
+  renderCancelRequestedPayloadSchema,
+  renderCompletedEventPayloadSchema,
   renderCompletePayloadSchema,
   renderProgressPayloadSchema,
   renderQueuedPayloadSchema,
   settingsUpdatedPayloadSchema,
+  userRegisterPayloadSchema,
   userProfileUpdatedPayloadSchema,
 } from "@/lib/data/events";
 import type { renderBackendSchema } from "@/lib/data/render";
@@ -20,6 +26,12 @@ export type RenderBackend = z.infer<typeof renderBackendSchema>;
 export type RenderQueuedPayload = z.infer<typeof renderQueuedPayloadSchema>;
 export type RenderProgressPayload = z.infer<typeof renderProgressPayloadSchema>;
 export type RenderCompletePayload = z.infer<typeof renderCompletePayloadSchema>;
+export type RenderCompletedEventPayload = z.infer<typeof renderCompletedEventPayloadSchema>;
+export type RenderCancelRequestedPayload = z.infer<typeof renderCancelRequestedPayloadSchema>;
+export type UserRegisterPayload = z.infer<typeof userRegisterPayloadSchema>;
+export type MetricsUpdateEventPayload = z.infer<typeof metricsUpdateEventPayloadSchema>;
+export type MetricsSubscribePayload = z.infer<typeof metricsSubscribePayloadSchema>;
+export type MetricsUnsubscribePayload = z.infer<typeof metricsUnsubscribePayloadSchema>;
 export type PublishUpdatePayload = z.infer<typeof publishUpdatePayloadSchema>;
 export type PublishProgressPayload = z.infer<typeof publishProgressPayloadSchema>;
 export type CaptionUpdatePayload = z.infer<typeof captionUpdatePayloadSchema>;
@@ -36,14 +48,9 @@ export type AppEventMap = {
   "render.queued": RenderQueuedPayload;
   "render.started": ContentUpdatePayload;
   "render.progress": RenderProgressPayload;
-  "render.completed": RenderCompletePayload | ContentUpdatePayload;
+  "render.completed": RenderCompletedEventPayload;
   "render.failed": ContentUpdatePayload;
-  "render.cancel-requested": {
-    userId?: string | null;
-    id: string;
-    mode?: string;
-    jobId?: string;
-  };
+  "render.cancel-requested": RenderCancelRequestedPayload;
   "publish.queued": PublishUpdatePayload;
   "publish.started": PublishUpdatePayload;
   "publish.progress": PublishProgressPayload;

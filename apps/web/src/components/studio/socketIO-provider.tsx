@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -29,6 +30,8 @@ type SocketIOContextValue = {
   status: "connecting" | "connected" | "disconnected" | "error";
   eventToken: number;
   socket: Socket | null;
+  subscribeMetrics: () => void;
+  unsubscribeMetrics: () => void;
 };
 
 const SocketIOContext = createContext<SocketIOContextValue | null>(null);
@@ -133,6 +136,7 @@ export function SocketIOProvider({
   );
   const [eventToken, setEventToken] = useState(0);
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
+  const metricsSubscribedRef = useRef(false);
   const registeredUserRef = useRef<string | null>(null);
   const registeredForSocketRef = useRef<string | null>(null);
   const socketIdRef = useRef<string | null>(null);
@@ -240,7 +244,7 @@ export function SocketIOProvider({
         ) {
           return;
         }
-        socket.emit(SocketEvents.userRegister, { userId });
+        socket.emit(SocketEvents.user.register, { userId });
         registeredForSocketRef.current = userId;
         socketIdRef.current = socket.id ?? null;
       } catch {
@@ -489,10 +493,6 @@ export function SocketIOProvider({
       void notifyFailed(toastKey, "Captions", payload.id, payload.mode, payload.error);
     };
 
-    const handleMetricsUpdate = (payload: MetricsPayload) => {
-      setMetrics(payload);
-    };
-
     const stateSubscriptions = [
       { event: SocketEvents.connect, handler: handleConnect },
       { event: SocketEvents.disconnect, handler: handleDisconnect },
@@ -520,7 +520,6 @@ export function SocketIOProvider({
       { event: SocketEvents.content.created, handler: invalidateDashboardStats },
       { event: SocketEvents.content.deleted, handler: invalidateDashboardStats },
       { event: SocketEvents.content.statusChanged, handler: invalidateDashboardStats },
-      { event: SocketEvents.metricsUpdate, handler: handleMetricsUpdate },
     ] as const;
 
     const toastSubscriptions = [
@@ -586,9 +585,48 @@ export function SocketIOProvider({
 
   }, [queryClient, socket]);
 
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const handleMetricsUpdate = (payload: MetricsPayload) => {
+      setMetrics(payload);
+    };
+
+    socket.on(SocketEvents.metrics.update, handleMetricsUpdate);
+    return () => {
+      socket.off(SocketEvents.metrics.update, handleMetricsUpdate);
+    };
+  }, [socket]);
+
+  const subscribeMetrics = useCallback(() => {
+    if (!socket || metricsSubscribedRef.current) {
+      return;
+    }
+    metricsSubscribedRef.current = true;
+    socket.emit(SocketEvents.metrics.subscribe);
+  }, [socket]);
+
+  const unsubscribeMetrics = useCallback(() => {
+    if (!socket || !metricsSubscribedRef.current) {
+      return;
+    }
+    metricsSubscribedRef.current = false;
+    socket.emit(SocketEvents.metrics.unsubscribe);
+    setMetrics(null);
+  }, [socket]);
+
   const value = useMemo(
-    () => ({ connected, status, eventToken, socket }),
-    [connected, status, eventToken, socket]
+    () => ({
+      connected,
+      status,
+      eventToken,
+      socket,
+      subscribeMetrics,
+      unsubscribeMetrics,
+    }),
+    [connected, status, eventToken, socket, subscribeMetrics, unsubscribeMetrics]
   );
 
   return (
@@ -614,4 +652,15 @@ export function useOptionalSocketIO() {
 
 export function useSocketMetrics() {
   return useContext(MetricsContext);
+}
+
+export function useMetricsSubscription() {
+  const context = useContext(SocketIOContext);
+  if (!context) {
+    throw new Error("useMetricsSubscription must be used within SocketIOProvider.");
+  }
+  return {
+    subscribeMetrics: context.subscribeMetrics,
+    unsubscribeMetrics: context.unsubscribeMetrics,
+  };
 }

@@ -1,11 +1,23 @@
 "use client";
 
+import { useEffect } from "react";
 import { Activity } from "lucide-react";
-import { useSocketMetrics } from "@/components/studio/socketIO-provider";
+import {
+  useMetricsSubscription,
+  useSocketMetrics,
+} from "@/components/studio/socketIO-provider";
 import { MetricsPanel } from "@/components/studio/metrics-panel";
 
 export default function DashboardStatsPage() {
   const metrics = useSocketMetrics();
+  const { subscribeMetrics, unsubscribeMetrics } = useMetricsSubscription();
+
+  useEffect(() => {
+    subscribeMetrics();
+    return () => {
+      unsubscribeMetrics();
+    };
+  }, [subscribeMetrics, unsubscribeMetrics]);
 
   return (
     <div className="flex flex-col gap-6">
