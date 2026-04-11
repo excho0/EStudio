@@ -36,6 +36,7 @@ import { LabelWithTooltip } from "@/components/content-settings/label-with-toolt
 import { IconSelect } from "@/components/ui/icon-select";
 import { toast } from "sonner";
 import { cn } from "@/lib/shared/utils";
+import { getMediaDuration } from "@/lib/shared/media";
 import { isFieldInvalid } from "@/lib/shared/validation";
 import {
   StepperContent,
@@ -111,23 +112,6 @@ const stepper = defineStepper(
     icon: CheckCircle,
   }
 );
-
-const getMediaDuration = (file: File, kind: "audio" | "video") =>
-  new Promise<number>((resolve) => {
-    const url = URL.createObjectURL(file);
-    const element = document.createElement(kind);
-    element.preload = "metadata";
-    element.onloadedmetadata = () => {
-      const duration = Number.isFinite(element.duration) ? element.duration : 0;
-      URL.revokeObjectURL(url);
-      resolve(duration);
-    };
-    element.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(0);
-    };
-    element.src = url;
-  });
 
 export default function DashboardUploadPage() {
   const methods = stepper.useStepper();
@@ -398,7 +382,6 @@ export default function DashboardUploadPage() {
               [current.mode]: {
                 ...currentSettings,
                 segmentDurationSeconds: segmentDurationSeconds || undefined,
-                videoDurationSeconds: segmentDurationSeconds || undefined,
               },
             },
           };
@@ -415,7 +398,6 @@ export default function DashboardUploadPage() {
               [current.mode]: {
                 ...currentSettings,
                 segmentDurationSeconds: undefined,
-                videoDurationSeconds: undefined,
               },
             },
           };

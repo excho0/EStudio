@@ -110,8 +110,6 @@ const recoverSettingsMap = (mode: string | undefined, raw: Record<string, unknow
             : true,
       visualizationBars:
         toPositiveInt(currentScoped.visualizationBars ?? raw.visualizationBars) ?? 128,
-      videoDurationSeconds:
-        toNonNegative(currentScoped.videoDurationSeconds ?? raw.videoDurationSeconds, 0) ?? 0,
       playbackRate: toNumber(currentScoped.playbackRate ?? raw.playbackRate) ?? 1,
     },
   };

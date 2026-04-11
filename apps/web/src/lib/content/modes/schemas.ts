@@ -22,7 +22,6 @@ export const outputConfigSchema = z
 export const videoLoopSettingsSchema = z
   .object({
     segmentDurationSeconds: z.number().nonnegative().default(4),
-    videoDurationSeconds: z.number().nonnegative().nullable().default(null),
     songRangeStartSeconds: z.number().nonnegative().default(0),
     songRangeEndSeconds: z.number().nonnegative().nullable().default(null),
     fadeDurationSeconds: z.number().nonnegative().default(1),

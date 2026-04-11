@@ -116,9 +116,6 @@ export const contentModeRegistry = {
           thumbnailSrc: assets.thumbnailSrc,
           videoSrc: assets.videoSrc,
           audioSrc: assets.audioSrc,
-          videoDurationSeconds:
-            (settings as z.infer<typeof videoLoopSettingsSchema>).videoDurationSeconds ??
-            undefined,
           playbackRate:
             (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
           scalePercent:
@@ -156,9 +153,6 @@ export const contentModeRegistry = {
           thumbnailSrc: assets.thumbnailSrc,
           videoSrc: assets.videoSrc,
           audioSrc: assets.audioSrc,
-          videoDurationSeconds:
-            (settings as z.infer<typeof videoLoopSettingsSchema>).videoDurationSeconds ??
-            undefined,
           playbackRate:
             (settings as z.infer<typeof videoLoopSettingsSchema>).playbackRate ?? 1,
           scalePercent:

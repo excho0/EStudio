@@ -16,7 +16,7 @@ type UseCompositionTimingArgs = {
   scalePercent: number;
   segmentDurationSeconds: number;
   fadeDurationSeconds: number;
-  videoDurationSeconds?: number | null;
+  sourceVideoDurationSeconds?: number | null;
   songDurationSeconds?: number | null;
   songRangeStartSeconds: number;
   songRangeEndSeconds: number | null;
@@ -38,7 +38,7 @@ export const useCompositionTiming = ({
   scalePercent,
   segmentDurationSeconds,
   fadeDurationSeconds,
-  videoDurationSeconds,
+  sourceVideoDurationSeconds,
   songDurationSeconds,
   songRangeStartSeconds,
   songRangeEndSeconds,
@@ -78,19 +78,28 @@ export const useCompositionTiming = ({
   const resolvedPlaybackRate =
     Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
   const scaleFactor = Math.min(2, Math.max(0, scalePercent / 100));
-  const sourceSegmentFrames = Math.max(1, Math.round(segmentDurationSeconds * fps));
+  const sourceVideoFrames = Math.max(
+    1,
+    Math.round(
+      ((sourceVideoDurationSeconds ?? 0) > 0
+        ? sourceVideoDurationSeconds ?? 0
+        : segmentDurationSeconds) * fps
+    )
+  );
+  const requestedSourceSegmentFrames = Math.max(
+    1,
+    Math.round(segmentDurationSeconds * fps)
+  );
+  const sourceSegmentFrames = Math.min(requestedSourceSegmentFrames, sourceVideoFrames);
   const segmentFrames = Math.max(1, Math.round(sourceSegmentFrames / resolvedPlaybackRate));
-  const fadeFrames = Math.max(0, Math.round(fadeDurationSeconds * fps));
+  const fadeFrames = Math.min(
+    Math.max(0, Math.round(fadeDurationSeconds * fps)),
+    Math.max(0, segmentFrames - 1)
+  );
   const audioFadeInFrames = Math.max(0, Math.round(audioFadeInSeconds * fps));
   const audioFadeOutFrames = Math.max(0, Math.round(audioFadeOutSeconds * fps));
   const audioFadeInOffsetFrames = Math.max(0, Math.round(audioFadeInOffsetSeconds * fps));
   const audioFadeOutOffsetFrames = Math.max(0, Math.round(audioFadeOutOffsetSeconds * fps));
-  const sourceVideoFrames = Math.max(
-    1,
-    Math.round(
-      ((videoDurationSeconds ?? 0) > 0 ? videoDurationSeconds ?? 0 : segmentDurationSeconds) * fps
-    )
-  );
   const songTotalFrames = Math.max(
     1,
     Math.round(Math.max(0, songDurationSeconds ?? durationInFrames / fps) * fps)
@@ -118,11 +127,10 @@ export const useCompositionTiming = ({
     defaultOverlapFrames
   );
   const segmentStepFrames = Math.max(1, segmentFrames - overlapFrames);
-  const sourceOverlapFrames = Math.min(
-    sourceSegmentFrames - 1,
-    Math.max(0, Math.round(overlapFrames * resolvedPlaybackRate))
+  const sourceSegmentStepFrames = Math.min(
+    sourceSegmentFrames,
+    Math.max(1, Math.round(segmentStepFrames * resolvedPlaybackRate))
   );
-  const sourceSegmentStepFrames = Math.max(1, sourceSegmentFrames - sourceOverlapFrames);
   const transitionFrames =
     fadeFrames > 0 && segmentFrames > 1 && overlapFrames > 0
       ? Math.min(fadeFrames, overlapFrames)

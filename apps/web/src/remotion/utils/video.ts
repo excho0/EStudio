@@ -18,6 +18,7 @@ export const buildVideoSlices = (
   let remainingSource = sourceDuration;
   let currentStart = startFrom;
   let outputOffset = 0;
+  let consumedSource = 0;
 
   while (remainingOutput > 0 && remainingSource > 0) {
     if (currentStart >= videoFrames) {
@@ -25,10 +26,12 @@ export const buildVideoSlices = (
     }
     const available = Math.max(0, videoFrames - currentStart);
     const sliceSourceDuration = Math.min(remainingSource, available || remainingSource);
-    const rawOutputDuration = sliceSourceDuration / safePlaybackRate;
+    const nextConsumedSource = consumedSource + sliceSourceDuration;
+    const projectedOutputOffset = Math.round(nextConsumedSource / safePlaybackRate);
+    const desiredSliceOutputDuration = projectedOutputOffset - outputOffset;
     const sliceOutputDuration = Math.min(
       remainingOutput,
-      Math.max(1, Math.round(rawOutputDuration))
+      Math.max(1, desiredSliceOutputDuration)
     );
     slices.push({
       from: outputOffset,
@@ -38,6 +41,7 @@ export const buildVideoSlices = (
     });
     remainingOutput -= sliceOutputDuration;
     remainingSource -= sliceSourceDuration;
+    consumedSource = nextConsumedSource;
     outputOffset += sliceOutputDuration;
     currentStart = 0;
 

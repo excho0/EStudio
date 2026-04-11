@@ -97,6 +97,7 @@ import {
   SettingToggleRow,
 } from "@/components/content-settings/fields";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getMediaDuration } from "@/lib/shared/media";
 import { cn } from "@/lib/shared/utils";
 import { Alert, AlertContent, AlertIcon, AlertTitle } from "@/components/ui/alert";
 
@@ -769,6 +770,35 @@ export default function EditContentPage() {
 
   const handleVideoChange = (file: File | null) => {
     setVideoFile(file);
+    if (!file) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const duration = await getMediaDuration(file, "video");
+        const resolvedDuration = duration ? Number(duration.toFixed(2)) : 0;
+        setFormValues((current) => {
+          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
+          const currentSettings =
+            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
+          return {
+            ...current,
+            settings: {
+              ...settingsMap,
+              [current.mode]: {
+                ...currentSettings,
+                segmentDurationSeconds: resolvedDuration || undefined,
+              },
+            },
+          };
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to inspect video duration.";
+        toast.error(message);
+      }
+    })();
   };
 
   const openThumbnailPicker = () => {

@@ -36,7 +36,6 @@ export const CONTENT_LOOP_DEFAULTS: ContentLoopProps = {
   audioFadeInOffsetSeconds: 0,
   audioFadeOutOffsetSeconds: 0,
   syncAudioFadesWithVideo: true,
-  videoDurationSeconds: null,
   playbackRate: 1,
   captionsEnabled: false,
   captionsStyle: "subtitle",
@@ -206,10 +205,6 @@ export const buildContentLoopPropsFromItem = (
       getSetting<number>("sharpenBrightnessWeight") ??
       item.sharpenBrightnessWeight ??
       CONTENT_LOOP_DEFAULTS.sharpenBrightnessWeight,
-    videoDurationSeconds:
-      getSetting<number | null>("videoDurationSeconds") ??
-      item.videoDurationSeconds ??
-      CONTENT_LOOP_DEFAULTS.videoDurationSeconds,
     captionsEnabled:
       getSetting<boolean>("captionsEnabled") ??
       item.captionsEnabled ??

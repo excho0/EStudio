@@ -28,6 +28,7 @@ import { useEdgeRaysMetrics } from "./hooks/useEdgeRaysMetrics";
 import { useCompositionPalette } from "./hooks/useCompositionPalette";
 import { useCompositionTiming } from "./hooks/useCompositionTiming";
 import { useMotionTransform } from "./hooks/useMotionTransform";
+import { getMediaDurationFromSrc } from "../lib/shared/media";
 
 type LoopVideoProps = {
   src: string;
@@ -225,7 +226,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   audioFadeOutSeconds = 0,
   audioFadeInOffsetSeconds = 0,
   audioFadeOutOffsetSeconds = 0,
-  videoDurationSeconds,
   songDurationSeconds,
   songRangeStartSeconds = 0,
   songRangeEndSeconds = null,
@@ -242,6 +242,10 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   debugOverlayEnabled = false,
 }) => {
   const [fontHandle] = useState(() => delayRender("Load Estudio Geist caption font"));
+  const [sourceVideoMetadata, setSourceVideoMetadata] = useState<{
+    src: string;
+    durationSeconds: number | null;
+  } | null>(null);
   useEffect(() => {
     let cancelled = false;
 
@@ -265,6 +269,39 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
   const frame = useCurrentFrame();
   const { isRendering } = useRemotionEnvironment();
   const { durationInFrames, fps, width, height } = useVideoConfig();
+  const sourceVideoDurationSeconds =
+    sourceVideoMetadata?.src === videoSrc ? sourceVideoMetadata.durationSeconds : null;
+
+  useEffect(() => {
+    if (!videoSrc || isRendering || typeof document === "undefined") {
+      return;
+    }
+
+    let cancelled = false;
+
+    getMediaDurationFromSrc(videoSrc, "video")
+      .then((duration) => {
+        if (!cancelled) {
+          setSourceVideoMetadata({
+            src: videoSrc,
+            durationSeconds: duration > 0 ? duration : null,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSourceVideoMetadata({
+            src: videoSrc,
+            durationSeconds: null,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRendering, videoSrc]);
+
   const effectivePreviewMode = isRendering ? "full" : previewMode;
   const effectiveDebugOverlayEnabled =
     debugOverlayEnabled ||
@@ -303,7 +340,7 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     scalePercent,
     segmentDurationSeconds,
     fadeDurationSeconds,
-    videoDurationSeconds,
+    sourceVideoDurationSeconds,
     songDurationSeconds,
     songRangeStartSeconds,
     songRangeEndSeconds,
@@ -473,7 +510,6 @@ export const ContentLoopComposition: React.FC<ContentLoopProps> = ({
     [
       segmentFrames,
       segments,
-      segmentStepFrames,
       transitionFrames,
       playableVideoFrames,
       videoSrc,
