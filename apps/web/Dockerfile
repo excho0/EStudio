@@ -104,8 +104,9 @@ set -e
 BROWSER_BIN="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser)"
 exec "$BROWSER_BIN" \
   --headless \
+  --no-sandbox \
+  --disable-setuid-sandbox \
   --use-gl=angle \
-  --use-angle=vulkan \
   --ignore-gpu-blocklist \
   --enable-webgl \
   --disable-gpu-sandbox \

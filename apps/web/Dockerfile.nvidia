@@ -65,17 +65,42 @@ RUN pnpm build
 FROM base AS runtime
 WORKDIR /app
 
-RUN mkdir -p /etc/apt/keyrings   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub     | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg   && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main"     > /etc/apt/sources.list.d/google-chrome.list   && apt-get update && apt-get install -y --no-install-recommends     google-chrome-stable     libvulkan1     mesa-vulkan-drivers     libegl1     libgles2     libgl1   && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /etc/apt/keyrings   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub     | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg   && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main"     > /etc/apt/sources.list.d/google-chrome.list   && apt-get update && apt-get install -y --no-install-recommends     google-chrome-stable     libvulkan1     mesa-vulkan-drivers     libegl1     libgles2     libgl1     xvfb     dbus-x11   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# NVIDIA Container Toolkit variables
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics,display
+
 RUN cat <<'EOF' >/usr/local/bin/chromium-headless-angle
 #!/usr/bin/env bash
 set -e
+
+# Dynamically resolve NVIDIA/CDI Nix store paths if they exist
+NVIDIA_SHARE_DIR="$(find /nix/store -maxdepth 2 -name "*nvidia-x11*" -type d -path "*/share" | head -n 1)"
+if [ -n "$NVIDIA_SHARE_DIR" ]; then
+  export __EGL_VENDOR_LIBRARY_DIRS="$NVIDIA_SHARE_DIR/glvnd/egl_vendor.d"
+  export VK_ICD_FILENAMES="$NVIDIA_SHARE_DIR/vulkan/icd.d/nvidia_icd.x86_64.json"
+  # Some drivers also need the lib dir in LD_LIBRARY_PATH
+  NVIDIA_LIB_DIR="${NVIDIA_SHARE_DIR%/share}/lib"
+  if [ -d "$NVIDIA_LIB_DIR" ]; then
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$NVIDIA_LIB_DIR"
+  fi
+fi
+
 BROWSER_BIN="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser)"
-exec "$BROWSER_BIN"   --headless   --use-gl=angle   --use-angle=vulkan   --ignore-gpu-blocklist   --enable-webgl   --disable-gpu-sandbox   "$@"
+exec xvfb-run -a -s "-screen 0 1920x1080x24" "$BROWSER_BIN" \
+  --headless \
+  --no-sandbox \
+  --disable-setuid-sandbox \
+  --use-gl=angle \
+  --ignore-gpu-blocklist \
+  --enable-webgl \
+  --disable-gpu-sandbox \
+  "$@"
 EOF
 RUN chmod +x /usr/local/bin/chromium-headless-angle
 # Root workspace metadata + installed deps

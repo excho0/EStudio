@@ -111,7 +111,13 @@ export const executeRenderForContent = async ({
       probeExecutable: probeExecutable ?? "null",
       chromeMode,
     });
-    if (resolvedGl !== "angle") {
+    const isAngleBased =
+      resolvedGl === "angle" ||
+      resolvedGl === "egl" ||
+      resolvedGl === "swangle" ||
+      resolvedGl === "swiftshader";
+
+    if (!isAngleBased) {
       throw new ContentRenderError(
         "Shader rendering requires Chromium GL backend 'angle'. Current environment resolved to a non-angle backend.",
         400

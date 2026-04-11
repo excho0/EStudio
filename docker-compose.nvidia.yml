@@ -2,6 +2,7 @@ name: estudio
 
 services:
   captions-api:
+    image: estudio-captions-api:nvidia
     # profiles: ["captions-api"]
     build:
       context: ./apps/captions-api
@@ -12,11 +13,12 @@ services:
 
   # Enable GPU for Remotion/transcription code paths executed in web runtime.
   web:
+    image: estudio-web:nvidia
     build:
       context: .
       dockerfile: ./apps/web/Dockerfile.nvidia
     environment:
-      REMOTION_RENDER_GL: angle
+      REMOTION_RENDER_GL: auto
       REMOTION_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
       REMOTION_RENDER_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
     devices:
@@ -24,11 +26,12 @@ services:
 
   # Worker executes render/caption jobs and also needs GPU access in NVIDIA mode.
   worker:
+    image: estudio-worker:nvidia
     build:
       context: .
       dockerfile: ./apps/web/Dockerfile.nvidia
     environment:
-      REMOTION_RENDER_GL: angle
+      REMOTION_RENDER_GL: auto
       REMOTION_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
       REMOTION_RENDER_BROWSER_EXECUTABLE: /usr/local/bin/chromium-headless-angle
     devices:

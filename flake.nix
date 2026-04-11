@@ -15,7 +15,6 @@
         exec ${pkgs.chromium}/bin/chromium \
           --headless \
           --use-gl=angle \
-          --use-angle=vulkan \
           --ignore-gpu-blocklist \
           --enable-webgl \
           --disable-gpu-sandbox \
@@ -142,7 +141,7 @@
         # Remotion runtime defaults
         REMOTION_BROWSER_EXECUTABLE = "${chromiumHeadlessAngle}/bin/chromium-headless-angle";
         REMOTION_RENDER_BROWSER_EXECUTABLE = "${chromiumHeadlessAngle}/bin/chromium-headless-angle";
-        REMOTION_RENDER_GL = "angle";
+        REMOTION_RENDER_GL = "auto";
         LIBGL_DRIVERS_PATH = "${pkgs.mesa}/lib/dri";
         __EGL_VENDOR_LIBRARY_DIRS = "${pkgs.mesa}/share/glvnd/egl_vendor.d";
         VK_ICD_FILENAMES = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/intel_icd.x86_64.json";

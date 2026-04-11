@@ -275,7 +275,7 @@ export const resolveWorkingChromiumGl = async ({
 
   const candidates =
     requested === "auto"
-      ? (["angle", "swangle", "swiftshader", "egl"] as const)
+      ? (["angle", "egl", "swangle", "swiftshader"] as const)
       : ([requested] as const);
 
   for (const backend of candidates) {
@@ -468,10 +468,21 @@ export const startRenderJob = async ({
       requested: chromiumGlRequested,
       executablePath: probeExecutable,
     });
-    const chromiumOptions = {
-      ...(chromiumGl ? { gl: chromiumGl } : {}),
+
+    const chromiumOptions: Record<string, unknown> = {
       ...(debugNonHeadless ? { headless: false as const } : {}),
     };
+
+    if (chromiumGl === "swangle") {
+      chromiumOptions.gl = "angle";
+      chromiumOptions.args = ["--use-angle=swiftshader-webgl"];
+    } else if (chromiumGl === "swiftshader") {
+      chromiumOptions.gl = "angle";
+      chromiumOptions.args = ["--use-angle=swiftshader"];
+    } else if (chromiumGl) {
+      chromiumOptions.gl = chromiumGl;
+    }
+
     const renderDefaults = {
       logLevel: "warn" as const,
       browserExecutable,
