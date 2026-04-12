@@ -22,6 +22,7 @@ import {
   DEFAULT_CONTENT_MODE,
   resolveContentSettings,
   normalizeSettingsMap,
+  stripSharedScopedKeys,
 } from "@/lib/content/modes";
 import { enqueueCaptionJob, isCaptionQueueEnabled } from "@/lib/queue/caption-queue";
 import { getLogger } from "@/lib/logging";
@@ -263,6 +264,9 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     const resolved = resolveContentSettings(mode, settingsInput);
     const settingsMap = normalizeSettingsMap(mode, settingsInput);
     settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
+    const normalizedSettings = stripSharedScopedKeys(settingsMap, [
+      "segmentDurationSeconds",
+    ]);
     const songDurationSeconds = serverSongDuration ?? 0;
     const item = contentCreateSchema.parse({
       id,
@@ -272,7 +276,7 @@ export const handleCreateContent = async (request: Request, userId: string) => {
       colorPalette,
       paletteMode: "auto",
       mode: resolved.mode,
-      settings: settingsMap,
+      settings: normalizedSettings,
       songDurationSeconds,
     });
 
@@ -329,6 +333,9 @@ export const handleCreateContent = async (request: Request, userId: string) => {
   const resolved = resolveContentSettings(mode, settingsInput ?? {});
   const settingsMap = normalizeSettingsMap(mode, settingsInput ?? {});
   settingsMap[resolved.mode] = resolved.settings as Record<string, unknown>;
+  const normalizedSettings = stripSharedScopedKeys(settingsMap, [
+    "segmentDurationSeconds",
+  ]);
 
   const item = contentCreateSchema.parse({
     id,
@@ -338,7 +345,7 @@ export const handleCreateContent = async (request: Request, userId: string) => {
     colorPalette,
     paletteMode: "auto",
     mode: resolved.mode,
-    settings: settingsMap,
+    settings: normalizedSettings,
     songDurationSeconds: serverSongDuration ?? 0,
   });
 

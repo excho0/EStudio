@@ -62,6 +62,31 @@ export const setSharedContentSettings = (
   };
 };
 
+export const stripSharedScopedKeys = (
+  settings: unknown,
+  keys: string[]
+): Record<string, Record<string, unknown>> => {
+  const settingsMap = normalizeSettingsMap(undefined, settings);
+  const nextEntries = Object.entries(settingsMap).map(([entryKey, entryValue]) => {
+    if (
+      entryKey === SHARED_CONTENT_SETTINGS_KEY ||
+      !entryValue ||
+      typeof entryValue !== "object" ||
+      Array.isArray(entryValue)
+    ) {
+      return [entryKey, entryValue] as const;
+    }
+
+    const nextEntry = { ...(entryValue as Record<string, unknown>) };
+    for (const key of keys) {
+      delete nextEntry[key];
+    }
+    return [entryKey, nextEntry] as const;
+  });
+
+  return Object.fromEntries(nextEntries) as Record<string, Record<string, unknown>>;
+};
+
 const parseModeSettings = (
   schema: (typeof contentModeRegistry)[ContentModeId]["schema"],
   input: Record<string, unknown>
@@ -113,8 +138,14 @@ export const resolveContentSettings = (mode: string | undefined, settings: unkno
   const definition = getContentMode(mode);
   const settingsMap = normalizeSettingsMap(definition.id, settings);
   const scoped = settingsMap[definition.id] ?? {};
+  const shared = getSharedContentSettings(settingsMap);
   const cleaned = {
     ...(cloneSettingsValue(definition.defaults) as Record<string, unknown>),
+    ...(shared && typeof shared === "object"
+      ? {
+          ...(shared as Record<string, unknown>),
+        }
+      : {}),
     ...(scoped && typeof scoped === "object"
       ? {
           ...(scoped as Record<string, unknown>),
@@ -145,8 +176,17 @@ export const mergeContentSettings = (
   const definition = getContentMode(mode);
   const settingsMap = normalizeSettingsMap(definition.id, base);
   const patchMap = normalizeSettingsMap(definition.id, patch);
+  const shared = {
+    ...getSharedContentSettings(settingsMap),
+    ...getSharedContentSettings(patchMap),
+  };
   const merged = {
     ...(cloneSettingsValue(definition.defaults) as Record<string, unknown>),
+    ...(shared && typeof shared === "object"
+      ? {
+          ...(shared as Record<string, unknown>),
+        }
+      : {}),
     ...(settingsMap[definition.id] ?? {}),
   } as Record<string, unknown>;
   Object.assign(merged, patchMap[definition.id] ?? {});

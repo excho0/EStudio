@@ -25,6 +25,7 @@ import {
   DEFAULT_CONTENT_MODE,
   mergeContentSettings,
   normalizeSettingsMap,
+  stripSharedScopedKeys,
 } from "@/lib/content/modes";
 const storage = getStorage();
 
@@ -152,7 +153,7 @@ export const handlePatchContentItem = async (
       [merged.mode]: merged.settings,
     };
     payload.mode = merged.mode;
-    payload.settings = nextMap;
+    payload.settings = stripSharedScopedKeys(nextMap, ["segmentDurationSeconds"]);
   }
 
   const resolvedPaletteMode =

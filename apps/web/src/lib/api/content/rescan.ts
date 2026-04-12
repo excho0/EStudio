@@ -16,6 +16,8 @@ import {
   getOutputDefaultsForMode,
   normalizeSettingsMap,
   resolveContentSettings,
+  setSharedContentSettings,
+  stripSharedScopedKeys,
 } from "@/lib/content/modes";
 import { getStorage, storageKey } from "@/lib/storage";
 
@@ -79,8 +81,6 @@ const recoverSettingsMap = (mode: string | undefined, raw: Record<string, unknow
     [resolvedMode]: {
       ...currentScoped,
       outputConfig,
-      segmentDurationSeconds:
-        toNonNegative(currentScoped.segmentDurationSeconds ?? raw.segmentDurationSeconds, 4) ?? 4,
       fadeDurationSeconds:
         toNonNegative(currentScoped.fadeDurationSeconds ?? raw.fadeDurationSeconds, 1) ?? 1,
       introFadeSeconds:
@@ -114,13 +114,22 @@ const recoverSettingsMap = (mode: string | undefined, raw: Record<string, unknow
     },
   };
 
+  normalized = setSharedContentSettings(normalized, {
+    segmentDurationSeconds:
+      toNonNegative(currentScoped.segmentDurationSeconds ?? raw.segmentDurationSeconds, 4) ?? 4,
+  });
+  normalized = stripSharedScopedKeys(normalized, ["segmentDurationSeconds"]);
+
   const resolved = resolveContentSettings(resolvedMode, normalized);
   return {
     mode: resolved.mode,
-    settings: {
-      ...normalized,
-      [resolved.mode]: resolved.settings as Record<string, unknown>,
-    } as Record<string, Record<string, unknown>>,
+    settings: stripSharedScopedKeys(
+      {
+        ...normalized,
+        [resolved.mode]: resolved.settings as Record<string, unknown>,
+      } as Record<string, Record<string, unknown>>,
+      ["segmentDurationSeconds"]
+    ),
   };
 };
 

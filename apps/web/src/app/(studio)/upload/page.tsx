@@ -57,6 +57,7 @@ import { SettingSliderRow, SettingToggleRow } from "@/components/content-setting
 import {
   normalizeSettingsMap,
   resolveContentSettings,
+  setSharedContentSettings,
 } from "@/lib/content/modes";
 import { getOutputDefaultsForMode } from "@/lib/content/modes";
 import {
@@ -372,36 +373,20 @@ export default function DashboardUploadPage() {
         const duration = await getMediaDuration(videoFile, "video");
         const segmentDurationSeconds = duration ? Number(duration.toFixed(2)) : 0;
         setFormValues((current) => {
-          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
-          const currentSettings =
-            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
           return {
             ...current,
-            settings: {
-              ...settingsMap,
-              [current.mode]: {
-                ...currentSettings,
-                segmentDurationSeconds: segmentDurationSeconds || undefined,
-              },
-            },
+            settings: setSharedContentSettings(current.settings, {
+              segmentDurationSeconds: segmentDurationSeconds || undefined,
+            }),
           };
         });
       } else if (requiresVideo) {
-        setFormValues((current) => {
-          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
-          const currentSettings =
-            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-          return {
-            ...current,
-            settings: {
-              ...settingsMap,
-              [current.mode]: {
-                ...currentSettings,
-                segmentDurationSeconds: undefined,
-              },
-            },
-          };
-        });
+        setFormValues((current) => ({
+          ...current,
+          settings: setSharedContentSettings(current.settings, {
+            segmentDurationSeconds: undefined,
+          }),
+        }));
       }
 
       if (audioFile && requiresSong) {

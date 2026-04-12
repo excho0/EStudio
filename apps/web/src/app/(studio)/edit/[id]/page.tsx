@@ -69,6 +69,7 @@ import {
   getOutputDefaultsForMode,
   resolveContentSettings,
   normalizeSettingsMap,
+  setSharedContentSettings,
 } from "@/lib/content/modes";
 import {
   getContentModeDefinition,
@@ -778,21 +779,12 @@ export default function EditContentPage() {
       try {
         const duration = await getMediaDuration(file, "video");
         const resolvedDuration = duration ? Number(duration.toFixed(2)) : 0;
-        setFormValues((current) => {
-          const settingsMap = normalizeSettingsMap(current.mode, current.settings);
-          const currentSettings =
-            (settingsMap[current.mode] as Record<string, unknown>) ?? {};
-          return {
-            ...current,
-            settings: {
-              ...settingsMap,
-              [current.mode]: {
-                ...currentSettings,
-                segmentDurationSeconds: resolvedDuration || undefined,
-              },
-            },
-          };
-        });
+        setFormValues((current) => ({
+          ...current,
+          settings: setSharedContentSettings(current.settings, {
+            segmentDurationSeconds: resolvedDuration || undefined,
+          }),
+        }));
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Failed to inspect video duration.";
