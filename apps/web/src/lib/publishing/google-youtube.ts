@@ -8,14 +8,32 @@ import { getProviderDefinition } from "@/lib/publishing/providers";
 const youtubeProviderId =
   getProviderDefinition("youtube")?.oauthProviderId ?? "google-youtube";
 
+type GoogleYoutubeAccount = {
+  providerAccountId: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+  expiresAt: number | null;
+  tokenType: string | null;
+  scope: string | null;
+};
+
+const pickBestGoogleYoutubeAccount = <T extends GoogleYoutubeAccount>(
+  accounts: T[]
+) =>
+  accounts.find((account) => Boolean(account.refreshToken)) ??
+  accounts.find((account) => Boolean(account.accessToken)) ??
+  accounts[0] ??
+  null;
+
 const fetchGoogleYoutubeAccount = async (
   userId: string,
   providerAccountId?: string
 ) => {
   const db = getDrizzleDb();
   if (isPostgres) {
-    const [account] = await (db as PostgresDrizzleDb)
+    const accounts = await (db as PostgresDrizzleDb)
       .select({
+        providerAccountId: schema.accounts.providerAccountId,
         accessToken: schema.accounts.access_token,
         refreshToken: schema.accounts.refresh_token,
         expiresAt: schema.accounts.expires_at,
@@ -31,12 +49,12 @@ const fetchGoogleYoutubeAccount = async (
             ? [eq(schema.accounts.providerAccountId, providerAccountId)]
             : [])
         )
-      )
-      .limit(1);
-    return account ?? null;
+      );
+    return pickBestGoogleYoutubeAccount(accounts);
   }
-  const [account] = await (db as SqliteDrizzleDb)
+  const accounts = await (db as SqliteDrizzleDb)
     .select({
+      providerAccountId: sqliteSchema.accounts.providerAccountId,
       accessToken: sqliteSchema.accounts.access_token,
       refreshToken: sqliteSchema.accounts.refresh_token,
       expiresAt: sqliteSchema.accounts.expires_at,
@@ -52,9 +70,8 @@ const fetchGoogleYoutubeAccount = async (
           ? [eq(sqliteSchema.accounts.providerAccountId, providerAccountId)]
           : [])
       )
-    )
-    .limit(1);
-  return account ?? null;
+    );
+  return pickBestGoogleYoutubeAccount(accounts);
 };
 
 const updateAccountTokens = async (
@@ -143,6 +160,21 @@ export const getGoogleYoutubeClient = async (
 
   let accessToken = account.accessToken ?? null;
 
+  if (account.refreshToken) {
+    try {
+      const refreshed = await oauth2Client.refreshAccessToken();
+      const credentials = refreshed?.credentials ?? {};
+      accessToken = credentials.access_token ?? accessToken;
+      await persistAndApplyCredentials(userId, oauth2Client, credentials);
+    } catch (error) {
+      if (!accessToken) {
+        const message =
+          error instanceof Error ? error.message : "Unable to refresh token.";
+        throw new Error(`YouTube token refresh failed: ${message}`);
+      }
+    }
+  }
+
   if (!accessToken) {
     try {
       const access = await oauth2Client.getAccessToken();
@@ -156,19 +188,6 @@ export const getGoogleYoutubeClient = async (
       const message =
         error instanceof Error ? error.message : "Unable to fetch access token.";
       throw new Error(`YouTube token fetch failed: ${message}`);
-    }
-  }
-
-  if (!accessToken && account.refreshToken) {
-    try {
-      const refreshed = await oauth2Client.refreshAccessToken();
-      const credentials = refreshed?.credentials ?? {};
-      accessToken = credentials.access_token ?? null;
-      await persistAndApplyCredentials(userId, oauth2Client, credentials);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to refresh token.";
-      throw new Error(`YouTube token refresh failed: ${message}`);
     }
   }
 

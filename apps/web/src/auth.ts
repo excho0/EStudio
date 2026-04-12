@@ -269,6 +269,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     linkAccount: async ({ user, account }) => {
       if (!user?.id || !account?.provider) return;
+
+      if (
+        account.provider === YOUTUBE_OAUTH_PROVIDER_ID &&
+        account.providerAccountId
+      ) {
+        await persistOauthAccountTokens({
+          provider: account.provider,
+          providerAccountId: account.providerAccountId,
+          accessToken: account.access_token,
+          refreshToken: account.refresh_token,
+          expiresAt: account.expires_at,
+          tokenType: account.token_type,
+          scope: account.scope,
+          idToken: account.id_token,
+          sessionState:
+            typeof account.session_state === "string"
+              ? account.session_state
+              : undefined,
+        });
+
+        await pruneDuplicateProviderAccounts({
+          userId: user.id,
+          provider: account.provider,
+          keepProviderAccountId: account.providerAccountId,
+        });
+      }
+
       void eventBus.emit("provider.connection.created", {
         userId: user.id,
         provider: account.provider,

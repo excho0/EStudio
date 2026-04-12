@@ -9,6 +9,7 @@ import {
   YOUTUBE_AVATAR_ENDPOINT,
   YOUTUBE_OAUTH_PROVIDER_ID,
 } from "@/lib/publishing/providers/youtube/constants";
+import { getGoogleYoutubeClient } from "@/lib/publishing/google-youtube";
 import { getStorage, storageKey } from "@/lib/storage";
 import type {
   PostgresDrizzleDb,
@@ -67,34 +68,6 @@ const writeAvatarMeta = async (
   meta: { fetchedAt: number; contentType?: string; sourceUrl?: string }
 ) => {
   await storage.writeFile(filePath, JSON.stringify(meta));
-};
-
-const fetchAccessToken = async (userId: string) => {
-  const db = getDrizzleDb();
-  if (isPostgres) {
-    const [account] = await (db as PostgresDrizzleDb)
-      .select({ access_token: schema.accounts.access_token })
-      .from(schema.accounts)
-      .where(
-        and(
-          eq(schema.accounts.userId, userId),
-          eq(schema.accounts.provider, YOUTUBE_OAUTH_PROVIDER_ID)
-        )
-      )
-      .limit(1);
-    return account?.access_token ?? null;
-  }
-  const [account] = await (db as SqliteDrizzleDb)
-    .select({ access_token: sqliteSchema.accounts.access_token })
-    .from(sqliteSchema.accounts)
-    .where(
-      and(
-        eq(sqliteSchema.accounts.userId, userId),
-        eq(sqliteSchema.accounts.provider, YOUTUBE_OAUTH_PROVIDER_ID)
-      )
-    )
-    .limit(1);
-  return account?.access_token ?? null;
 };
 
 const fetchConnectedAccount = async (userId: string) => {
@@ -160,11 +133,6 @@ export const getYoutubeConnection = async (
   const connected = await fetchConnectedAccount(userId);
   if (!connected) return { connected: false };
 
-  const accessToken = await fetchAccessToken(userId);
-  if (!accessToken) {
-    return { connected: true, needsReconnect: true };
-  }
-
   const { cacheDir, channelFile } = resolveCachePaths(userId);
   await storage.ensureDir(cacheDir);
   const cacheTtlMs: number | null = null;
@@ -182,34 +150,17 @@ export const getYoutubeConnection = async (
   }
 
   try {
-    const response = await fetch(
-      "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const { youtube } = await getGoogleYoutubeClient(userId);
+    const response = await youtube.channels.list({
+      part: ["snippet"],
+      mine: true,
+    });
 
-    if (!response.ok) {
+    if ((response.status ?? 500) >= 400) {
       return { connected: true, needsReconnect: true };
     }
 
-    const payload = (await response.json()) as {
-      items?: Array<{
-        id?: string;
-        snippet?: {
-          title?: string;
-          thumbnails?: {
-            default?: { url?: string };
-            medium?: { url?: string };
-            high?: { url?: string };
-          };
-        };
-      }>;
-    };
-
-    const channel = payload.items?.[0];
+    const channel = response.data.items?.[0];
     const thumbnail =
       channel?.snippet?.thumbnails?.high?.url ??
       channel?.snippet?.thumbnails?.medium?.url ??
@@ -266,42 +217,23 @@ export const getYoutubeAvatar = async (userId: string) => {
     }
   }
 
-  const accessToken = await fetchAccessToken(userId);
-  if (!accessToken) {
-    return { error: "Missing access token", status: 404 } as const;
-  }
+  let thumbnail: string | null = null;
 
-  const response = await fetch(
-    "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
+  try {
+    const { youtube } = await getGoogleYoutubeClient(userId);
+    const response = await youtube.channels.list({
+      part: ["snippet"],
+      mine: true,
+    });
+    const channel = response.data.items?.[0];
+    thumbnail =
+      channel?.snippet?.thumbnails?.high?.url ??
+      channel?.snippet?.thumbnails?.medium?.url ??
+      channel?.snippet?.thumbnails?.default?.url ??
+      null;
+  } catch {
     return { error: "Unable to fetch channel", status: 502 } as const;
   }
-
-  const payload = (await response.json()) as {
-    items?: Array<{
-      snippet?: {
-        thumbnails?: {
-          high?: { url?: string };
-          medium?: { url?: string };
-          default?: { url?: string };
-        };
-      };
-    }>;
-  };
-
-  const channel = payload.items?.[0];
-  const thumbnail =
-    channel?.snippet?.thumbnails?.high?.url ??
-    channel?.snippet?.thumbnails?.medium?.url ??
-    channel?.snippet?.thumbnails?.default?.url ??
-    null;
 
   if (!thumbnail) {
     return { error: "Missing channel thumbnail", status: 404 } as const;
