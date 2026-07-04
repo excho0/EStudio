@@ -8,7 +8,11 @@ import {
 import { getRenderThumbnailPath } from "@/lib/rendering/render-thumbnail";
 import { getContentItem, getContentItemById } from "@/lib/data/content";
 import { getStorage } from "@/lib/storage";
-import { getSessionUser } from "@/lib/auth/session";
+import {
+  ensureActorContentAccess,
+  ensureActorPermission,
+  resolveRequestActor,
+} from "@/lib/auth/request-actor";
 import { verifyContentAssetToken } from "@/lib/content/asset-token";
 import type { AssetCacheEntry } from "@/types";
 import type { ReadStream } from "fs";
@@ -219,11 +223,21 @@ export const handleGetContentAsset = async (
   }
 
   const isTokenAccess = Boolean(tokenPayload && tokenPayload.contentId === id);
-  const user = isTokenAccess ? null : await getSessionUser();
+  const { actor, error } = isTokenAccess
+    ? { actor: null, error: null }
+    : await resolveRequestActor(request);
+  if (error) return error;
+  if (!isTokenAccess && actor) {
+    const permissionError = ensureActorPermission(actor, "content:read");
+    if (permissionError) return permissionError;
+    const resourceError = ensureActorContentAccess(actor, id);
+    if (resourceError) return resourceError;
+  }
+
   const item = isTokenAccess
     ? await getContentItemById(id)
-    : user
-      ? await getContentItem(user.id, id)
+    : actor
+      ? await getContentItem(actor.userId, id)
       : null;
 
   if (!item) {

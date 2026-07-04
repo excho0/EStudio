@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 import {
   handleSubscribePush,
   handleUnsubscribePush,
@@ -8,17 +7,19 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return handleSubscribePush(request, user.id);
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "notifications:write");
+  if (permissionError) return permissionError;
+  return handleSubscribePush(request, actor.userId);
 }
 
 export async function DELETE(request: Request) {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "notifications:write");
+  if (permissionError) return permissionError;
   return handleUnsubscribePush(request);
 }

@@ -97,34 +97,46 @@ const deletePublishThumbnailAsset = async (userId: string, metadata: string | nu
   await storage.deleteFile(thumbnailAssetPath).catch(() => {});
 };
 
-const resolveAuthAndPublish = async (contentId: string, publishId: string) => {
+const resolveUserId = async (
+  userId?: string
+): Promise<{ userId: string } | { error: Response }> => {
+  if (userId) return { userId };
   const session = await auth();
   const email = getSessionEmail(session);
   if (!email) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-
   const user = await fetchUserByEmail(email);
   if (!user) {
     return { error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
   }
+  return { userId: user.id };
+};
 
-  const publish = await fetchPublish(user.id, contentId, publishId);
+const resolveAuthAndPublish = async (
+  contentId: string,
+  publishId: string,
+  userId?: string
+) => {
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved;
+  const publish = await fetchPublish(resolved.userId, contentId, publishId);
   if (!publish) {
     return { error: NextResponse.json({ error: "Publish not found" }, { status: 404 }) };
   }
 
-  return { user, publish };
+  return { userId: resolved.userId, publish };
 };
 
 export const handleDeletePublish = async (
   request: Request,
   contentId: string,
-  publishId: string
+  publishId: string,
+  userId?: string
 ) => {
-  const resolved = await resolveAuthAndPublish(contentId, publishId);
+  const resolved = await resolveAuthAndPublish(contentId, publishId, userId);
   if ("error" in resolved) return resolved.error;
-  const { user, publish } = resolved;
+  const { publish } = resolved;
 
   const db = getDrizzleDb();
   const now = new Date();
@@ -135,14 +147,14 @@ export const handleDeletePublish = async (
     publish.providerAssetId.startsWith("pending-");
 
   if (publish.status === "deleted" || removeRecordOnly) {
-    await deletePublishThumbnailAsset(user.id, publish.metadata ?? null);
+    await deletePublishThumbnailAsset(resolved.userId, publish.metadata ?? null);
     if (isPostgres) {
       await (db as PostgresDrizzleDb)
         .delete(schema.publishes)
         .where(
           and(
             eq(schema.publishes.id, publishId),
-            eq(schema.publishes.userId, user.id)
+            eq(schema.publishes.userId, resolved.userId)
           )
         );
     } else {
@@ -151,7 +163,7 @@ export const handleDeletePublish = async (
         .where(
           and(
             eq(sqliteSchema.publishes.id, publishId),
-            eq(sqliteSchema.publishes.userId, user.id)
+            eq(sqliteSchema.publishes.userId, resolved.userId)
           )
         );
     }
@@ -177,7 +189,7 @@ export const handleDeletePublish = async (
     try {
       if (publish.providerAssetId) {
         await adapter.deleteAsset({
-          userId: user.id,
+          userId: resolved.userId,
           providerAssetId: publish.providerAssetId,
         });
       }
@@ -223,15 +235,19 @@ export const handleDeletePublish = async (
       .where(eq(sqliteSchema.publishes.id, publishId));
   }
 
-  await deletePublishThumbnailAsset(user.id, publish.metadata ?? null);
+  await deletePublishThumbnailAsset(resolved.userId, publish.metadata ?? null);
 
   return NextResponse.json({ deleted: true });
 };
 
-export const handleRetryPublish = async (contentId: string, publishId: string) => {
-  const resolved = await resolveAuthAndPublish(contentId, publishId);
+export const handleRetryPublish = async (
+  contentId: string,
+  publishId: string,
+  userId?: string
+) => {
+  const resolved = await resolveAuthAndPublish(contentId, publishId, userId);
   if ("error" in resolved) return resolved.error;
-  const { user, publish } = resolved;
+  const { publish } = resolved;
 
   if (publish.status !== "failed") {
     return NextResponse.json({ error: "Publish is not retryable." }, { status: 409 });
@@ -262,7 +278,7 @@ export const handleRetryPublish = async (contentId: string, publishId: string) =
   const metadata = metadataTitle ? { title: metadataTitle } : undefined;
 
   emitPublishUpdate({
-    userId: user.id,
+    userId: resolved.userId,
     id: contentId,
     jobId: publishId,
     status: "queued",

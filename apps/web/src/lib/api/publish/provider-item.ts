@@ -65,81 +65,82 @@ const clearProviderCaches = async (providerId: string, userId: string) => {
   }
 };
 
-export const handleGetPublishProvider = async (providerKey: string) => {
+const resolveUserId = async (
+  userId?: string
+): Promise<{ userId: string } | { error: Response }> => {
+  if (userId) return { userId };
+  const session = await auth();
+  const email = getSessionEmail(session);
+  if (!email) {
+    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  const user = await fetchUserByEmail(email);
+  if (!user) {
+    return { error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
+  }
+  return { userId: user.id };
+};
+
+export const handleGetPublishProvider = async (
+  providerKey: string,
+  userId?: string
+) => {
   const provider = getProviderDefinitionServer(providerKey);
   if (!provider) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await fetchUserByEmail(email);
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved.error;
 
   if (!provider.oauthProviderId) {
     return NextResponse.json({ connected: false });
   }
 
-  const connection = await resolveProviderConnection(provider.id, user.id);
+  const connection = await resolveProviderConnection(provider.id, resolved.userId);
   return NextResponse.json(connection);
 };
 
-export const handleDeletePublishProvider = async (providerKey: string) => {
+export const handleDeletePublishProvider = async (
+  providerKey: string,
+  userId?: string
+) => {
   const provider = getProviderDefinitionServer(providerKey);
   if (!provider) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await fetchUserByEmail(email);
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved.error;
 
   if (!provider.oauthProviderId) {
     return NextResponse.json({ ok: true });
   }
 
-  await removeProviderAccount(user.id, provider.oauthProviderId);
-  await clearProviderCaches(provider.id, user.id);
+  await removeProviderAccount(resolved.userId, provider.oauthProviderId);
+  await clearProviderCaches(provider.id, resolved.userId);
 
   return NextResponse.json({ ok: true });
 };
 
-export const handleGetPublishProviderAvatar = async (providerKey: string) => {
+export const handleGetPublishProviderAvatar = async (
+  providerKey: string,
+  userId?: string
+) => {
   const provider = getProviderDefinitionServer(providerKey);
   if (!provider) {
     return NextResponse.json({ error: "Provider not found" }, { status: 404 });
   }
 
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await fetchUserByEmail(email);
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved.error;
 
   const definition = getProviderDefinitionServer(provider.id);
   if (!definition?.getAvatar) {
     return NextResponse.json({ error: "Avatar not available" }, { status: 404 });
   }
 
-  const avatar = await definition.getAvatar(user.id);
+  const avatar = await definition.getAvatar(resolved.userId);
   if (!avatar) {
     return NextResponse.json({ error: "Avatar not available" }, { status: 404 });
   }

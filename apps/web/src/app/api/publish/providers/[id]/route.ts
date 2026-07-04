@@ -2,6 +2,7 @@ import {
   handleDeletePublishProvider,
   handleGetPublishProvider,
 } from "@/lib/api/publish/provider-item";
+import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,12 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
-  return handleGetPublishProvider(params.id);
+  const { actor, error } = await resolveRequestActor(_request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "publish:read");
+  if (permissionError) return permissionError;
+  return handleGetPublishProvider(params.id, actor.userId);
 }
 
 export async function DELETE(
@@ -18,5 +24,10 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
-  return handleDeletePublishProvider(params.id);
+  const { actor, error } = await resolveRequestActor(_request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "publish:write");
+  if (permissionError) return permissionError;
+  return handleDeletePublishProvider(params.id, actor.userId);
 }

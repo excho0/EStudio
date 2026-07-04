@@ -15,6 +15,7 @@ import { emitPublishUpdate } from "@/lib/socket/manager";
 import { getLogger } from "@/lib/logging";
 import { getPublishThumbnailPath } from "@/lib/content/store";
 import { getStorage } from "@/lib/storage";
+import { handleGetPublishProviders } from "@/lib/api/publish/providers";
 
 const publishApiLogger = getLogger("publish-api");
 const storage = getStorage();
@@ -277,7 +278,16 @@ const failStalePublishes = async (
   }
 };
 
-const fetchPublishTargets = async (request: Request) => {
+const fetchPublishTargets = async (request: Request, userId?: string) => {
+  if (userId) {
+    const response = await handleGetPublishProviders(userId);
+    if (!response.ok) return [];
+    const payload = (await response.json()) as {
+      publishTargets?: Array<{ id: string; label: string; status?: string }>;
+    };
+    return payload.publishTargets ?? [];
+  }
+
   try {
     const baseUrl = getRequestBaseUrl(request);
     const response = await fetch(new URL("/api/publish/providers", baseUrl));
@@ -291,19 +301,31 @@ const fetchPublishTargets = async (request: Request) => {
   }
 };
 
-export const handleListPublishes = async (request: Request, contentId: string) => {
+const resolveUserId = async (
+  userId?: string
+): Promise<{ userId: string } | { error: Response }> => {
+  if (userId) return { userId };
   const session = await auth();
   const email = getSessionEmail(session);
   if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-
   const user = await fetchUserByEmail(email);
   if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return { error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
   }
+  return { userId: user.id };
+};
 
-  const contentItem = await fetchContentItem(user.id, contentId);
+export const handleListPublishes = async (
+  request: Request,
+  contentId: string,
+  userId?: string
+) => {
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved.error;
+
+  const contentItem = await fetchContentItem(resolved.userId, contentId);
   if (!contentItem) {
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
@@ -312,7 +334,7 @@ export const handleListPublishes = async (request: Request, contentId: string) =
     10_000,
     Number(process.env.PUBLISH_STALE_TIMEOUT_MS ?? "180000")
   );
-  await failStalePublishes(user.id, contentId, Date.now() - staleTimeoutMs);
+  await failStalePublishes(resolved.userId, contentId, Date.now() - staleTimeoutMs);
 
   const db = getDrizzleDb();
   const publishes = isPostgres
@@ -321,7 +343,7 @@ export const handleListPublishes = async (request: Request, contentId: string) =
         .from(schema.publishes)
         .where(
           and(
-            eq(schema.publishes.userId, user.id),
+            eq(schema.publishes.userId, resolved.userId),
             eq(schema.publishes.contentId, contentId)
           )
         )
@@ -330,29 +352,25 @@ export const handleListPublishes = async (request: Request, contentId: string) =
         .from(sqliteSchema.publishes)
         .where(
           and(
-            eq(sqliteSchema.publishes.userId, user.id),
+            eq(sqliteSchema.publishes.userId, resolved.userId),
             eq(sqliteSchema.publishes.contentId, contentId)
           )
         );
 
-  const publishTargets = await fetchPublishTargets(request);
+  const publishTargets = await fetchPublishTargets(request, resolved.userId);
 
   return NextResponse.json({ publishes, publishTargets });
 };
 
-export const handleCreatePublish = async (request: Request, contentId: string) => {
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const handleCreatePublish = async (
+  request: Request,
+  contentId: string,
+  userId?: string
+) => {
+  const resolved = await resolveUserId(userId);
+  if ("error" in resolved) return resolved.error;
 
-  const user = await fetchUserByEmail(email);
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  const contentItem = await fetchContentItem(user.id, contentId);
+  const contentItem = await fetchContentItem(resolved.userId, contentId);
   if (!contentItem) {
     return NextResponse.json({ error: "Content not found" }, { status: 404 });
   }
@@ -369,7 +387,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   }
 
   const account = await fetchAccountByProviderAccountId(
-    user.id,
+    resolved.userId,
     payload.data.provider,
     payload.data.connectionId
   );
@@ -388,7 +406,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
       .from(schema.publishes)
       .where(
         and(
-          eq(schema.publishes.userId, user.id),
+          eq(schema.publishes.userId, resolved.userId),
           eq(schema.publishes.contentId, contentId),
           eq(schema.publishes.provider, payload.data.provider),
           eq(schema.publishes.renderId, payload.data.renderId),
@@ -405,7 +423,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
       .from(sqliteSchema.publishes)
       .where(
         and(
-          eq(sqliteSchema.publishes.userId, user.id),
+          eq(sqliteSchema.publishes.userId, resolved.userId),
           eq(sqliteSchema.publishes.contentId, contentId),
           eq(sqliteSchema.publishes.provider, payload.data.provider),
           eq(sqliteSchema.publishes.renderId, payload.data.renderId),
@@ -421,7 +439,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   const now = new Date();
   const id = idempotencyKey
     ? createDeterministicPublishId(
-        user.id,
+        resolved.userId,
         contentId,
         payload.data.provider,
         payload.data.renderId,
@@ -443,7 +461,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
     metadataPayload.thumbnailAssetPath.length > 0
   ) {
     const assetPath = await finalizePublishThumbnail(
-      user.id,
+      resolved.userId,
       contentId,
       id,
       metadataPayload.thumbnailAssetPath
@@ -470,7 +488,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
         .insert(schema.publishes)
         .values({
           id,
-          userId: user.id,
+          userId: resolved.userId,
           contentId,
           renderId: payload.data.renderId,
           provider: payload.data.provider,
@@ -495,7 +513,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
     }
     enqueuePublishJob(record.id);
     emitPublishUpdate({
-      userId: user.id,
+      userId: resolved.userId,
       id: contentId,
       jobId: record.id,
       status: "queued",
@@ -507,7 +525,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   try {
     await (db as SqliteDrizzleDb).insert(sqliteSchema.publishes).values({
       id,
-      userId: user.id,
+      userId: resolved.userId,
       contentId,
       renderId: payload.data.renderId,
       provider: payload.data.provider,
@@ -532,7 +550,7 @@ export const handleCreatePublish = async (request: Request, contentId: string) =
   if (record?.id) {
     enqueuePublishJob(record.id);
     emitPublishUpdate({
-      userId: user.id,
+      userId: resolved.userId,
       id: contentId,
       jobId: record.id,
       status: "queued",
