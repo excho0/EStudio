@@ -9,7 +9,7 @@ import type { PostgresDrizzleDb, SqliteDrizzleDb } from "@/types";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
 import { eventBus } from "@/lib/event-bus";
 
-const profileSchema = z.object({
+export const profileSchema = z.object({
   name: z.string().trim().min(1).max(80),
 });
 

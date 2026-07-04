@@ -73,6 +73,15 @@ export const contentCreateFormSchema = z.object({
   settings: z.string().optional(),
 }).describe("Content create form payload.");
 
+export const contentDraftCreateRequestSchema = z.object({
+  title: z.string().trim().min(1).max(160).optional(),
+  thumbnailPath: z.string().min(1),
+  videoPath: z.string().min(1),
+  songPath: z.string().min(1),
+  mode: z.string().min(1).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+}).describe("Content create request payload using existing draft upload paths.");
+
 /** Multipart/form-data update payload accepted by content update endpoint. */
 export const contentUpdateFormSchema = z.object({
   title: z.string().optional(),

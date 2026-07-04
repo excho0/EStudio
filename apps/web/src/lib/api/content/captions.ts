@@ -15,13 +15,13 @@ const resolveDefaultCaptionLanguage = () => {
   return value && value.length >= 2 ? value : undefined;
 };
 
-const triggerCaptionsRequestSchema = z.object({
+export const triggerCaptionsRequestSchema = z.object({
   mode: z.string().min(1).optional(),
   backend: settingsCaptionBackendSchema.optional(),
   language: z.string().min(2).max(16).optional(),
 });
 
-const saveCaptionsRequestSchema = z.object({
+export const saveCaptionsRequestSchema = z.object({
   captionsData: captionDocumentSchema.nullable(),
 });
 

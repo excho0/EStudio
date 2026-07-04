@@ -12,6 +12,7 @@ import { getPaletteFromPath } from "@/lib/content/color-palette";
 import { emitContentUpdate, getRenderProgressSnapshot } from "@/lib/socket/manager";
 import {
   contentCreateFormSchema,
+  contentDraftCreateRequestSchema,
   contentCreateSchema,
   contentQuerySchema,
   createContentItem,
@@ -230,23 +231,16 @@ export const handleCreateContent = async (request: Request, userId: string) => {
   const isMultipart = contentType.includes("multipart/form-data");
 
   if (!isMultipart) {
-    const payload = (await request.json().catch(() => null)) as
-      | {
-          title?: string;
-          thumbnailPath?: string;
-          videoPath?: string;
-          songPath?: string;
-          mode?: string;
-          settings?: Record<string, unknown>;
-        }
-      | null;
-
-    if (!payload?.thumbnailPath || !payload.videoPath || !payload.songPath) {
+    const parsedPayload = contentDraftCreateRequestSchema.safeParse(
+      await request.json().catch(() => null)
+    );
+    if (!parsedPayload.success) {
       return NextResponse.json(
         { error: "Missing thumbnail, video, or song file." },
         { status: 400 }
       );
     }
+    const payload = parsedPayload.data;
 
     const id = randomUUID();
     const [thumbnailPath, videoPath, songPath] = await Promise.all([
