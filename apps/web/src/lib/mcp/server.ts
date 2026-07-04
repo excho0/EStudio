@@ -33,6 +33,7 @@ import { handleGetPublishProviders } from "@/lib/api/publish/providers";
 import { handleGetPublishProgress } from "@/lib/api/content/publish-progress";
 import { handleListPublishes } from "@/lib/api/content/publishes";
 import { handleGetSettings, handleUpdateSettings } from "@/lib/api/settings";
+import { handleDeleteDraft } from "@/lib/api/uploads";
 import {
   handleCreateUserApiKey,
   handleDeleteUserApiKey,
@@ -61,6 +62,8 @@ import {
 import { triggerRenderRequestSchema } from "@/lib/data/render";
 import { settingsUpdateRequestSchema } from "@/lib/data/settings";
 import { userNotificationPreferencesUpdateRequestSchema } from "@/lib/data/user-preferences";
+import { getUserUploadsDir } from "@/lib/content/store";
+import { getStorage } from "@/lib/storage";
 
 type ToolContext = {
   actor: RequestActor;
@@ -71,6 +74,8 @@ type QueryValue = string | number | boolean | null | undefined;
 type QueryInput = Record<string, QueryValue>;
 type ToolInput = Record<string, unknown>;
 
+const storage = getStorage();
+
 const jsonToolResult = (data: unknown): CallToolResult => ({
   content: [
     {
@@ -79,6 +84,77 @@ const jsonToolResult = (data: unknown): CallToolResult => ({
     },
   ],
 });
+
+const getUploadWorkflowGuide = (context: ToolContext) => {
+  const baseUrl = new URL(context.request.url);
+  const uploadsUrl = new URL("/api/uploads", baseUrl);
+  const contentUrl = new URL("/api/content", baseUrl);
+
+  return {
+    summary:
+      "Upload assets as drafts first, then create the content item from the returned draft paths.",
+    recommendedForAgents:
+      "For real files, especially videos, upload directly to the HTTP multipart endpoint instead of sending file bytes through MCP tool arguments.",
+    authentication: {
+      header: "Authorization: Bearer <ESTUDIO_API_KEY>",
+      requiredPermissions: {
+        uploadDrafts: ["uploads:write"],
+        createContent: ["content:write"],
+        inspectDrafts: ["uploads:read"],
+      },
+      currentActor:
+        context.actor.kind === "api-key"
+          ? {
+              kind: context.actor.kind,
+              permissions: context.actor.apiKey.permissions,
+              resources: context.actor.apiKey.resources,
+            }
+          : { kind: context.actor.kind },
+    },
+    httpDraftUpload: {
+      method: "POST",
+      url: uploadsUrl.toString(),
+      contentType: "multipart/form-data",
+      fields: {
+        file: "Binary file body for the asset.",
+        kind: "One of: thumbnail, video, song.",
+      },
+      response: {
+        path: "Draft storage path. Pass this into estudio_content_create.",
+        kind: "The asset kind that was uploaded.",
+        expiresAt: "Unix timestamp in milliseconds. Drafts currently expire after roughly 6 hours.",
+      },
+      curlExample:
+        "curl -X POST https://studio.example.com/api/uploads -H 'Authorization: Bearer <ESTUDIO_API_KEY>' -F kind=video -F file=@./video.mp4",
+    },
+    createContent: {
+      mcpTool: "estudio_content_create",
+      httpEndpoint: {
+        method: "POST",
+        url: contentUrl.toString(),
+      },
+      requiredDraftPathFields: ["thumbnailPath", "videoPath", "songPath"],
+      optionalFields: ["title", "mode", "settings"],
+      sequence: [
+        "Upload thumbnail draft and keep returned path.",
+        "Upload video draft and keep returned path.",
+        "Upload song draft and keep returned path.",
+        "Call estudio_content_create with thumbnailPath, videoPath, songPath, and metadata.",
+      ],
+    },
+    mcpUploadPolicy: {
+      inlineFileUpload: "disabled",
+      reason:
+        "MCP tool calls should not carry binary payloads or base64 file data because that bloats client context, transport payloads, logs, and model/tool history.",
+      requiredPath:
+        "Upload binaries with the HTTP multipart endpoint, then use MCP tools with the returned draft paths.",
+    },
+    safeInspection: {
+      tool: "estudio_upload_draft_info",
+      note: "Returns draft metadata and an authenticated app API URL without returning raw binary bytes into the model context.",
+    },
+  };
+};
 
 const responseToToolResult = async (response: Response): Promise<CallToolResult> => {
   const contentType = response.headers.get("content-type") ?? "";
@@ -199,6 +275,16 @@ export const createEstudioMcpServer = (context: ToolContext) => {
     }
   );
 
+  server.registerTool(
+    "estudio_upload_workflow_guide",
+    {
+      title: "Upload workflow guide",
+      description:
+        "Explain the safe draft-upload-to-content workflow for agents and API clients without moving file bytes through MCP context.",
+    },
+    async () => jsonToolResult(getUploadWorkflowGuide(context))
+  );
+
   addTool(
     server,
     context,
@@ -222,6 +308,66 @@ export const createEstudioMcpServer = (context: ToolContext) => {
       inputSchema: profileSchema.shape,
     },
     (args) => handleUpdateProfile(requestWithJson(context.request, args, "PUT"), context.actor.userId)
+  );
+
+  addTool(
+    server,
+    context,
+    "estudio_upload_draft_delete",
+    {
+      title: "Delete draft asset",
+      description: "Delete a staged draft upload path before it is turned into a content item.",
+      permission: "uploads:write",
+      inputSchema: {
+        path: z.string().min(1),
+      },
+    },
+    (args) => handleDeleteDraft(requestWithJson(context.request, args, "DELETE"), context.actor.userId)
+  );
+
+  addTool(
+    server,
+    context,
+    "estudio_upload_draft_info",
+    {
+      title: "Get draft asset info",
+      description:
+        "Return metadata and a temporary app API URL for a staged draft upload without echoing binary file data into the agent context.",
+      permission: "uploads:read",
+      inputSchema: {
+        path: z.string().min(1),
+      },
+    },
+    async (args) => {
+      const targetPath = String(args.path ?? "");
+      const uploadsBaseDir = getUserUploadsDir(context.actor.userId);
+      if (!targetPath.startsWith(uploadsBaseDir)) {
+        return new Response(JSON.stringify({ error: "Invalid path." }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      const stats = await storage.stat(targetPath);
+      if (!stats) {
+        return new Response(JSON.stringify({ error: "Draft not found." }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      const url = new URL(context.request.url);
+      url.pathname = "/api/uploads";
+      url.search = "";
+      url.searchParams.set("path", targetPath);
+
+      return Response.json({
+        path: targetPath,
+        size: stats.size,
+        modifiedAt: new Date(stats.mtimeMs).toISOString(),
+        url: url.toString(),
+      });
+    }
   );
 
   addTool(
