@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 import { handleGetRenderProgress } from "@/lib/api/content/progress";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return handleGetRenderProgress(user.id);
+export async function GET(request: Request) {
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "content:read");
+  if (permissionError) return permissionError;
+  return handleGetRenderProgress(actor.userId);
 }

@@ -1,3 +1,4 @@
+import { apiKeysSdk } from "@/lib/sdk/domains/api-keys";
 import { contentSdk } from "@/lib/sdk/domains/content";
 import { dashboardSdk } from "@/lib/sdk/domains/dashboard";
 import { metaSdk } from "@/lib/sdk/domains/meta";
@@ -9,6 +10,7 @@ import { userSdk } from "@/lib/sdk/domains/user";
 import { userPreferencesSdk } from "@/lib/sdk/domains/user-preferences";
 
 export const sdk = {
+  apiKeys: apiKeysSdk,
   content: contentSdk,
   dashboard: dashboardSdk,
   uploads: uploadsSdk,

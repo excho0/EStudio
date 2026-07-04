@@ -133,14 +133,8 @@ const updateUserName = async (id: string, name: string) => {
   return fetchUserById(id);
 };
 
-export const handleGetProfile = async () => {
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await fetchUserByEmail(email);
+const getResolvedProfileResponse = async (userId: string) => {
+  const user = await fetchUserById(userId);
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -173,11 +167,36 @@ export const handleGetProfile = async () => {
   });
 };
 
-export const handleUpdateProfile = async (request: Request) => {
+export const handleGetProfile = async (userId?: string) => {
+  let resolvedUserId = userId ?? null;
+  if (!resolvedUserId) {
+    const session = await auth();
+    const email = getSessionEmail(session);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const user = await fetchUserByEmail(email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    resolvedUserId = user.id;
+  }
+  return getResolvedProfileResponse(resolvedUserId);
+};
+
+export const handleUpdateProfile = async (request: Request, userId?: string) => {
+  let resolvedUserId = userId ?? null;
+  if (!resolvedUserId) {
   const session = await auth();
   const email = getSessionEmail(session);
   if (!email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+    const user = await fetchUserByEmail(email);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    resolvedUserId = user.id;
   }
 
   const payload = profileSchema.safeParse(await request.json());
@@ -185,7 +204,7 @@ export const handleUpdateProfile = async (request: Request) => {
     return NextResponse.json({ error: payload.error.message }, { status: 400 });
   }
 
-  const user = await fetchUserByEmail(email);
+  const user = await fetchUserById(resolvedUserId);
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }

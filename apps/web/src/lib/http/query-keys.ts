@@ -24,6 +24,7 @@ export const queryKeys = {
   publishProvider: (id: string) => ["publish-provider", id] as const,
   profile: ["profile"] as const,
   profileConnections: ["profile-connections"] as const,
+  apiKeys: ["api-keys"] as const,
   metaProviders: ["meta-providers"] as const,
   settings: ["settings"] as const,
 };

@@ -11,6 +11,7 @@ import {
   Palette,
   Cable,
   Bell,
+  KeyRound,
 } from "lucide-react";
 
 type Submenu = {
@@ -90,6 +91,12 @@ export function getMenuList(): Group[] {
               href: "/settings/profile",
               label: "Profile",
               icon: User,
+              requiresAuth: true,
+            },
+            {
+              href: "/settings/api-access",
+              label: "API Access",
+              icon: KeyRound,
               requiresAuth: true,
             },
             {

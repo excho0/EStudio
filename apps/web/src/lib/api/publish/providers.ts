@@ -82,15 +82,19 @@ const fetchProviderConnected = async (
   return pickBestAccount(accounts);
 };
 
-export const handleGetPublishProviders = async () => {
-  const session = await auth();
-  const email = getSessionEmail(session);
-  const user = email ? await fetchUserByEmail(email) : null;
+export const handleGetPublishProviders = async (userId?: string | null) => {
+  let resolvedUserId = userId ?? null;
+  if (!resolvedUserId) {
+    const session = await auth();
+    const email = getSessionEmail(session);
+    const user = email ? await fetchUserByEmail(email) : null;
+    resolvedUserId = user?.id ?? null;
+  }
   const providers = Object.values(PROVIDER_REGISTRY);
   const publishTargets = await Promise.all(
     providers.map(async (provider) => {
-      const account = user
-        ? await fetchProviderConnected(user.id, provider.oauthProviderId)
+      const account = resolvedUserId
+        ? await fetchProviderConnected(resolvedUserId, provider.oauthProviderId)
         : null;
       const connected = Boolean(account);
       return {

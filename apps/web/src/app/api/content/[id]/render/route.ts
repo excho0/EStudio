@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import {
+  ensureActorContentAccess,
+  ensureActorPermission,
+  resolveRequestActor,
+} from "@/lib/auth/request-actor";
 import { handleCancelRenderRequest, handleRenderRequest } from "@/lib/api/content/render";
 
 export const runtime = "nodejs";
@@ -9,11 +12,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return handleRenderRequest(request, user.id, id);
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "content:write");
+  if (permissionError) return permissionError;
+  const resourceError = ensureActorContentAccess(actor, id);
+  if (resourceError) return resourceError;
+  return handleRenderRequest(request, actor.userId, id);
 }
 
 export async function DELETE(
@@ -21,9 +27,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return handleCancelRenderRequest(user.id, id);
+  const { actor, error } = await resolveRequestActor(_request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "content:write");
+  if (permissionError) return permissionError;
+  const resourceError = ensureActorContentAccess(actor, id);
+  if (resourceError) return resourceError;
+  return handleCancelRenderRequest(actor.userId, id);
 }

@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import {
+  ensureActorContentAccess,
+  ensureActorPermission,
+  resolveRequestActor,
+} from "@/lib/auth/request-actor";
 import {
   handleDeleteContentItem,
   handleGetContentItem,
@@ -13,11 +16,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { actor, error } = await resolveRequestActor(_request);
+  if (error) return error;
+  if (!actor) {
+    throw new Error("resolveRequestActor returned no actor and no error.");
   }
-  return handleGetContentItem(user.id, id);
+  const permissionError = ensureActorPermission(actor, "content:read");
+  if (permissionError) return permissionError;
+  const resourceError = ensureActorContentAccess(actor, id);
+  if (resourceError) return resourceError;
+  return handleGetContentItem(actor.userId, id);
 }
 
 export async function PATCH(
@@ -25,11 +33,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) {
+    throw new Error("resolveRequestActor returned no actor and no error.");
   }
-  return handlePatchContentItem(request, user.id, id);
+  const permissionError = ensureActorPermission(actor, "content:write");
+  if (permissionError) return permissionError;
+  const resourceError = ensureActorContentAccess(actor, id);
+  if (resourceError) return resourceError;
+  return handlePatchContentItem(request, actor.userId, id);
 }
 
 export async function DELETE(
@@ -37,9 +50,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) {
+    throw new Error("resolveRequestActor returned no actor and no error.");
   }
-  return handleDeleteContentItem(request, user.id, id);
+  const permissionError = ensureActorPermission(actor, "content:write");
+  if (permissionError) return permissionError;
+  const resourceError = ensureActorContentAccess(actor, id);
+  if (resourceError) return resourceError;
+  return handleDeleteContentItem(request, actor.userId, id);
 }

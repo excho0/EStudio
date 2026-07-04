@@ -96,7 +96,7 @@ function DrawerHeightAnimator({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="min-h-0 max-h-full overflow-y-auto overflow-x-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      className="min-h-[var(--drawer-content-min-height,0px)] max-h-full overflow-y-auto overflow-x-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
       style={height !== null ? { height: `${height}px` } : undefined}
     >
       <div

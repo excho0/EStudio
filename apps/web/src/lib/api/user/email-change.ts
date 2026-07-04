@@ -63,6 +63,24 @@ const fetchUserByEmail = async (email: string) => {
   return user ?? null;
 };
 
+const fetchUserById = async (id: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    const [user] = await (db as PostgresDrizzleDb)
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
+      .limit(1);
+    return user ?? null;
+  }
+  const [user] = await (db as SqliteDrizzleDb)
+    .select()
+    .from(sqliteSchema.users)
+    .where(eq(sqliteSchema.users.id, id))
+    .limit(1);
+  return user ?? null;
+};
+
 const fetchPendingEmailTokenByUser = async (userId: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
@@ -171,11 +189,15 @@ const getPendingEmail = async (userId: string) => {
   }
 };
 
-export const handleRequestEmailChange = async (request: Request) => {
-  const session = await auth();
-  const sessionEmail = getSessionEmail(session);
-  if (!sessionEmail) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const handleRequestEmailChange = async (request: Request, userId?: string) => {
+  let user = userId ? await fetchUserById(userId) : null;
+  if (!user) {
+    const session = await auth();
+    const sessionEmail = getSessionEmail(session);
+    if (!sessionEmail) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    user = await fetchUserByEmail(sessionEmail);
   }
 
   const payload = emailChangeSchema.safeParse(await request.json());
@@ -183,7 +205,6 @@ export const handleRequestEmailChange = async (request: Request) => {
     return NextResponse.json({ error: payload.error.message }, { status: 400 });
   }
 
-  const user = await fetchUserByEmail(sessionEmail);
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }

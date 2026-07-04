@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 import { handleRescanContent } from "@/lib/api/content/rescan";
 
 export const runtime = "nodejs";
 
-export async function POST() {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return handleRescanContent(user.id);
+export async function POST(request: Request) {
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) throw new Error("resolveRequestActor returned no actor and no error.");
+  const permissionError = ensureActorPermission(actor, "content:write");
+  if (permissionError) return permissionError;
+  return handleRescanContent(actor.userId);
 }

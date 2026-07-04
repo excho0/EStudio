@@ -1,8 +1,8 @@
 import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 import {
-  handleCreateContent,
-  handleListContent,
-} from "@/lib/api/content/collection";
+  handleCreateUserApiKey,
+  handleListUserApiKeys,
+} from "@/lib/api/user/api-keys";
 
 export const runtime = "nodejs";
 
@@ -12,9 +12,9 @@ export async function GET(request: Request) {
   if (!actor) {
     throw new Error("resolveRequestActor returned no actor and no error.");
   }
-  const permissionError = ensureActorPermission(actor, "content:read");
+  const permissionError = ensureActorPermission(actor, "api_keys:read");
   if (permissionError) return permissionError;
-  return handleListContent(request, actor.userId);
+  return handleListUserApiKeys(actor.userId);
 }
 
 export async function POST(request: Request) {
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (!actor) {
     throw new Error("resolveRequestActor returned no actor and no error.");
   }
-  const permissionError = ensureActorPermission(actor, "content:write");
+  const permissionError = ensureActorPermission(actor, "api_keys:write");
   if (permissionError) return permissionError;
-  return handleCreateContent(request, actor.userId);
+  return handleCreateUserApiKey(request, actor.userId);
 }

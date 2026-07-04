@@ -114,6 +114,31 @@ export const appTokens = sqliteTable(
   ]
 );
 
+export const userApiKeys = sqliteTable(
+  "user_api_keys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    tokenPrefix: text("tokenPrefix").notNull().unique(),
+    tokenHash: text("tokenHash").notNull(),
+    permissions: text("permissions", { mode: "json" }).notNull(),
+    resources: text("resources", { mode: "json" }).notNull(),
+    lastUsedAt: integer("lastUsedAt", { mode: "timestamp_ms" }),
+    expiresAt: integer("expiresAt", { mode: "timestamp_ms" }),
+    revokedAt: integer("revokedAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("user_api_keys_user_id_idx").on(table.userId),
+    index("user_api_keys_prefix_idx").on(table.tokenPrefix),
+    index("user_api_keys_revoked_at_idx").on(table.revokedAt),
+  ]
+);
+
 export const contentItems = sqliteTable(
   "content_items",
   {
@@ -511,6 +536,31 @@ export const appTokensPg = pgTable(
   ]
 );
 
+export const userApiKeysPg = pgTable(
+  "user_api_keys",
+  {
+    id: pgText("id").primaryKey(),
+    userId: pgText("userId")
+      .notNull()
+      .references(() => usersPg.id, { onDelete: "cascade" }),
+    label: pgText("label").notNull(),
+    tokenPrefix: pgText("tokenPrefix").notNull().unique(),
+    tokenHash: pgText("tokenHash").notNull(),
+    permissions: pgJsonb("permissions").notNull(),
+    resources: pgJsonb("resources").notNull(),
+    lastUsedAt: pgTimestamp("lastUsedAt", { mode: "date" }),
+    expiresAt: pgTimestamp("expiresAt", { mode: "date" }),
+    revokedAt: pgTimestamp("revokedAt", { mode: "date" }),
+    createdAt: pgTimestamp("createdAt", { mode: "date" }).notNull(),
+    updatedAt: pgTimestamp("updatedAt", { mode: "date" }).notNull(),
+  },
+  (table) => [
+    pgIndex("user_api_keys_user_id_idx").on(table.userId),
+    pgIndex("user_api_keys_prefix_idx").on(table.tokenPrefix),
+    pgIndex("user_api_keys_revoked_at_idx").on(table.revokedAt),
+  ]
+);
+
 export const sqliteSchema = {
   users,
   accounts,
@@ -518,6 +568,7 @@ export const sqliteSchema = {
   verificationTokens,
   authenticators,
   appTokens,
+  userApiKeys,
   contentItems,
   publishes,
   notifications,
@@ -533,6 +584,7 @@ export const schema = {
   verificationTokens: verificationTokensPg,
   authenticators: authenticatorsPg,
   appTokens: appTokensPg,
+  userApiKeys: userApiKeysPg,
   contentItems: contentItemsPg,
   publishes: publishesPg,
   notifications: notificationsPg,
@@ -546,6 +598,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   authenticators: many(authenticators),
   appTokens: many(appTokens),
+  apiKeys: many(userApiKeys),
   publishes: many(publishes),
   notifications: many(notifications),
   pushSubscriptions: many(pushSubscriptions),
@@ -567,6 +620,10 @@ export const authenticatorsRelations = relations(authenticators, ({ one }) => ({
 
 export const appTokensRelations = relations(appTokens, ({ one }) => ({
   user: one(users, { fields: [appTokens.userId], references: [users.id] }),
+}));
+
+export const userApiKeysRelations = relations(userApiKeys, ({ one }) => ({
+  user: one(users, { fields: [userApiKeys.userId], references: [users.id] }),
 }));
 
 export const contentItemsRelations = relations(contentItems, ({ one, many }) => ({
@@ -612,6 +669,7 @@ export const usersPgRelations = relations(usersPg, ({ many }) => ({
   sessions: many(sessionsPg),
   authenticators: many(authenticatorsPg),
   appTokens: many(appTokensPg),
+  apiKeys: many(userApiKeysPg),
   contentItems: many(contentItemsPg),
   publishes: many(publishesPg),
   notifications: many(notificationsPg),
@@ -637,6 +695,10 @@ export const authenticatorsPgRelations = relations(authenticatorsPg, ({ one }) =
 
 export const appTokensPgRelations = relations(appTokensPg, ({ one }) => ({
   user: one(usersPg, { fields: [appTokensPg.userId], references: [usersPg.id] }),
+}));
+
+export const userApiKeysPgRelations = relations(userApiKeysPg, ({ one }) => ({
+  user: one(usersPg, { fields: [userApiKeysPg.userId], references: [usersPg.id] }),
 }));
 
 export const contentItemsPgRelations = relations(contentItemsPg, ({ one, many }) => ({

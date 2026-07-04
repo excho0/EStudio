@@ -32,6 +32,24 @@ const fetchUserByEmail = async (email: string) => {
   return user ?? null;
 };
 
+const fetchUserById = async (id: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    const [user] = await (db as PostgresDrizzleDb)
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
+      .limit(1);
+    return user ?? null;
+  }
+  const [user] = await (db as SqliteDrizzleDb)
+    .select()
+    .from(sqliteSchema.users)
+    .where(eq(sqliteSchema.users.id, id))
+    .limit(1);
+  return user ?? null;
+};
+
 const fetchAccounts = async (userId: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
@@ -54,14 +72,16 @@ const fetchAccounts = async (userId: string) => {
     .where(eq(sqliteSchema.accounts.userId, userId));
 };
 
-export const handleGetConnections = async () => {
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const handleGetConnections = async (userId?: string) => {
+  let user = userId ? await fetchUserById(userId) : null;
+  if (!user) {
+    const session = await auth();
+    const email = getSessionEmail(session);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    user = await fetchUserByEmail(email);
   }
-
-  const user = await fetchUserByEmail(email);
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -197,12 +217,7 @@ export const handleGetConnections = async () => {
   return NextResponse.json({ connections });
 };
 
-export const handleDeleteConnection = async (request: Request) => {
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const handleDeleteConnection = async (request: Request, userId?: string) => {
 
   const payload = (await request.json().catch(() => null)) as
     | { provider?: string }
@@ -212,7 +227,15 @@ export const handleDeleteConnection = async (request: Request) => {
     return NextResponse.json({ error: "Missing provider" }, { status: 400 });
   }
 
-  const user = await fetchUserByEmail(email);
+  let user = userId ? await fetchUserById(userId) : null;
+  if (!user) {
+    const session = await auth();
+    const email = getSessionEmail(session);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    user = await fetchUserByEmail(email);
+  }
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }

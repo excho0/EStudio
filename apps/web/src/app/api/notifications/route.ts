@@ -1,15 +1,17 @@
-import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session";
+import { ensureActorPermission, resolveRequestActor } from "@/lib/auth/request-actor";
 import { handleListNotifications } from "@/lib/api/notifications/list";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { actor, error } = await resolveRequestActor(request);
+  if (error) return error;
+  if (!actor) {
+    throw new Error("resolveRequestActor returned no actor and no error.");
   }
+  const permissionError = ensureActorPermission(actor, "notifications:read");
+  if (permissionError) return permissionError;
   const { searchParams } = new URL(request.url);
   const query = Object.fromEntries(searchParams.entries());
-  return handleListNotifications(user.id, query);
+  return handleListNotifications(actor.userId, query);
 }

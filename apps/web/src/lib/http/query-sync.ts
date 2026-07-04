@@ -44,6 +44,13 @@ export const syncProfileQueries = async (queryClient: QueryClient) => {
   ]);
 };
 
+export const syncApiKeyQueries = async (queryClient: QueryClient) => {
+  await reconcileResourceFamily({
+    queryClient,
+    queryKey: queryKeys.apiKeys,
+  });
+};
+
 export const syncDashboardStatsQueries = async (queryClient: QueryClient) => {
   await queryClient.invalidateQueries({
     predicate: ({ queryKey }) => Array.isArray(queryKey) && queryKey[0] === "dashboard-stats",

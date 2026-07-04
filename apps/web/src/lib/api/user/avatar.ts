@@ -31,6 +31,24 @@ const fetchUserByEmail = async (email: string) => {
   return user ?? null;
 };
 
+const fetchUserById = async (id: string) => {
+  const db = getDrizzleDb();
+  if (isPostgres) {
+    const [user] = await (db as PostgresDrizzleDb)
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
+      .limit(1);
+    return user ?? null;
+  }
+  const [user] = await (db as SqliteDrizzleDb)
+    .select()
+    .from(sqliteSchema.users)
+    .where(eq(sqliteSchema.users.id, id))
+    .limit(1);
+  return user ?? null;
+};
+
 const fetchAccountByProvider = async (userId: string, provider: string) => {
   const db = getDrizzleDb();
   if (isPostgres) {
@@ -138,20 +156,22 @@ const writeCacheMeta = async (
   await storage.writeFile(filePath, JSON.stringify(meta));
 };
 
-export const handleGetProviderAvatar = async (request: Request) => {
+export const handleGetProviderAvatar = async (request: Request, userId?: string) => {
   const { searchParams } = new URL(request.url);
   const provider = searchParams.get("provider");
   if (!provider) {
     return NextResponse.json({ error: "Missing provider" }, { status: 400 });
   }
 
-  const session = await auth();
-  const email = getSessionEmail(session);
-  if (!email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let user = userId ? await fetchUserById(userId) : null;
+  if (!user) {
+    const session = await auth();
+    const email = getSessionEmail(session);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    user = await fetchUserByEmail(email);
   }
-
-  const user = await fetchUserByEmail(email);
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
