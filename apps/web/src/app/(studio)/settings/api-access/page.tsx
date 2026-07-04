@@ -1097,7 +1097,7 @@ function ApiAccessStatCard({
   tone?: "default" | "active" | "revoked";
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04]">
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/4 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
       <span
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 data-[tone=active]:text-emerald-600 data-[tone=revoked]:text-rose-500 dark:border-white/10 dark:bg-black/20 dark:text-zinc-300 dark:data-[tone=active]:text-emerald-300 dark:data-[tone=revoked]:text-rose-300"
         data-tone={tone}
