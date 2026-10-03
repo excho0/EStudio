@@ -125,7 +125,7 @@ const getUploadWorkflowGuide = (context: ToolContext) => {
         expiresAt: "Unix timestamp in milliseconds. Drafts currently expire after roughly 6 hours.",
       },
       curlExample:
-        "curl -X POST https://studio.example.com/api/uploads -H 'Authorization: Bearer <ESTUDIO_API_KEY>' -F kind=video -F file=@./video.mp4",
+        "curl -X POST \"$ESTUDIO_PUBLIC_URL/api/uploads\" -H 'Authorization: Bearer <ESTUDIO_API_KEY>' -F kind=video -F file=@./video.mp4",
     },
     createContent: {
       mcpTool: "estudio_content_create",

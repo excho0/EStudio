@@ -108,9 +108,11 @@ in
 
     repoPath = lib.mkOption {
       type = lib.types.str;
-      default = "/srv/estudio";
       example = "/srv/estudio";
-      description = "Absolute path to the EStudio repository containing compose files.";
+      description = ''
+        Absolute path to the EStudio repository containing compose files.
+        Set this explicitly when enabling the service.
+      '';
     };
 
     dataRoot = lib.mkOption {

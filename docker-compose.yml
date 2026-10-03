@@ -24,7 +24,7 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       # Expose Redis for local tooling/debugging.
-      - "6379:6379"
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       # Persist Redis append-only data between restarts.
       - ${ESTUDIO_DATA_ROOT:-./data}/redis:/data
@@ -41,12 +41,12 @@ services:
     restart: unless-stopped
     environment:
       # Dev credentials/database. Replace for non-local environments.
-      POSTGRES_DB: estudio
-      POSTGRES_USER: estudio
-      POSTGRES_PASSWORD:
+      POSTGRES_DB: ${POSTGRES_DB:-estudio}
+      POSTGRES_USER: ${POSTGRES_USER:-estudio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the project root .env}
     ports:
       # Expose Postgres for local clients/migrations.
-      - "5432:5432"
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       # Persist database files between container restarts.
       - ${ESTUDIO_DATA_ROOT:-./data}/postgres:/var/lib/postgresql/data
@@ -84,16 +84,15 @@ services:
       PORT: 3000
 
       # Public origin served through Traefik.
-      AUTH_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
-      NEXTAUTH_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
-      NEXT_PUBLIC_APP_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
-      APP_URL: ${ESTUDIO_PUBLIC_URL:-https://studio.example.com}
+      AUTH_URL: ${ESTUDIO_PUBLIC_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${ESTUDIO_PUBLIC_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_URL: ${ESTUDIO_PUBLIC_URL:-http://localhost:3000}
+      APP_URL: ${ESTUDIO_PUBLIC_URL:-http://localhost:3000}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
-      NEXTAUTH_SECRET:
 
       # Database connection for the web runtime
       DB_DRIVER: postgres
-      DATABASE_URL:
+      DATABASE_URL: "${ESTUDIO_DATABASE_URL:-postgresql://${POSTGRES_USER:-estudio}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the project root .env}@postgres:5432/${POSTGRES_DB:-estudio}}"
 
       # Shared Redis URL used by queue/socket modules
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -108,6 +107,8 @@ services:
 
       # Keep uploaded/media assets in the shared bind-mounted storage root.
       STORAGE_BASE_DIR: /app/data
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_HOST_PORT:-3000}:3000"
     expose:
       # Only Traefik should reach the web runtime directly.
       - "3000"
@@ -119,11 +120,11 @@ services:
       - proxy
     labels:
       traefik.enable: "true"
-      traefik.docker.network: proxy
-      traefik.http.routers.estudio.rule: Host(`${ESTUDIO_HOST:-studio.example.com}`)
+      traefik.docker.network: ${ESTUDIO_PROXY_NETWORK:-estudio-proxy}
+      traefik.http.routers.estudio.rule: Host(`${ESTUDIO_HOST:-localhost}`)
       traefik.http.routers.estudio.entrypoints: websecure
       traefik.http.routers.estudio.tls: "true"
-      traefik.http.routers.estudio.tls.certresolver: stepca
+      traefik.http.routers.estudio.tls.certresolver: ${ESTUDIO_TRAEFIK_CERT_RESOLVER:-letsencrypt}
       traefik.http.services.estudio.loadbalancer.server.port: "3000"
     command: ["pnpm", "start"]
     healthcheck:
@@ -161,7 +162,7 @@ services:
 
       # Database connection for worker runtime
       DB_DRIVER: postgres
-      DATABASE_URL:
+      DATABASE_URL: "${ESTUDIO_DATABASE_URL:-postgresql://${POSTGRES_USER:-estudio}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the project root .env}@postgres:5432/${POSTGRES_DB:-estudio}}"
 
       # Shared Redis URL for queue workers
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
@@ -219,5 +220,5 @@ services:
 
 networks:
   proxy:
-    external: true
-    name: proxy
+    external: ${ESTUDIO_PROXY_NETWORK_EXTERNAL:-false}
+    name: ${ESTUDIO_PROXY_NETWORK:-estudio-proxy}
