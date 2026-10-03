@@ -68,6 +68,11 @@ export default function CardUpload({
   onRemoveUploaded,
 }: CardUploadProps) {
   const [uploadFiles, setUploadFiles] = useState<FileUploadItem[]>(initialFiles);
+  const [previousInitialFiles, setPreviousInitialFiles] = useState(initialFiles);
+  if (previousInitialFiles !== initialFiles) {
+    setPreviousInitialFiles(initialFiles);
+    setUploadFiles(initialFiles);
+  }
   const inFlightUploads = useRef(new Set<string>());
   const isMaxed =
     typeof maxFiles === "number" ? uploadFiles.length >= maxFiles : false;
@@ -138,10 +143,6 @@ export default function CardUpload({
       }
     },
   });
-
-  useEffect(() => {
-    setUploadFiles(initialFiles);
-  }, [initialFiles]);
 
   // Simulate upload progress for new files
   useEffect(() => {

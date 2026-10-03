@@ -186,6 +186,8 @@ export const Particles: React.FC<ParticlesProps> = ({
     }
   }, [circleParams, clearContext, drawCircle, quantity])
 
+  const animateRef = useRef<() => void>(() => {});
+
   const remapValue = (
     value: number,
     start1: number,
@@ -245,8 +247,12 @@ export const Particles: React.FC<ParticlesProps> = ({
         drawCircle(newCircle)
       }
     })
-    rafID.current = window.requestAnimationFrame(animate)
+    rafID.current = window.requestAnimationFrame(() => animateRef.current())
   }, [clearContext, circleParams, drawCircle, ease, staticity, vx, vy])
+
+  useEffect(() => {
+    animateRef.current = animate
+  }, [animate])
 
   const initCanvas = useCallback(() => {
     resizeCanvas()

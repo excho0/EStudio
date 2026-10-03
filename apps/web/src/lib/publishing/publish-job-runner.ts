@@ -10,7 +10,7 @@ import { getLogger } from "@/lib/logging";
 import { emitPublishProgress, emitPublishUpdate } from "@/lib/socket/manager";
 import { getDrizzleDb, isPostgres, type PostgresDrizzleDb, type SqliteDrizzleDb } from "@/lib/drizzle/client";
 import { schema, sqliteSchema } from "@/lib/drizzle/schema";
-import { getStorage, storageKey } from "@/lib/storage";
+import { getStorage } from "@/lib/storage";
 
 const publishLogger = getLogger("publish-job-runner");
 

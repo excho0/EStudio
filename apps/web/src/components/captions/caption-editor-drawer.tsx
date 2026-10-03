@@ -425,6 +425,7 @@ export function CaptionEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDraggingSegments, setIsDraggingSegments] = useState(false);
+  const [hasClipboard, setHasClipboard] = useState(false);
   const [mobileSelectionMode, setMobileSelectionMode] = useState(false);
   const [volume, setVolume] = useState(1);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
@@ -479,7 +480,8 @@ export function CaptionEditor({
     () => JSON.stringify(toPersistedCaptionDocument(toPersistedCaptionDocumentFromEditor(draft))),
     [draft]
   );
-  const isDirty = persistedDraftSnapshot !== baselineDraftRef.current;
+  const [baselineDraftSnapshot, setBaselineDraftSnapshot] = useState("");
+  const isDirty = persistedDraftSnapshot !== baselineDraftSnapshot;
   const canSave = useMemo(() => isDirty, [isDirty]);
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
@@ -728,6 +730,7 @@ export function CaptionEditor({
     setDraft(next);
     setHistory({ past: [], future: [] });
     baselineDraftRef.current = persistedNextSnapshot;
+    setBaselineDraftSnapshot(persistedNextSnapshot);
     hydratedValueSnapshotRef.current = nextSnapshot;
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
@@ -759,6 +762,7 @@ export function CaptionEditor({
     setDraft(next);
     setHistory({ past: [], future: [] });
     baselineDraftRef.current = persistedNextSnapshot;
+    setBaselineDraftSnapshot(persistedNextSnapshot);
     const hasSegments = (next.segments?.length ?? 0) > 0;
     setSelectedIndex(hasSegments ? 0 : null);
     setSelectedIndices(hasSegments ? [0] : []);
@@ -1027,6 +1031,7 @@ export function CaptionEditor({
       .map((segment) => ({ ...segment }));
     if (selected.length === 0) return;
     clipboardRef.current = { segments: selected };
+    setHasClipboard(true);
   };
 
   const pasteSegmentsAtCursor = () => {
@@ -1715,6 +1720,7 @@ export function CaptionEditor({
       setDraft(nextDraft);
       draftRef.current = nextDraft;
       baselineDraftRef.current = JSON.stringify(persisted);
+      setBaselineDraftSnapshot(baselineDraftRef.current);
       autosaveSuppressedRef.current = false;
       if (options?.resetHistory ?? true) {
         setHistory({ past: [], future: [] });
@@ -2055,7 +2061,7 @@ export function CaptionEditor({
             isPlaying={isPlaying}
             volume={volume}
             canCopy={selectedIndices.length > 0}
-            canPaste={Boolean(clipboardRef.current)}
+            canPaste={hasClipboard}
             canDelete={selectedIndices.length > 0}
             canUndo={canUndo}
             canRedo={canRedo}
@@ -2119,7 +2125,7 @@ export function CaptionEditor({
               isSelectionMode={mobileSelectionMode}
               isDraggingSegments={isDraggingSegments}
               canCopy={selectedIndices.length > 0}
-              canPaste={Boolean(clipboardRef.current)}
+              canPaste={hasClipboard}
               canDelete={selectedIndices.length > 0}
               timelineScrollerRef={timelineScrollerRef}
               timelineWidth={timelineWidth}

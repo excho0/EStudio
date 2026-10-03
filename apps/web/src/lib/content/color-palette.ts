@@ -1,31 +1,29 @@
-import { Vibrant } from "node-vibrant/node";
+import sharp from "sharp";
 import { getLogger } from "@/lib/logging";
 
 const logger = getLogger("content-color-palette");
 
-const swatchesToPalette = (
-  swatches: Record<string, { getHex?: () => string; hex?: string } | null>,
-  maxColors: number
-) => {
-  const order = ["Vibrant", "LightVibrant", "DarkVibrant", "Muted", "LightMuted", "DarkMuted"];
-  const hexes = order
-    .map((key) => {
-      const swatch = swatches[key];
-      if (!swatch) return null;
-      if (typeof swatch.getHex === "function") {
-        return swatch.getHex();
-      }
-      return swatch.hex ?? null;
-    })
-    .filter((value): value is string => Boolean(value));
-  const unique = Array.from(new Set(hexes));
-  return unique.slice(0, maxColors);
-};
-
 export const getPaletteFromPath = async (path: string, maxColors = 5) => {
   logger.debug({ path, maxColors }, "Extracting color palette.");
-  const palette = await Vibrant.from(path).maxColorCount(maxColors).getPalette();
-  const colors = swatchesToPalette(palette, maxColors);
+  const { data, info } = await sharp(path)
+    .resize({ width: 128, height: 128, fit: "inside" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const colorsByHex = new Map<string, number>();
+  for (let index = 0; index + 2 < data.length; index += info.channels) {
+    const red = data[index];
+    const green = data[index + 1];
+    const blue = data[index + 2];
+    const hex = `#${[red, green, blue]
+      .map((channel) => channel.toString(16).padStart(2, "0"))
+      .join("")}`;
+    colorsByHex.set(hex, (colorsByHex.get(hex) ?? 0) + 1);
+  }
+  const colors = [...colorsByHex.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, maxColors)
+    .map(([hex]) => hex);
   logger.debug({ count: colors.length, colors }, "Extracted color palette.");
   return colors;
 };

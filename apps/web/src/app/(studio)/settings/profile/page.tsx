@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { AtSignIcon, CircleAlert, Link2, Pencil, UserRound } from "lucide-react";
@@ -142,23 +142,50 @@ const cardTransition = {
 export default function ProfileSettingsPage() {
   const { data: session, status, update } = useSession();
   const searchParams = useSearchParams();
-  const [profile, setProfile] = useState<ProfilePayload>(emptyProfile);
-  const [draft, setDraft] = useState<ProfilePayload>(emptyProfile);
-  const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
-  const [providerProfiles, setProviderProfiles] = useState<
-    Record<string, { image?: string | null; name?: string | null }>
-  >({});
-  const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const [emailDrawerOpen, setEmailDrawerOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
+  const [profileDraftName, setProfileDraftName] = useState<string | null>(null);
+  const [avatarCacheBust, setAvatarCacheBust] = useState(0);
   const [pendingProvider, setPendingProvider] = useState<
     (typeof allProviders)[number] | null
   >(null);
   const [pendingUnlink, setPendingUnlink] = useState<
     (typeof allProviders)[number] | null
   >(null);
-  const [didRefreshAuthedState, setDidRefreshAuthedState] = useState(false);
+  const didRefreshAuthedState = useRef(false);
+
+  const profileQuery = useProfile({ enabled: status === "authenticated" });
+  const connectionsQuery = useProfileConnections({
+    enabled: status === "authenticated",
+  });
+  const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
+    queryKey: queryKeys.metaProviders,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => sdk.meta.providers(),
+  });
+  const profile = profileQuery.data ?? {
+    name: session?.user?.name ?? emptyProfile.name,
+    email: session?.user?.email ?? emptyProfile.email,
+    image: session?.user?.image ?? emptyProfile.image,
+    pendingEmail: emptyProfile.pendingEmail,
+  };
+  const draft: ProfilePayload = {
+    ...profile,
+    name: profileDraftName ?? profile.name,
+    email: profile.pendingEmail ?? profile.email,
+  };
+  const connections = connectionsQuery.data?.connections ?? [];
+  const connectedProviders = connections.map((connection) => connection.provider);
+  const providerProfiles = Object.fromEntries(
+    connections.map((connection) => [
+      connection.provider,
+      connection.profile ?? { name: null, image: null },
+    ])
+  );
+  const enabledProviders =
+    metaProvidersQuery.data?.oauthProviders ??
+    (metaProvidersQuery.isError ? allProviders.map((provider) => provider.id) : []);
 
   const initials = useMemo(() => {
     const parts = (draft.name || session?.user?.name || "")
@@ -186,10 +213,6 @@ export default function ProfileSettingsPage() {
     if (providerProfiles.discord?.image) return "discord";
     return null;
   }, [providerProfiles]);
-  const avatarCacheBust = useMemo(
-    () => (connectedProviders.length ? Date.now() : Date.now()),
-    [connectedProviders.length]
-  );
   const avatarSrc = avatarProvider
     ? sdk.user.avatarUrl(avatarProvider, String(avatarCacheBust))
     : draft.image ?? undefined;
@@ -197,43 +220,19 @@ export default function ProfileSettingsPage() {
     () => new Set(connectedProviders),
     [connectedProviders]
   );
-  const providers = useMemo(
-    () => allProviders.filter((provider) => enabledProviders.includes(provider.id)),
-    [enabledProviders]
+  const providers = allProviders.filter((provider) =>
+    enabledProviders.includes(provider.id)
   );
 
   useEffect(() => {
-    if (status !== "authenticated" || didRefreshAuthedState) return;
-    setDidRefreshAuthedState(true);
+    if (status !== "authenticated" || didRefreshAuthedState.current) return;
+    didRefreshAuthedState.current = true;
     void invalidateAuthQueries(queryClient);
-  }, [didRefreshAuthedState, queryClient, status]);
-
-  const profileQuery = useProfile({ enabled: status === "authenticated" });
-
-  const connectionsQuery = useProfileConnections({
-    enabled: status === "authenticated",
-  });
-
-  const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
-    queryKey: queryKeys.metaProviders,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => sdk.meta.providers(),
-  });
+  }, [queryClient, status]);
 
   const loading = profileQuery.isLoading || profileQuery.isFetching;
   const connectionsLoading =
     connectionsQuery.isLoading || connectionsQuery.isFetching;
-
-  useEffect(() => {
-    if (!profileQuery.data) return;
-    const payload = profileQuery.data;
-    const nextDraft = {
-      ...payload,
-      email: payload.pendingEmail ?? payload.email,
-    };
-    setProfile(payload);
-    setDraft(nextDraft);
-  }, [profileQuery.data]);
 
   useEffect(() => {
     if (!profileQuery.error) return;
@@ -245,20 +244,6 @@ export default function ProfileSettingsPage() {
   }, [profileQuery.error]);
 
   useEffect(() => {
-    if (!connectionsQuery.data) return;
-    const connections = connectionsQuery.data.connections ?? [];
-    setConnectedProviders(connections.map((connection) => connection.provider));
-    setProviderProfiles(
-      Object.fromEntries(
-        connections.map((connection) => [
-          connection.provider,
-          connection.profile ?? { name: null, image: null },
-        ])
-      )
-    );
-  }, [connectionsQuery.data]);
-
-  useEffect(() => {
     if (!connectionsQuery.error) return;
     const message =
       connectionsQuery.error instanceof Error
@@ -267,23 +252,13 @@ export default function ProfileSettingsPage() {
     toast.error(message);
   }, [connectionsQuery.error]);
 
-  useEffect(() => {
-    if (metaProvidersQuery.data) {
-      setEnabledProviders(metaProvidersQuery.data.oauthProviders ?? []);
-      return;
-    }
-    if (metaProvidersQuery.isError) {
-      setEnabledProviders(allProviders.map((provider) => provider.id));
-    }
-  }, [metaProvidersQuery.data, metaProvidersQuery.isError]);
-
   const applyProfileState = (payload: ProfilePayload) => {
     const nextDraft = {
       ...payload,
       email: payload.pendingEmail ?? payload.email,
     };
-    setProfile(payload);
-    setDraft(nextDraft);
+    setProfileDraftName(nextDraft.name);
+    setAvatarCacheBust(Date.now());
     setEmailDraft(payload.pendingEmail ?? payload.email);
     queryClient.setQueryData(queryKeys.profile, payload);
   };
@@ -374,23 +349,6 @@ export default function ProfileSettingsPage() {
       void reconcileQuery({ queryClient, queryKey: queryKeys.profileConnections });
     },
   });
-
-  useEffect(() => {
-    const fallbackProfile: ProfilePayload = {
-      name: session?.user?.name ?? "",
-      email: session?.user?.email ?? "",
-      image: session?.user?.image ?? null,
-    };
-    setDraft((prev) => ({
-      ...prev,
-      ...fallbackProfile,
-    }));
-    setProfile((prev) => ({
-      ...prev,
-      ...fallbackProfile,
-    }));
-    setEmailDraft((prev) => prev || fallbackProfile.email);
-  }, [session?.user?.email, session?.user?.image, session?.user?.name]);
 
   const openEmailDrawer = () => {
     setEmailDraft(profile.pendingEmail ?? profile.email);
@@ -525,9 +483,7 @@ export default function ProfileSettingsPage() {
                     id="profile-name"
                     value={draft.name}
                     placeholder="Add your name"
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, name: event.target.value }))
-                    }
+                    onChange={(event) => setProfileDraftName(event.target.value)}
                     disabled={loading || status !== "authenticated"}
                     className="h-11"
                   />
@@ -581,12 +537,7 @@ export default function ProfileSettingsPage() {
                     type="button"
                     variant="outline"
                     disabled={loading || status !== "authenticated" || !isDirty}
-                    onClick={() =>
-                      setDraft({
-                        ...profile,
-                        email: profile.pendingEmail ?? profile.email,
-                      })
-                    }
+                    onClick={() => setProfileDraftName(profile.name)}
                     className="h-11 border-slate-200 text-slate-900 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
                   >
                     Reset

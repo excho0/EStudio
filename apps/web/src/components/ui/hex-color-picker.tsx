@@ -33,17 +33,19 @@ export function HexPicker({
   disabled = false,
   onChange,
 }: HexPickerProps) {
-  const [color, setColor] = React.useState(parseColor(colorValue))
-  const [inputValue, setInputValue] = React.useState(colorValue.toUpperCase())
-
-  React.useEffect(() => {
-    setColor(parseColor(colorValue))
-    setInputValue(colorValue.toUpperCase())
-  }, [colorValue])
+  const [editedColor, setEditedColor] = React.useState<{
+    source: string;
+    color: ReturnType<typeof parseColor>;
+    inputValue: string;
+  } | null>(null)
+  const isEditedValueCurrent = editedColor?.source === colorValue
+  const color = isEditedValueCurrent ? editedColor.color : parseColor(colorValue)
+  const inputValue = isEditedValueCurrent
+    ? editedColor.inputValue
+    : colorValue.toUpperCase()
 
   const handleColorChange = React.useCallback(
     (nextColor: typeof color) => {
-      setColor(nextColor)
       const next = (() => {
         try {
           return nextColor.toString("hex")
@@ -52,7 +54,7 @@ export function HexPicker({
         }
       })()
       const upper = next.toUpperCase()
-      setInputValue(upper)
+      setEditedColor({ source: colorValue, color: nextColor, inputValue: upper })
       onChange?.(upper)
     },
     [colorValue, onChange]
@@ -107,15 +109,17 @@ export function HexPicker({
                 value={inputValue}
                 onChange={(event) => {
                   const next = event.target.value.toUpperCase()
-                setInputValue(next)
-                const normalized = next.startsWith("#") ? next : `#${next}`
-                if (/^#[0-9A-F]{6}$/.test(normalized)) {
-                  try {
-                    handleColorChange(parseColor(normalized))
-                  } catch {
-                    // ignore invalid input
+                  const normalized = next.startsWith("#") ? next : `#${next}`
+                  let nextColor = color
+                  if (/^#[0-9A-F]{6}$/.test(normalized)) {
+                    try {
+                      nextColor = parseColor(normalized)
+                      onChange?.(normalized)
+                    } catch {
+                      // ignore invalid input
+                    }
                   }
-                }
+                  setEditedColor({ source: colorValue, color: nextColor, inputValue: next })
                 }}
                 spellCheck={false}
               />

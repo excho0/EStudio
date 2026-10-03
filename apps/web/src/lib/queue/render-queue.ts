@@ -79,7 +79,9 @@ export const cancelRenderJob = async (userId: string, id: string) => {
   }
   const prefix = `${userId}:${id}:`;
   const jobs = await queue.getJobs(
-    ["wait", "delayed", "prioritized", "paused", "active"],
+    ["wait", "paused", "delayed", "prioritized", "active"] as const as Parameters<
+      typeof queue.getJobs
+    >[0],
     0,
     -1,
     false

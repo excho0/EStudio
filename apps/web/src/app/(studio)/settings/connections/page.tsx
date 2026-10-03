@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -98,7 +98,7 @@ export default function ConnectionsSettingsPage() {
   }, [providers]);
   const [unlinkTarget, setUnlinkTarget] = useState<ProviderDefinition | null>(null);
   const queryClient = useQueryClient();
-  const [didRefreshAuthedState, setDidRefreshAuthedState] = useState(false);
+  const didRefreshAuthedState = useRef(false);
 
   const metaProvidersQuery = useQuery<{ oauthProviders?: string[] }>({
     queryKey: queryKeys.metaProviders,
@@ -151,10 +151,10 @@ export default function ConnectionsSettingsPage() {
   }, [connections, providers]);
 
   useEffect(() => {
-    if (status !== "authenticated" || didRefreshAuthedState) return;
-    setDidRefreshAuthedState(true);
+    if (status !== "authenticated" || didRefreshAuthedState.current) return;
+    didRefreshAuthedState.current = true;
     void invalidateAuthQueries(queryClient);
-  }, [didRefreshAuthedState, queryClient, status]);
+  }, [queryClient, status]);
 
   useEffect(() => {
     connectionQueries.forEach((query, index) => {

@@ -10,7 +10,9 @@ export const useStore = <T, F>(
   const [data, setData] = useState<F>();
 
   useEffect(() => {
-    setData(result);
+    const update = () => setData(result);
+    const timeout = setTimeout(update, 0);
+    return () => clearTimeout(timeout);
   }, [result]);
 
   return data;

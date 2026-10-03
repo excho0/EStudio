@@ -12,8 +12,8 @@
     "./processing": "./src/processing.ts"
   },
   "dependencies": {
-    "@remotion/media-utils": "4.0.409",
-    "fft.js": "^4.0.4",
-    "@estudio/utils": "workspace:*"
+    "@estudio/utils": "workspace:*",
+    "@remotion/media-utils": "4.0.532",
+    "fft.js": "^4.0.4"
   }
 }
